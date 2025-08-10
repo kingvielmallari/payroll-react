@@ -201,7 +201,9 @@ class TimeLogController extends Controller
             'remarks' => $validated['remarks'],
             'is_holiday' => $validated['is_holiday'] ?? false,
             'is_rest_day' => $validated['is_rest_day'] ?? false,
-            'status' => 'pending',
+            'status' => 'approved', // Auto-approve time logs
+            'approved_by' => Auth::id(),
+            'approved_at' => now(),
         ]);
 
         return redirect()->route('time-logs.show', $timeLog)
@@ -649,7 +651,9 @@ class TimeLogController extends Controller
             'undertime_hours' => $undertimeHours,
             'log_type' => 'regular',
             'remarks' => $validated['remarks'],
-            'status' => 'pending',
+            'status' => 'approved', // Auto-approve time logs
+            'approved_by' => Auth::id(),
+            'approved_at' => now(),
         ]);
 
         return redirect()->route('my-time-logs')

@@ -42,7 +42,7 @@
                                                 @case('total_employees')
                                                     👥
                                                     @break
-                                                @case('pending_time_logs')
+                                                @case('pending_payrolls')
                                                     ⏰
                                                     @break
                                                 @case('pending_leave_requests')

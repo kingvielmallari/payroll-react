@@ -41,7 +41,7 @@ class DashboardController extends Controller
         if ($user->hasAnyRole(['System Admin', 'HR Head', 'HR Staff'])) {
             // Admin/HR stats
             $stats['total_employees'] = Employee::where('employment_status', 'active')->count();
-            $stats['pending_time_logs'] = TimeLog::where('status', 'pending')->count();
+            $stats['pending_payrolls'] = Payroll::where('status', 'processing')->count();
             // $stats['pending_leave_requests'] = LeaveRequest::where('status', 'pending')->count();
             $stats['pending_leave_requests'] = 0; // Placeholder until leave system is implemented
             $stats['active_payrolls'] = Payroll::whereIn('status', ['draft', 'processing'])->count();
@@ -169,13 +169,13 @@ class DashboardController extends Controller
         $notifications = [];
         
         if ($user->hasAnyRole(['System Admin', 'HR Head'])) {
-            // Pending approvals
-            $pendingTimeLog = TimeLog::where('status', 'pending')->count();
-            if ($pendingTimeLog > 0) {
+            // Pending payroll approvals
+            $pendingPayrolls = Payroll::where('status', 'processing')->count();
+            if ($pendingPayrolls > 0) {
                 $notifications[] = [
-                    'type' => 'warning',
-                    'message' => "{$pendingTimeLog} time logs need approval",
-                    'link' => route('time-logs.index'),
+                    'type' => 'warning', 
+                    'message' => "{$pendingPayrolls} payrolls need approval",
+                    'link' => route('payrolls.index'),
                 ];
             }
             
