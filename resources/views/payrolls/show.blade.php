@@ -1,0 +1,584 @@
+<x-app-layout>
+    <x-slot name="header">
+        <div class="flex justify-between items-center">
+            <div>
+                <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+                    Payroll Details: {{ $payroll->payroll_number }}
+                </h2>
+                <p class="text-sm text-gray-600 mt-1">
+                    {{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}
+                </p>
+            </div>
+            <div class="flex space-x-2">
+                @can('edit payrolls')
+                @if($payroll->canBeEdited())
+                <a href="{{ route('payrolls.edit', $payroll) }}" 
+                   class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                    Edit Payroll
+                </a>
+                @endif
+                @endcan
+                <a href="{{ route('payrolls.index') }}" 
+                   class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                    Back to Payrolls
+                </a>
+            </div>
+        </div>
+    </x-slot>
+
+    <div class="py-6">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+            
+            <!-- Payroll Summary -->
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div class="bg-blue-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-blue-600">₱{{ number_format($payroll->payrollDetails->sum('regular_pay'), 2) }}</div>
+                            <div class="text-sm text-blue-800">Total Basic</div>
+                        </div>
+                        <div class="bg-green-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-green-600">₱{{ number_format($payroll->total_gross, 2) }}</div>
+                            <div class="text-sm text-green-800">Total Gross</div>
+                        </div>
+                        <div class="bg-red-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-red-600">₱{{ number_format($payroll->total_deductions, 2) }}</div>
+                            <div class="text-sm text-red-800">Total Deductions</div>
+                        </div>
+                        <div class="bg-purple-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-purple-600">₱{{ number_format($payroll->total_net, 2) }}</div>
+                            <div class="text-sm text-purple-800">Total Net</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Status</h4>
+                            <span class="mt-1 inline-flex px-3 py-1 text-sm font-semibold rounded-full 
+                                {{ $payroll->status == 'paid' ? 'bg-green-100 text-green-800' : 
+                                   ($payroll->status == 'approved' ? 'bg-blue-100 text-blue-800' : 
+                                    ($payroll->status == 'processing' ? 'bg-yellow-100 text-yellow-800' : 
+                                     ($payroll->status == 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'))) }}">
+                                {{ ucfirst($payroll->status) }}
+                            </span>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Type</h4>
+                            <p class="mt-1 text-sm text-gray-600">{{ ucfirst(str_replace('_', ' ', $payroll->payroll_type)) }}</p>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Pay Date</h4>
+                            <p class="mt-1 text-sm text-gray-600">{{ $payroll->pay_date->format('M d, Y') }}</p>
+                        </div>
+                    </div>
+
+                    @if($payroll->description)
+                    <div class="mt-6">
+                        <h4 class="text-sm font-medium text-gray-900">Description</h4>
+                        <p class="mt-1 text-sm text-gray-600">{{ $payroll->description }}</p>
+                    </div>
+                    @endif
+
+                    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Created By</h4>
+                            <p class="mt-1 text-sm text-gray-600">{{ $payroll->creator->name }} on {{ $payroll->created_at->format('M d, Y g:i A') }}</p>
+                        </div>
+                        @if($payroll->approver)
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Approved By</h4>
+                            <p class="mt-1 text-sm text-gray-600">{{ $payroll->approver->name }} on {{ $payroll->approved_at->format('M d, Y g:i A') }}</p>
+                        </div>
+                        @endif
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="mt-6 flex space-x-3">
+                        @can('process payrolls')
+                        @if($payroll->status == 'draft')
+                        <form method="POST" action="{{ route('payrolls.process', $payroll) }}" class="inline">
+                            @csrf
+                            <button type="submit" 
+                                    class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Submit this payroll for processing?')">
+                                Submit for Processing
+                            </button>
+                        </form>
+                        @endif
+                        @endcan
+
+                        <!-- View Payslip Button - Show only if not draft and not processing -->
+                        @if($payroll->status != 'draft' && $payroll->status != 'processing')
+                        <a href="{{ route('payrolls.payslip', $payroll) }}" 
+                           class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            View Payslip
+                        </a>
+                        @endif
+
+                        @can('approve payrolls')
+                        @if($payroll->status == 'processing')
+                        <form method="POST" action="{{ route('payrolls.approve', $payroll) }}" class="inline">
+                            @csrf
+                            <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-purple-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-purple-700 focus:bg-purple-700 active:bg-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Approve this payroll?')">
+                                Approve Payroll
+                            </button>
+                        </form>
+                        @endif
+                        @endcan
+
+                        @can('email all payslips')
+                        @if($payroll->status == 'approved')
+                        <form method="POST" action="{{ route('payslips.email-all', $payroll) }}" class="inline">
+                            @csrf
+                            <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Send payslips to all employees?')">
+                                Email All Payslips
+                            </button>
+                        </form>
+                        @endif
+                        @endcan
+
+                        @can('download all payslips')
+                        @if($payroll->status == 'approved')
+                        <a href="{{ route('payslips.download-all', $payroll) }}"
+                           class="inline-flex items-center px-4 py-2 bg-orange-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-orange-700 focus:bg-orange-700 active:bg-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                            Download All Payslips
+                        </a>
+                        @endif
+                        @endcan
+{{-- 
+                        @can('delete payrolls')
+                        @if($payroll->canBeEdited())
+                        <form method="POST" action="{{ route('payrolls.destroy', $payroll) }}" class="inline">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-700 focus:bg-red-700 active:bg-red-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Are you sure you want to delete this payroll? This action cannot be undone.')">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                Delete Payroll
+                            </button>
+                        </form>
+                        @endif
+                        @endcan --}}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Employee Payroll Details -->
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Employee Payroll Details</h3>
+                    
+                    <div class="overflow-x-auto">   
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Employee
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Basic Pay
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Overtime
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Allowances
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Gross Pay
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Deductions
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Net Pay
+                                    </th>
+                                    {{-- @if($payroll->status == 'approved')
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Payslip
+                                    </th>
+                                    @endif --}}
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                @foreach($payroll->payrollDetails as $detail)
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div>
+                                                <div class="text-sm font-medium text-gray-900">
+                                                    {{ $detail->employee->first_name }} {{ $detail->employee->last_name }}
+                                                </div>
+                                                <div class="text-sm text-gray-500">
+                                                    {{ $detail->employee->employee_number }} - {{ $detail->employee->position->title ?? 'No Position' }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                        <div class="font-bold text-blue-600">₱{{ number_format($detail->regular_pay, 2) }}</div>
+                                        <div class="text-xs text-gray-500">{{ number_format($detail->regular_hours ?? 0, 1) }} hrs</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                        <div class="font-bold text-orange-600">₱{{ number_format($detail->overtime_pay, 2) }}</div>
+                                        <div class="text-xs text-gray-500">{{ number_format($detail->overtime_hours ?? 0, 1) }} hrs</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                       
+                                        <div class="text-xs text-gray-500 space-y-1">
+                                            @php
+                                                $activeAllowances = App\Models\AllowanceBonusSetting::active()->allowances()->get();
+                                                $activeBonuses = App\Models\AllowanceBonusSetting::active()->bonuses()->get();
+                                                $hasEarnings = false;
+                                            @endphp
+                                            
+                                            @if($detail->allowances > 0)
+                                                @php $hasEarnings = true; @endphp
+                                                @if($activeAllowances->count() > 0)
+                                                    @foreach($activeAllowances as $allowance)
+                                                        <div class="flex justify-between">
+                                                            <span>{{ $allowance->code }}:</span>
+                                                            <span>₱{{ number_format($allowance->fixed_amount, 2) }}</span>
+                                                        </div>
+                                                    @endforeach
+                                                @else
+                                                    <div class="flex justify-between">
+                                                        <span>Allowances:</span>
+                                                        <span>₱{{ number_format($detail->allowances, 2) }}</span>
+                                                    </div>
+                                                @endif
+                                            @endif
+                                            
+                                            @if($detail->bonuses > 0)
+                                                @php $hasEarnings = true; @endphp
+                                                @if($activeBonuses->count() > 0)
+                                                    @foreach($activeBonuses as $bonus)
+                                                        <div class="flex justify-between">
+                                                            <span>{{ $bonus->name }}:</span>
+                                                            <span>₱{{ number_format($detail->bonuses / $activeBonuses->count(), 2) }}</span>
+                                                        </div>
+                                                    @endforeach
+                                                @else
+                                                    <div class="flex justify-between">
+                                                        <span>Bonuses:</span>
+                                                        <span>₱{{ number_format($detail->bonuses, 2) }}</span>
+                                                    </div>
+                                                @endif
+                                            @endif
+                                            
+                                            @if($detail->other_earnings > 0)
+                                                @php $hasEarnings = true; @endphp
+                                                <div class="flex justify-between">
+                                                    <span>Other Earnings:</span>
+                                                    <span>₱{{ number_format($detail->other_earnings, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            
+                                            @if(!$hasEarnings)
+                                                <div class="text-gray-400">No additional earnings</div>
+                                            @endif
+                                            
+                                        </div>
+                                         <div class="font-bold text-yellow-600">₱{{ number_format($detail->allowances + $detail->bonuses + $detail->other_earnings, 2) }}</div>
+                                    </td>
+                                    <td>
+                                       
+                                        <div  class="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 text-right">
+                                             ₱{{ number_format($detail->gross_pay, 2) }}    
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right">
+                                       
+                                        <div class="text-xs text-gray-500 space-y-1">
+                                            @php
+                                                $deductionSettings = App\Models\DeductionSetting::active()->get();
+                                                $deductionNames = $deductionSettings->pluck('name', 'code')->toArray();
+                                                $hasDeductions = false;
+                                            @endphp
+                                            
+                                            @if($detail->sss_contribution > 0)
+                                                @php $hasDeductions = true; @endphp
+                                                <div class="flex justify-between">
+                                                    <span>{{ $deductionNames['sss'] ?? 'SSS' }}:</span>
+                                                    <span>₱{{ number_format($detail->sss_contribution, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            
+                                            @if($detail->philhealth_contribution > 0)
+                                                @php $hasDeductions = true; @endphp
+                                                <div class="flex justify-between">
+                                                    <span>{{ $deductionNames['philhealth'] ?? 'PhilHealth' }}:</span>
+                                                    <span>₱{{ number_format($detail->philhealth_contribution, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            
+                                            @if($detail->pagibig_contribution > 0)
+                                                @php $hasDeductions = true; @endphp
+                                                <div class="flex justify-between">
+                                                    <span>{{ $deductionNames['pagibig'] ?? 'Pag-IBIG' }}:</span>
+                                                    <span>₱{{ number_format($detail->pagibig_contribution, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            
+                                            @if($detail->withholding_tax > 0)
+                                                @php $hasDeductions = true; @endphp
+                                                <div class="flex justify-between">
+                                                    <span>{{ $deductionNames['withholding_tax'] ?? 'Tax' }}:</span>
+                                                    <span>₱{{ number_format($detail->withholding_tax, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            
+                                            @if($detail->late_deductions > 0)
+                                                @php $hasDeductions = true; @endphp
+                                                <div class="flex justify-between">
+                                                    <span>{{ $deductionNames['late'] ?? 'Late' }}:</span>
+                                                    <span>₱{{ number_format($detail->late_deductions, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            
+                                            @if($detail->undertime_deductions > 0)
+                                                @php $hasDeductions = true; @endphp
+                                                <div class="flex justify-between">
+                                                    <span>{{ $deductionNames['undertime'] ?? 'Undertime' }}:</span>
+                                                    <span>₱{{ number_format($detail->undertime_deductions, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            
+                                            @if($detail->cash_advance_deductions > 0)
+                                                @php $hasDeductions = true; @endphp
+                                                <div class="flex justify-between">
+                                                    <span>{{ $deductionNames['cash_advance'] ?? 'Cash Advance' }}:</span>
+                                                    <span>₱{{ number_format($detail->cash_advance_deductions, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            
+                                            @if($detail->other_deductions > 0)
+                                                @php $hasDeductions = true; @endphp
+                                                <div class="flex justify-between">
+                                                    <span>{{ $deductionNames['other'] ?? 'Other' }}:</span>
+                                                    <span>₱{{ number_format($detail->other_deductions, 2) }}</span>
+                                                </div>
+                                            @endif
+                                            
+                                            @if(!$hasDeductions)
+                                                <div class="text-gray-400">No deductions</div>
+                                            @endif
+                                        </div>
+
+                                         <div class="text-sm text-red-600 font-bold">₱{{ number_format($detail->total_deductions, 2) }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-purple-600 text-right">
+                                        ₱{{ number_format($detail->net_pay, 2) }}
+                                    </td>
+                                    {{-- @if($payroll->status == 'approved')
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <div class="flex space-x-2">
+                                            @can('view payslips')
+                                            <a href="{{ route('payslips.show', $detail) }}" 
+                                               class="text-indigo-600 hover:text-indigo-900 text-xs">View</a>
+                                            @endcan
+                                            @can('download payslips')
+                                            <a href="{{ route('payslips.download', $detail) }}" 
+                                               class="text-blue-600 hover:text-blue-900 text-xs">PDF</a>
+                                            @endcan
+                                            @can('email payslips')
+                                            <form method="POST" action="{{ route('payslips.email', $detail) }}" class="inline">
+                                                @csrf
+                                                <button type="submit" 
+                                                        class="text-green-600 hover:text-green-900 text-xs"
+                                                        onclick="return confirm('Send payslip to {{ $detail->employee->user->email ?? 'employee' }}?')">
+                                                    Email
+                                                </button>
+                                            </form>
+                                            @endcan
+                                        </div>
+                                    </td>
+                                    @endif --}}
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DTR Summary for Period -->
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">
+                            DTR Summary: {{ \Carbon\Carbon::parse($payroll->period_start)->format('M d') }} - {{ \Carbon\Carbon::parse($payroll->period_end)->format('M d, Y') }}
+                        </h3>
+                        <div class="flex space-x-2">
+                            @can('create time logs')
+                                @if($payroll->payrollDetails->isNotEmpty())
+                                    <a href="{{ route('time-logs.create-bulk-employee', [
+                                        'employee_id' => $payroll->payrollDetails->first()->employee_id,
+                                        'period_start' => $payroll->period_start->format('Y-m-d'),
+                                        'period_end' => $payroll->period_end->format('Y-m-d'),
+                                        'payroll_id' => $payroll->id
+                                    ]) }}" 
+                                       class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded text-sm flex items-center">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                        </svg>
+                                        Manage DTR
+                                    </a>
+                                @endif
+                            @endcan
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <style>
+                            .dtr-table {
+                                font-size: 0.75rem;
+                            }
+                            .dtr-table td, .dtr-table th {
+                                white-space: nowrap;
+                            }
+                            .employee-column {
+                                min-width: 150px;
+                                max-width: 200px;
+                            }
+                            .date-column {
+                                min-width: 90px;
+                                max-width: 120px;
+                            }
+                        </style>
+                        <table class="min-w-full divide-y divide-gray-200 dtr-table">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 employee-column">
+                                        Employee
+                                    </th>
+                                    @foreach($periodDates as $date)
+                                    <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider date-column">
+                                        {{ \Carbon\Carbon::parse($date)->format('M d') }}
+                                        <br>
+                                        <span class="text-gray-400 normal-case">{{ \Carbon\Carbon::parse($date)->format('D') }}</span>
+                                    </th>
+                                    @endforeach
+                                    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Total<br>Hours
+                                    </th>
+                                    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Overtime<br>Hours
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                @foreach($payroll->payrollDetails as $detail)
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-3 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r">
+                                        <div>
+                                            {{ $detail->employee->user->name }}
+                                            <div class="text-xs text-gray-600">{{ $detail->employee->schedule_display }}</div>
+                                            <div class="text-xs text-blue-600">₱{{ number_format($detail->employee->hourly_rate ?? 0, 2) }}/hr</div>
+                                        </div>
+                                    </td>
+                                    @php 
+                                        $totalEmployeeHours = 0; 
+                                        $totalEmployeeOvertimeHours = 0;
+                                    @endphp
+                                    @foreach($periodDates as $date)
+                                    @php 
+                                        $timeLog = $dtrData[$detail->employee_id][$date] ?? null;
+                                        $regularHours = $timeLog ? ($timeLog->regular_hours ?? 0) : 0;
+                                        $overtimeHours = $timeLog ? ($timeLog->overtime_hours ?? 0) : 0;
+                                        $totalEmployeeHours += $regularHours;
+                                        $totalEmployeeOvertimeHours += $overtimeHours;
+                                        $isWeekend = \Carbon\Carbon::parse($date)->isWeekend();
+                                    @endphp
+                                    <td class="px-2 py-4 text-xs text-center {{ $isWeekend ? 'bg-gray-100' : '' }}">
+                                        @if($timeLog)
+                                            <div class="space-y-1">
+                                                @if($timeLog->time_in && $timeLog->time_out)
+                                                <div class="text-green-600 font-medium">
+                                                    {{ \Carbon\Carbon::parse($timeLog->time_in)->format('H:i') }} - {{ \Carbon\Carbon::parse($timeLog->time_out)->format('H:i') }}
+                                                </div>
+                                                @endif
+                                                @if($timeLog->break_in && $timeLog->break_out)
+                                                <div class="text-gray-600 text-xs">
+                                                    Break: {{ \Carbon\Carbon::parse($timeLog->break_in)->format('H:i') }} - {{ \Carbon\Carbon::parse($timeLog->break_out)->format('H:i') }}
+                                                </div>
+                                                @endif
+                                                @if($regularHours > 0)
+                                                <div class="text-blue-600">
+                                                    {{ number_format($regularHours, 1) }}h
+                                                </div>
+                                                @endif
+                                                @if($overtimeHours > 0)
+                                                <div class="text-orange-600">
+                                                    OT: {{ number_format($overtimeHours, 1) }}h
+                                                </div>
+                                                @endif
+                                                @if($timeLog->late_hours)
+                                                <div class="text-red-600">
+                                                    Late: {{ number_format($timeLog->late_hours, 1) }}h
+                                                </div>
+                                                @endif
+                                                <div class="text-xs text-gray-500">
+                                                    {{ ucfirst($timeLog->status ?? 'pending') }}
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div class="text-gray-300">-</div>
+                                        @endif
+                                    </td>
+                                    @endforeach
+                                    <td class="px-3 py-4 text-sm font-medium text-center border-l">
+                                        <div class="text-blue-600">{{ number_format($totalEmployeeHours, 1) }} hrs</div>
+                                        <div class="text-xs text-gray-500">
+                                            ₱{{ number_format($totalEmployeeHours * ($detail->employee->hourly_rate ?? 0), 2) }}
+                                        </div>
+                                    </td>
+                                    <td class="px-3 py-4 text-sm font-medium text-center border-l">
+                                        <div class="text-orange-600">{{ number_format($totalEmployeeOvertimeHours, 1) }} hrs</div>
+                                        @if($totalEmployeeOvertimeHours > 0)
+                                        <div class="text-xs text-gray-500">
+                                            ₱{{ number_format($totalEmployeeOvertimeHours * (($detail->employee->hourly_rate ?? 0) * 1.25), 2) }}
+                                        </div>
+                                        @endif
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mt-4 text-sm text-gray-600">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <strong>Legend:</strong>
+                                <ul class="mt-2 space-y-1">
+                                    <li><span class="text-green-600">●</span> Time In/Out</li>
+                                    <li><span class="text-blue-600">●</span> Regular Hours</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <ul class="mt-6 space-y-1">
+                                    <li><span class="text-orange-600">●</span> Overtime Hours</li>
+                                    <li><span class="text-red-600">●</span> Late Hours</li>
+                                </ul>
+                            </div>
+                            <div class="bg-gray-100 p-3 rounded">
+                                <strong>Weekend days</strong> are highlighted in gray background
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</x-app-layout>

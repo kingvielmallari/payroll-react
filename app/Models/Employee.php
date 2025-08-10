@@ -1,0 +1,473 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
+
+class Employee extends Model
+{
+    use HasFactory, LogsActivity;
+
+    protected $fillable = [
+        'user_id',
+        'department_id',
+        'position_id',
+        'employee_number',
+        'first_name',
+        'middle_name',
+        'last_name',
+        'suffix',
+        'birth_date',
+        'gender',
+        'civil_status',
+        'phone',
+        'address',
+        'hire_date',
+        'paid_leaves',
+        'benefits_status',
+        'employment_type',
+        'employment_status',
+        'pay_schedule',
+        'time_schedule_id',
+        'day_schedule_id',
+        'basic_salary',
+        'hourly_rate',
+        'daily_rate',
+        'weekly_rate',
+        'semi_monthly_rate',
+        'sss_number',
+        'philhealth_number',
+        'pagibig_number',
+        'tin_number',
+        'emergency_contact_name',
+        'emergency_contact_relationship',
+        'emergency_contact_phone',
+        'bank_name',
+        'bank_account_number',
+        'bank_account_name',
+    ];
+
+    protected $casts = [
+        'birth_date' => 'date',
+        'hire_date' => 'date',
+        'paid_leaves' => 'integer',
+        'basic_salary' => 'decimal:2',
+        'hourly_rate' => 'decimal:2',
+        'daily_rate' => 'decimal:2',
+    ];
+
+    /**
+     * Get the route key for the model.
+     */
+    public function getRouteKeyName()
+    {
+        return 'employee_number';
+    }
+
+    /**
+     * Get the value of the model's route key.
+     */
+    public function getRouteKey()
+    {
+        return strtolower($this->getAttribute($this->getRouteKeyName()));
+    }
+
+    /**
+     * Retrieve the model for a bound value.
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where($field ?? $this->getRouteKeyName(), strtoupper($value))->first();
+    }
+
+    /**
+     * Activity log options
+     */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['first_name', 'last_name', 'employment_status', 'basic_salary'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
+
+    /**
+     * Get the user associated with the employee.
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the department that the employee belongs to.
+     */
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Get the position of the employee.
+     */
+    public function position()
+    {
+        return $this->belongsTo(Position::class);
+    }
+
+    /**
+     * Get the time schedule of the employee.
+     */
+    public function timeSchedule()
+    {
+        return $this->belongsTo(TimeSchedule::class);
+    }
+
+    /**
+     * Get the day schedule of the employee.
+     */
+    public function daySchedule()
+    {
+        return $this->belongsTo(DaySchedule::class);
+    }
+
+    /**
+     * Get the complete schedule display for the employee.
+     */
+    public function getScheduleDisplayAttribute()
+    {
+        $daySchedule = $this->daySchedule;
+        $timeSchedule = $this->timeSchedule;
+
+        if (!$daySchedule || !$timeSchedule) {
+            return 'No schedule assigned';
+        }
+
+        return $daySchedule->days_display . ' | ' . $timeSchedule->time_range_display;
+    }
+
+    /**
+     * Get the time logs for the employee.
+     */
+    public function timeLogs()
+    {
+        return $this->hasMany(TimeLog::class);
+    }
+
+    /**
+     * Get the DTR records for the employee.
+     */
+    public function dtrRecords()
+    {
+        return $this->hasMany(\App\Models\DTRRecord::class);
+    }
+
+    /**
+     * Get the payroll details for the employee.
+     */
+    public function payrollDetails()
+    {
+        return $this->hasMany(PayrollDetail::class);
+    }
+
+    /**
+     * Get the deductions for the employee.
+     */
+    public function deductions()
+    {
+        return $this->hasMany(Deduction::class);
+    }
+
+    /**
+     * Get the leave requests for the employee.
+     */
+    public function leaveRequests()
+    {
+        return $this->hasMany(LeaveRequest::class);
+    }
+
+    /**
+     * Get the work schedules for the employee.
+     */
+    public function workSchedules()
+    {
+        return $this->belongsToMany(WorkSchedule::class, 'employee_work_schedules')
+                    ->withPivot('effective_date', 'end_date', 'is_active')
+                    ->withTimestamps();
+    }
+
+    /**
+     * Get the current work schedule for the employee.
+     */
+    public function currentWorkSchedule()
+    {
+        return $this->workSchedules()
+                    ->wherePivot('is_active', true)
+                    ->wherePivot('effective_date', '<=', now())
+                    ->where(function ($query) {
+                        $query->wherePivotNull('end_date')
+                              ->orWherePivot('end_date', '>=', now());
+                    })
+                    ->latest('pivot_effective_date')
+                    ->first();
+    }
+
+    /**
+     * Get the employee's full name.
+     */
+    public function getFullNameAttribute()
+    {
+        $name = trim("{$this->first_name} {$this->middle_name} {$this->last_name}");
+        return $this->suffix ? "{$name} {$this->suffix}" : $name;
+    }
+
+    /**
+     * Get the employee's display name.
+     */
+    public function getDisplayNameAttribute()
+    {
+        return "{$this->last_name}, {$this->first_name}";
+    }
+
+    /**
+     * Check if employee is active.
+     */
+    public function isActive()
+    {
+        return $this->employment_status === 'active';
+    }
+
+    /**
+     * Check if employee is regular.
+     */
+    public function isRegular()
+    {
+        return $this->employment_type === 'regular';
+    }
+
+    /**
+     * Calculate daily rate from basic salary.
+     */
+    public function calculateDailyRate()
+    {
+        if ($this->daily_rate) {
+            return $this->daily_rate;
+        }
+
+        // Calculate based on 22 working days per month
+        return $this->basic_salary / 22;
+    }
+
+    /**
+     * Calculate hourly rate from basic salary.
+     */
+    public function calculateHourlyRate()
+    {
+        if ($this->hourly_rate) {
+            return $this->hourly_rate;
+        }
+
+        // Calculate based on 8 hours per day, 22 working days per month
+        return $this->basic_salary / (22 * 8);
+    }
+
+    /**
+     * Scope to filter active employees.
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('employment_status', 'active');
+    }
+
+    /**
+     * Scope to filter by department.
+     */
+    public function scopeByDepartment($query, $departmentId)
+    {
+        return $query->where('department_id', $departmentId);
+    }
+
+    /**
+     * Scope to filter by employment type.
+     */
+    public function scopeByEmploymentType($query, $type)
+    {
+        return $query->where('employment_type', $type);
+    }
+
+    /**
+     * Get time logs for current month.
+     */
+    public function thisMonthTimeLogs()
+    {
+        return $this->timeLogs()->whereMonth('log_date', now()->month)->whereYear('log_date', now()->year);
+    }
+
+    /**
+     * Get employee's age.
+     */
+    public function getAgeAttribute()
+    {
+        return $this->birth_date ? $this->birth_date->age : null;
+    }
+
+    /**
+     * Get years of service.
+     */
+    public function getYearsOfServiceAttribute()
+    {
+        if (!$this->hire_date) {
+            return '0 Days';
+        }
+        
+        $hireDate = $this->hire_date;
+        $currentDate = now();
+        
+        // Calculate total years (cast to integer)
+        $years = (int) $hireDate->diffInYears($currentDate);
+        
+        // Calculate remaining months after years (cast to integer)
+        $afterYears = $hireDate->copy()->addYears($years);
+        $months = (int) $afterYears->diffInMonths($currentDate);
+        
+        // Calculate remaining days after years and months (cast to integer)  
+        $afterMonths = $afterYears->copy()->addMonths($months);
+        $days = (int) $afterMonths->diffInDays($currentDate);
+        
+        if ($years >= 1) {
+            // 1 year or more: "X years, Y months"
+            if ($months == 0) {
+                return $years . ' Year' . ($years != 1 ? 's' : '');
+            } else {
+                return $years . ' Year' . ($years != 1 ? 's' : '') . ', ' . $months . ' Month' . ($months != 1 ? 's' : '');
+            }
+        } elseif ($months >= 1) {
+            // Less than 1 year: "X months, Y days"
+            if ($days == 0) {
+                return $months . ' Month' . ($months != 1 ? 's' : '');
+            } else {
+                return $months . ' Month' . ($months != 1 ? 's' : '') . ', ' . $days . ' Day' . ($days != 1 ? 's' : '');
+            }
+        } else {
+            // Less than 1 month: "X days"
+            return $days . ' Day' . ($days != 1 ? 's' : '');
+        }
+    }
+
+    /**
+     * Get activities for this employee.
+     */
+    public function activities()
+    {
+        return $this->morphMany(\Spatie\Activitylog\Models\Activity::class, 'subject');
+    }
+
+    /**
+     * Get working days per week based on day schedule
+     */
+    public function getWorkingDaysPerWeek()
+    {
+        return match($this->day_schedule) {
+            'monday_friday' => 5,
+            'monday_saturday', 'tuesday_saturday' => 6,
+            'monday_sunday' => 7,
+            'sunday_thursday' => 5,
+            'custom' => 5, // Default for custom, should be configured elsewhere
+            default => 5
+        };
+    }
+
+    /**
+     * Get human-readable day schedule
+     */
+    public function getDayScheduleDisplayAttribute()
+    {
+        return match($this->day_schedule) {
+            'monday_friday' => 'Monday - Friday (5 days)',
+            'monday_saturday' => 'Monday - Saturday (6 days)',
+            'monday_sunday' => 'Monday - Sunday (7 days)',
+            'tuesday_saturday' => 'Tuesday - Saturday (6 days)',
+            'sunday_thursday' => 'Sunday - Thursday (5 days)',
+            'custom' => 'Custom Schedule',
+            default => 'Monday - Friday (5 days)'
+        };
+    }
+
+    /**
+     * Get working days for a specific month
+     */
+    public function getWorkingDaysForMonth($year, $month)
+    {
+        $startDate = \Carbon\Carbon::create($year, $month, 1);
+        $endDate = $startDate->copy()->endOfMonth();
+        $workingDays = 0;
+
+        $current = $startDate->copy();
+        while ($current <= $endDate) {
+            if ($this->isWorkingDay($current)) {
+                $workingDays++;
+            }
+            $current->addDay();
+        }
+
+        return $workingDays;
+    }
+
+    /**
+     * Check if a given date is a working day for this employee
+     */
+    public function isWorkingDay(\Carbon\Carbon $date)
+    {
+        $dayOfWeek = $date->dayOfWeek; // 0=Sunday, 1=Monday, ..., 6=Saturday
+
+        return match($this->day_schedule) {
+            'monday_friday' => $dayOfWeek >= 1 && $dayOfWeek <= 5, // Mon-Fri
+            'monday_saturday' => $dayOfWeek >= 1 && $dayOfWeek <= 6, // Mon-Sat
+            'monday_sunday' => true, // All days
+            'tuesday_saturday' => $dayOfWeek >= 2 && $dayOfWeek <= 6, // Tue-Sat (rest on Sun-Mon)
+            'sunday_thursday' => $dayOfWeek == 0 || ($dayOfWeek >= 1 && $dayOfWeek <= 4), // Sun-Thu
+            'custom' => true, // Should be implemented based on custom logic
+            default => $dayOfWeek >= 1 && $dayOfWeek <= 5 // Default to Mon-Fri
+        };
+    }
+
+    /**
+     * Get expected working hours per day based on current work schedule
+     */
+    public function getExpectedHoursPerDay()
+    {
+        $currentSchedule = $this->currentWorkSchedule();
+        if (!$currentSchedule) {
+            return 8; // Default 8 hours
+        }
+
+        // Calculate hours from work schedule
+        $startTime = \Carbon\Carbon::parse($currentSchedule->start_time);
+        $endTime = \Carbon\Carbon::parse($currentSchedule->end_time);
+        $breakHours = $currentSchedule->break_hours ?? 1; // Default 1 hour break
+
+        return $endTime->diffInHours($startTime) - $breakHours;
+    }
+
+    /**
+     * Calculate expected working hours for a given period
+     */
+    public function getExpectedHoursForPeriod(\Carbon\Carbon $startDate, \Carbon\Carbon $endDate)
+    {
+        $totalHours = 0;
+        $current = $startDate->copy();
+        $hoursPerDay = $this->getExpectedHoursPerDay();
+
+        while ($current <= $endDate) {
+            if ($this->isWorkingDay($current)) {
+                $totalHours += $hoursPerDay;
+            }
+            $current->addDay();
+        }
+
+        return $totalHours;
+    }
+}
