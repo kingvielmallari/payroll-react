@@ -676,59 +676,58 @@ class PayrollController extends Controller
         $deductions = [];
         $total = 0;
         
-        // Only calculate deductions if employee has benefits
-        if ($employee->benefits_status === 'with_benefits') {
-            // Get active deduction settings
-            $deductionSettings = \App\Models\DeductionTaxSetting::active()
-                ->where('type', 'government')
-                ->orderBy('sort_order')
-                ->get();
-            
-            $governmentTotal = 0;
-            
-            // Calculate government deductions first (SSS, PhilHealth, Pag-IBIG)
-            foreach ($deductionSettings as $setting) {
-                if ($setting->tax_table_type !== 'withholding_tax') {
-                    $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay);
-                    
-                    if ($amount > 0) {
-                        $deductions[$setting->code] = $amount;
-                        $total += $amount;
-                        $governmentTotal += $amount;
-                    }
-                }
-            }
-            
-            // Calculate taxable income (gross pay minus government deductions)
-            $taxableIncome = $grossPay - $governmentTotal;
-            
-            // Calculate withholding tax based on taxable income
-            $taxSettings = \App\Models\DeductionTaxSetting::active()
-                ->where('type', 'government')
-                ->where('tax_table_type', 'withholding_tax')
-                ->get();
-            
-            foreach ($taxSettings as $setting) {
-                $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome);
+        // Get active deduction settings that apply to this employee's benefit status
+        $deductionSettings = \App\Models\DeductionTaxSetting::active()
+            ->where('type', 'government')
+            ->forBenefitStatus($employee->benefits_status)
+            ->orderBy('sort_order')
+            ->get();
+        
+        $governmentTotal = 0;
+        
+        // Calculate government deductions (SSS, PhilHealth, Pag-IBIG)
+        foreach ($deductionSettings as $setting) {
+            if ($setting->tax_table_type !== 'withholding_tax') {
+                $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay);
                 
                 if ($amount > 0) {
                     $deductions[$setting->code] = $amount;
                     $total += $amount;
+                    $governmentTotal += $amount;
                 }
             }
+        }
+        
+        // Calculate taxable income (gross pay minus government deductions)
+        $taxableIncome = $grossPay - $governmentTotal;
+        
+        // Calculate withholding tax based on taxable income
+        $taxSettings = \App\Models\DeductionTaxSetting::active()
+            ->where('type', 'government')
+            ->where('tax_table_type', 'withholding_tax')
+            ->forBenefitStatus($employee->benefits_status)
+            ->get();
+        
+        foreach ($taxSettings as $setting) {
+            $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome);
             
-            // Get other custom deductions
-            $customDeductions = \App\Models\DeductionSetting::where('is_active', true)
-                ->where('type', 'custom')
-                ->get();
+            if ($amount > 0) {
+                $deductions[$setting->code] = $amount;
+                $total += $amount;
+            }
+        }
+        
+        // Get other custom deductions
+        $customDeductions = \App\Models\DeductionSetting::where('is_active', true)
+            ->where('type', 'custom')
+            ->get();
+        
+        foreach ($customDeductions as $setting) {
+            $amount = $this->calculateCustomDeduction($setting, $employee, $basicPay, $grossPay);
             
-            foreach ($customDeductions as $setting) {
-                $amount = $this->calculateCustomDeduction($setting, $employee, $basicPay, $grossPay);
-                
-                if ($amount > 0) {
-                    $deductions[$setting->code] = $amount;
-                    $total += $amount;
-                }
+            if ($amount > 0) {
+                $deductions[$setting->code] = $amount;
+                $total += $amount;
             }
         }
         
@@ -793,9 +792,10 @@ class PayrollController extends Controller
         $total = 0;
         $details = [];
         
-        // Get active allowance settings
+        // Get active allowance settings that apply to this employee's benefit status
         $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
             ->where('type', 'allowance')
+            ->forBenefitStatus($employee->benefits_status)
             ->orderBy('sort_order')
             ->get();
         
@@ -826,9 +826,10 @@ class PayrollController extends Controller
         $total = 0;
         $details = [];
         
-        // Get active bonus settings
+        // Get active bonus settings that apply to this employee's benefit status
         $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
             ->where('type', 'bonus')
+            ->forBenefitStatus($employee->benefits_status)
             ->orderBy('sort_order')
             ->get();
         
@@ -1182,11 +1183,43 @@ class PayrollController extends Controller
             $dtrData[$detail->employee_id] = $employeeDtr;
         }
 
-        // Load dynamic settings for allowances and deductions
-        $allowanceSettings = \App\Models\AllowanceBonusSetting::active()->get();
-        $deductionSettings = \App\Models\DeductionSetting::active()->get();
+        // Load current dynamic settings for display (if draft status)
+        $isDynamic = $payroll->isDynamic();
+        $allowanceSettings = collect();
+        $deductionSettings = collect();
+        
+        if ($isDynamic) {
+            // Get current active settings
+            $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+                                                                 ->where('type', 'allowance')
+                                                                 ->orderBy('sort_order')
+                                                                 ->get();
+            $deductionSettings = \App\Models\DeductionTaxSetting::active()
+                                                               ->orderBy('sort_order')
+                                                               ->get();
+        } else {
+            // For processing/approved payrolls, get settings from snapshots if available
+            $firstSnapshot = $payroll->snapshots()->first();
+            if ($firstSnapshot && $firstSnapshot->settings_snapshot) {
+                $settingsSnapshot = $firstSnapshot->settings_snapshot;
+                
+                if (isset($settingsSnapshot['allowance_settings'])) {
+                    $allowanceSettings = collect($settingsSnapshot['allowance_settings']);
+                }
+                if (isset($settingsSnapshot['deduction_settings'])) {
+                    $deductionSettings = collect($settingsSnapshot['deduction_settings']);
+                }
+            }
+        }
 
-        return view('payrolls.show', compact('payroll', 'dtrData', 'periodDates', 'allowanceSettings', 'deductionSettings'));
+        return view('payrolls.show', compact(
+            'payroll', 
+            'dtrData', 
+            'periodDates', 
+            'allowanceSettings', 
+            'deductionSettings',
+            'isDynamic'
+        ));
     }
 
     /**
@@ -1350,14 +1383,29 @@ class PayrollController extends Controller
                            ->with('error', 'Only processing payrolls can be approved.');
         }
 
-        $payroll->update([
-            'status' => 'approved',
-            'approved_by' => Auth::id(),
-            'approved_at' => now(),
-        ]);
+        DB::beginTransaction();
+        try {
+            $payroll->update([
+                'status' => 'approved',
+                'approved_by' => Auth::id(),
+                'approved_at' => now(),
+            ]);
 
-        return redirect()->route('payrolls.show', $payroll)
-                       ->with('success', 'Payroll approved successfully!');
+            DB::commit();
+
+            return redirect()->route('payrolls.show', $payroll)
+                           ->with('success', 'Payroll approved successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to approve payroll', [
+                'payroll_id' => $payroll->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return redirect()->route('payrolls.show', $payroll)
+                           ->with('error', 'Failed to approve payroll: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -1372,10 +1420,33 @@ class PayrollController extends Controller
                            ->with('error', 'Only draft payrolls can be processed.');
         }
 
-        $payroll->update(['status' => 'processing']);
+        DB::beginTransaction();
+        try {
+            // Create snapshots for all payroll details
+            $this->createPayrollSnapshots($payroll);
 
-        return redirect()->route('payrolls.show', $payroll)
-                       ->with('success', 'Payroll submitted for processing!');
+            // Update payroll status
+            $payroll->update([
+                'status' => 'processing',
+                'processing_started_at' => now(),
+                'processing_by' => Auth::id(),
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('payrolls.show', $payroll)
+                           ->with('success', 'Payroll submitted for processing! Data has been locked as snapshots.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to process payroll', [
+                'payroll_id' => $payroll->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return redirect()->route('payrolls.show', $payroll)
+                           ->with('error', 'Failed to process payroll: ' . $e->getMessage());
+        }
     }
     
     /**
@@ -1404,6 +1475,70 @@ class PayrollController extends Controller
      * Calculate employee payroll details based on approved DTR records
      */
     private function calculateEmployeePayroll(Employee $employee, Payroll $payroll)
+    {
+        // Check if payroll is in processing/approved state and has snapshots
+        if ($payroll->usesSnapshot()) {
+            return $this->getEmployeePayrollFromSnapshot($employee, $payroll);
+        }
+
+        // For draft payrolls, calculate dynamically
+        return $this->calculateEmployeePayrollDynamic($employee, $payroll);
+    }
+
+    /**
+     * Get employee payroll data from snapshot (for processing/approved payrolls)
+     */
+    private function getEmployeePayrollFromSnapshot(Employee $employee, Payroll $payroll)
+    {
+        $snapshot = $payroll->snapshots()->where('employee_id', $employee->id)->first();
+        
+        if (!$snapshot) {
+            throw new \Exception("No snapshot found for employee {$employee->employee_number} in payroll {$payroll->payroll_number}");
+        }
+
+        // Create or update PayrollDetail from snapshot data
+        $payrollDetail = PayrollDetail::updateOrCreate(
+            [
+                'payroll_id' => $payroll->id,
+                'employee_id' => $employee->id,
+            ],
+            [
+                'basic_salary' => $snapshot->basic_salary,
+                'daily_rate' => $snapshot->daily_rate,
+                'hourly_rate' => $snapshot->hourly_rate,
+                'days_worked' => $snapshot->days_worked,
+                'regular_hours' => $snapshot->regular_hours,
+                'overtime_hours' => $snapshot->overtime_hours,
+                'holiday_hours' => $snapshot->holiday_hours,
+                'night_differential_hours' => $snapshot->night_differential_hours,
+                'regular_pay' => $snapshot->regular_pay,
+                'overtime_pay' => $snapshot->overtime_pay,
+                'holiday_pay' => $snapshot->holiday_pay,
+                'night_differential_pay' => $snapshot->night_differential_pay,
+                'allowances' => $snapshot->allowances_total,
+                'bonuses' => $snapshot->bonuses_total,
+                'other_earnings' => $snapshot->other_earnings,
+                'gross_pay' => $snapshot->gross_pay,
+                'sss_contribution' => $snapshot->sss_contribution,
+                'philhealth_contribution' => $snapshot->philhealth_contribution,
+                'pagibig_contribution' => $snapshot->pagibig_contribution,
+                'withholding_tax' => $snapshot->withholding_tax,
+                'late_deductions' => $snapshot->late_deductions,
+                'undertime_deductions' => $snapshot->undertime_deductions,
+                'cash_advance_deductions' => $snapshot->cash_advance_deductions,
+                'other_deductions' => $snapshot->other_deductions,
+                'total_deductions' => $snapshot->total_deductions,
+                'net_pay' => $snapshot->net_pay,
+            ]
+        );
+
+        return $payrollDetail;
+    }
+
+    /**
+     * Calculate employee payroll dynamically (for draft payrolls)
+     */
+    private function calculateEmployeePayrollDynamic(Employee $employee, Payroll $payroll)
     {
         // Get approved time logs for the payroll period
         $timeLogs = TimeLog::where('employee_id', $employee->id)
@@ -1486,30 +1621,34 @@ class PayrollController extends Controller
         // Calculate cash advance deductions
         $cashAdvanceDeductions = $this->calculateCashAdvanceDeductions($employee, $payroll);
         
-        // Create payroll detail
-        $payrollDetail = PayrollDetail::create([
-            'payroll_id' => $payroll->id,
-            'employee_id' => $employee->id,
-            'basic_salary' => $employee->basic_salary,
-            'daily_rate' => $dailyRate,
-            'hourly_rate' => $hourlyRate,
-            'days_worked' => $daysWorked,
-            'regular_hours' => $regularHours,
-            'overtime_hours' => $overtimeHours,
-            'holiday_hours' => $holidayHours,
-            'night_differential_hours' => $nightDifferentialHours,
-            'regular_pay' => $regularPay,
-            'overtime_pay' => $overtimePay,
-            'holiday_pay' => $holidayPay,
-            'night_differential_pay' => $nightDifferentialPay,
-            'allowances' => $allowancesTotal,
-            'bonuses' => $bonusesTotal,
-            'other_earnings' => 0,
-            'late_deductions' => $lateDeductions,
-            'undertime_deductions' => $undertimeDeductions,
-            'cash_advance_deductions' => $cashAdvanceDeductions,
-            'other_deductions' => 0,
-        ]);
+        // Create or update payroll detail
+        $payrollDetail = PayrollDetail::updateOrCreate(
+            [
+                'payroll_id' => $payroll->id,
+                'employee_id' => $employee->id,
+            ],
+            [
+                'basic_salary' => $employee->basic_salary,
+                'daily_rate' => $dailyRate,
+                'hourly_rate' => $hourlyRate,
+                'days_worked' => $daysWorked,
+                'regular_hours' => $regularHours,
+                'overtime_hours' => $overtimeHours,
+                'holiday_hours' => $holidayHours,
+                'night_differential_hours' => $nightDifferentialHours,
+                'regular_pay' => $regularPay,
+                'overtime_pay' => $overtimePay,
+                'holiday_pay' => $holidayPay,
+                'night_differential_pay' => $nightDifferentialPay,
+                'allowances' => $allowancesTotal,
+                'bonuses' => $bonusesTotal,
+                'other_earnings' => 0,
+                'late_deductions' => $lateDeductions,
+                'undertime_deductions' => $undertimeDeductions,
+                'cash_advance_deductions' => $cashAdvanceDeductions,
+                'other_deductions' => 0,
+            ]
+        );
 
         // Calculate gross pay
         $payrollDetail->gross_pay = $payrollDetail->regular_pay + 
@@ -1536,8 +1675,11 @@ class PayrollController extends Controller
      */
     private function calculateEmployeeAllowances(Employee $employee, Payroll $payroll, $regularHours, $overtimeHours, $holidayHours)
     {
+        // Get current active allowance settings that apply to this employee's benefit status
         $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
                                                              ->where('type', 'allowance')
+                                                             ->forBenefitStatus($employee->benefits_status)
+                                                             ->orderBy('sort_order')
                                                              ->get();
         
         $totalAllowances = 0;
@@ -1563,8 +1705,11 @@ class PayrollController extends Controller
      */
     private function calculateEmployeeBonuses(Employee $employee, Payroll $payroll, $regularHours, $overtimeHours, $holidayHours)
     {
+        // Get current active bonus settings that apply to this employee's benefit status
         $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
                                                          ->where('type', 'bonus')
+                                                         ->forBenefitStatus($employee->benefits_status)
+                                                         ->orderBy('sort_order')
                                                          ->get();
         
         $totalBonuses = 0;
@@ -1595,6 +1740,16 @@ class PayrollController extends Controller
         switch ($setting->calculation_type) {
             case 'fixed_amount':
                 $amount = $setting->fixed_amount ?? 0;
+                
+                // Apply frequency-based calculation
+                if ($setting->frequency === 'daily') {
+                    $daysWorked = $this->calculateDaysWorked($employee, $payroll);
+                    $maxDays = $setting->max_days_per_period ?? $daysWorked;
+                    $amount = $amount * min($daysWorked, $maxDays);
+                } elseif ($setting->frequency === 'weekly') {
+                    $weeksInPeriod = $this->calculateWeeksInPeriod($payroll);
+                    $amount = $amount * $weeksInPeriod;
+                }
                 break;
                 
             case 'percentage':
@@ -1604,20 +1759,20 @@ class PayrollController extends Controller
                 break;
                 
             case 'per_day':
-                // Calculate based on days worked
-                $daysInPeriod = Carbon::parse($payroll->period_start)->diffInDays(Carbon::parse($payroll->period_end)) + 1;
-                $amount = ($setting->fixed_amount ?? 0) * $daysInPeriod;
+                // Calculate based on actual days worked
+                $daysWorked = $this->calculateDaysWorked($employee, $payroll);
+                $amount = ($setting->fixed_amount ?? 0) * $daysWorked;
                 break;
                 
             case 'per_hour':
                 // Calculate based on hours worked
                 $totalHours = $regularHours;
                 
-                if ($setting->apply_to_overtime) {
+                if ($setting->apply_to_overtime ?? false) {
                     $totalHours += $overtimeHours;
                 }
                 
-                if ($setting->apply_to_holidays) {
+                if ($setting->apply_to_holidays ?? false) {
                     $totalHours += $holidayHours;
                 }
                 
@@ -1626,7 +1781,13 @@ class PayrollController extends Controller
                 
             case 'multiplier':
                 // Calculate as multiplier of hourly rate
-                $amount = ($employee->hourly_rate ?? 0) * ($setting->multiplier ?? 0) * $regularHours;
+                $hourlyRate = $employee->hourly_rate ?? ($employee->basic_salary / 173.33); // Default monthly to hourly
+                $amount = $hourlyRate * ($setting->multiplier ?? 0) * $regularHours;
+                break;
+                
+            case 'basic_salary_multiplier':
+                // Calculate as multiplier of basic salary
+                $amount = ($employee->basic_salary ?? 0) * ($setting->multiplier ?? 0);
                 break;
         }
         
@@ -1639,7 +1800,32 @@ class PayrollController extends Controller
             $amount = $setting->maximum_amount;
         }
         
-        return $amount;
+        return round($amount, 2);
+    }
+
+    /**
+     * Calculate actual days worked by employee in payroll period
+     */
+    private function calculateDaysWorked(Employee $employee, Payroll $payroll)
+    {
+        $timeLogs = TimeLog::where('employee_id', $employee->id)
+                          ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+                          ->where('status', 'approved')
+                          ->where('regular_hours', '>', 0)
+                          ->count();
+        
+        return $timeLogs;
+    }
+
+    /**
+     * Calculate number of weeks in payroll period
+     */
+    private function calculateWeeksInPeriod(Payroll $payroll)
+    {
+        $startDate = Carbon::parse($payroll->period_start);
+        $endDate = Carbon::parse($payroll->period_end);
+        
+        return ceil($startDate->diffInDays($endDate) / 7);
     }
 
     /**
@@ -1647,36 +1833,37 @@ class PayrollController extends Controller
      */
     private function calculateCashAdvanceDeductions(Employee $employee, Payroll $payroll)
     {
-        // Get pending cash advances for this employee
-        $cashAdvances = \App\Models\CashAdvance::where('employee_id', $employee->id)
-                                              ->where('status', 'approved')
-                                              ->where('remaining_balance', '>', 0)
-                                              ->get();
-        
-        $totalDeductions = 0;
-        
-        foreach ($cashAdvances as $cashAdvance) {
-            // Calculate deduction amount based on payment schedule
-            $deductionAmount = min(
-                $cashAdvance->monthly_deduction_amount ?? 0,
-                $cashAdvance->remaining_balance
-            );
+        try {
+            // Get pending cash advances for this employee
+            $cashAdvances = \App\Models\CashAdvance::where('employee_id', $employee->id)
+                                                  ->where('status', 'approved')
+                                                  ->get();
             
-            if ($deductionAmount > 0) {
-                // Create cash advance payment record
-                \App\Models\CashAdvancePayment::create([
-                    'cash_advance_id' => $cashAdvance->id,
-                    'payroll_id' => $payroll->id,
-                    'amount' => $deductionAmount,
-                    'payment_date' => $payroll->pay_date,
-                    'status' => 'pending'
-                ]);
+            $totalDeductions = 0;
+            
+            foreach ($cashAdvances as $cashAdvance) {
+                // Calculate deduction amount based on payment schedule
+                $remainingBalance = $cashAdvance->remaining_balance ?? $cashAdvance->amount ?? 0;
                 
-                $totalDeductions += $deductionAmount;
+                if ($remainingBalance > 0) {
+                    $deductionAmount = min(
+                        $cashAdvance->monthly_deduction_amount ?? 0,
+                        $remainingBalance
+                    );
+                    
+                    if ($deductionAmount > 0) {
+                        $totalDeductions += $deductionAmount;
+                    }
+                }
             }
+            
+            return $totalDeductions;
+            
+        } catch (\Exception $e) {
+            // If there's an error (like missing table), return 0
+            Log::warning('Cash advance calculation failed: ' . $e->getMessage());
+            return 0;
         }
-        
-        return $totalDeductions;
     }
 
     /**
@@ -3104,52 +3291,33 @@ class PayrollController extends Controller
         }
 
         try {
-            // Always perform lightweight recalculation to reflect current data
+            // Always perform full recalculation to reflect current data
             Log::info('Auto-recalculating payroll on view', ['payroll_id' => $payroll->id]);
             
-            // Get current payroll settings
-            $payrollSettings = PayScheduleSetting::where('code', $payroll->pay_schedule)
-                ->where('is_active', true)
-                ->first();
+            $totalGross = 0;
+            $totalDeductions = 0;
+            $totalNet = 0;
             
-            if (!$payrollSettings) {
-                Log::warning('No payroll settings found for schedule: ' . $payroll->pay_schedule);
-                return;
-            }
-            
-            // Recalculate each payroll detail with current data
+            // Recalculate each payroll detail completely with current settings
             foreach ($payroll->payrollDetails as $detail) {
                 $employee = Employee::find($detail->employee_id);
                 
                 if (!$employee) continue;
 
-                // Get time logs and recalculate with current rates
-                $timeLogs = TimeLog::where('employee_id', $employee->id)
-                    ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-                    ->get();
-
-                $totalRegularHours = $timeLogs->sum('regular_hours');
-                $totalOvertimeHours = $timeLogs->sum('overtime_hours');
-                $daysWorked = $timeLogs->where('regular_hours', '>', 0)->count();
-
-                $hourlyRate = $employee->hourly_rate ?? 0;
-                $regularPay = $totalRegularHours * $hourlyRate;
-                $overtimePay = $totalOvertimeHours * ($hourlyRate * 1.25);
-
-                $grossPay = $regularPay + $overtimePay + $detail->allowances + $detail->bonuses;
-                $netPay = $grossPay - $detail->total_deductions;
-
-                $detail->update([
-                    'regular_pay' => $regularPay,
-                    'overtime_pay' => $overtimePay,
-                    'total_hours' => $totalRegularHours + $totalOvertimeHours,
-                    'regular_hours' => $totalRegularHours,
-                    'overtime_hours' => $totalOvertimeHours,
-                    'days_worked' => $daysWorked,
-                    'gross_pay' => $grossPay,
-                    'net_pay' => $netPay,
-                ]);
+                // Full recalculation using current dynamic settings
+                $updatedDetail = $this->calculateEmployeePayrollDynamic($employee, $payroll);
+                
+                $totalGross += $updatedDetail->gross_pay;
+                $totalDeductions += $updatedDetail->total_deductions;
+                $totalNet += $updatedDetail->net_pay;
             }
+            
+            // Update payroll totals
+            $payroll->update([
+                'total_gross' => $totalGross,
+                'total_deductions' => $totalDeductions,
+                'total_net' => $totalNet,
+            ]);
             
         } catch (\Exception $e) {
             Log::warning('Auto-recalculation failed', [
@@ -3157,5 +3325,321 @@ class PayrollController extends Controller
                 'error' => $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Move payroll back to draft status (only from processing)
+     */
+    public function backToDraft(Payroll $payroll)
+    {
+        $this->authorize('edit payrolls');
+
+        if ($payroll->status !== 'processing') {
+            return back()->withErrors(['status' => 'Only processing payrolls can be moved back to draft.']);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Delete all snapshots
+            $payroll->snapshots()->delete();
+
+            // Update payroll status
+            $payroll->update([
+                'status' => 'draft',
+                'processing_started_at' => null,
+                'processing_by' => null,
+            ]);
+
+            DB::commit();
+
+            return redirect()->route('payrolls.show', $payroll)
+                           ->with('success', 'Payroll moved back to draft. Snapshots have been cleared.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to move payroll back to draft', [
+                'payroll_id' => $payroll->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return back()->withErrors(['error' => 'Failed to move payroll back to draft: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Create snapshots for all employees in the payroll
+     */
+    private function createPayrollSnapshots(Payroll $payroll)
+    {
+        // Get all payroll details
+        $payrollDetails = $payroll->payrollDetails()->with('employee')->get();
+
+        if ($payrollDetails->isEmpty()) {
+            throw new \Exception('No payroll details found to create snapshots.');
+        }
+
+        foreach ($payrollDetails as $detail) {
+            $employee = $detail->employee;
+
+            // Get breakdown data for allowances and bonuses
+            $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
+            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
+            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail);
+
+            // Get current settings snapshot
+            $settingsSnapshot = $this->getCurrentSettingsSnapshot($employee);
+
+            // Create snapshot
+            \App\Models\PayrollSnapshot::create([
+                'payroll_id' => $payroll->id,
+                'employee_id' => $employee->id,
+                'employee_number' => $employee->employee_number,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'department' => $employee->department->name ?? 'N/A',
+                'position' => $employee->position->title ?? 'N/A',
+                'basic_salary' => $detail->basic_salary,
+                'daily_rate' => $detail->daily_rate,
+                'hourly_rate' => $detail->hourly_rate,
+                'days_worked' => $detail->days_worked,
+                'regular_hours' => $detail->regular_hours,
+                'overtime_hours' => $detail->overtime_hours,
+                'holiday_hours' => $detail->holiday_hours,
+                'night_differential_hours' => $detail->night_differential_hours,
+                'regular_pay' => $detail->regular_pay,
+                'overtime_pay' => $detail->overtime_pay,
+                'holiday_pay' => $detail->holiday_pay,
+                'night_differential_pay' => $detail->night_differential_pay,
+                'allowances_breakdown' => $allowancesBreakdown,
+                'allowances_total' => $detail->allowances,
+                'bonuses_breakdown' => $bonusesBreakdown,
+                'bonuses_total' => $detail->bonuses,
+                'other_earnings' => $detail->other_earnings,
+                'gross_pay' => $detail->gross_pay,
+                'deductions_breakdown' => $deductionsBreakdown,
+                'sss_contribution' => $detail->sss_contribution,
+                'philhealth_contribution' => $detail->philhealth_contribution,
+                'pagibig_contribution' => $detail->pagibig_contribution,
+                'withholding_tax' => $detail->withholding_tax,
+                'late_deductions' => $detail->late_deductions,
+                'undertime_deductions' => $detail->undertime_deductions,
+                'cash_advance_deductions' => $detail->cash_advance_deductions,
+                'other_deductions' => $detail->other_deductions,
+                'total_deductions' => $detail->total_deductions,
+                'net_pay' => $detail->net_pay,
+                'settings_snapshot' => $settingsSnapshot,
+                'remarks' => 'Snapshot created at ' . now()->format('Y-m-d H:i:s'),
+            ]);
+        }
+    }
+
+    /**
+     * Get allowances breakdown for employee
+     */
+    private function getEmployeeAllowancesBreakdown(Employee $employee, Payroll $payroll)
+    {
+        $breakdown = [];
+        
+        // Get active allowance settings that apply to this employee's benefit status
+        $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+                                                             ->where('type', 'allowance')
+                                                             ->forBenefitStatus($employee->benefits_status)
+                                                             ->orderBy('sort_order')
+                                                             ->get();
+        
+        foreach ($allowanceSettings as $setting) {
+            // Calculate hours data for this employee
+            $timeLogs = TimeLog::where('employee_id', $employee->id)
+                              ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+                              ->where('status', 'approved')
+                              ->get();
+            
+            $regularHours = $timeLogs->sum('regular_hours') ?? 0;
+            $overtimeHours = $timeLogs->sum('overtime_hours') ?? 0;
+            $holidayHours = $timeLogs->sum('holiday_hours') ?? 0;
+            
+            $amount = $this->calculateAllowanceBonusAmountForPayroll(
+                $setting, 
+                $employee, 
+                $payroll, 
+                $regularHours, 
+                $overtimeHours, 
+                $holidayHours
+            );
+            
+            if ($amount > 0) {
+                $breakdown[] = [
+                    'name' => $setting->name,
+                    'code' => $setting->code ?? $setting->name,
+                    'amount' => $amount,
+                    'is_taxable' => $setting->is_taxable ?? true,
+                    'calculation_type' => $setting->calculation_type,
+                    'description' => $setting->description ?? ''
+                ];
+            }
+        }
+        
+        return $breakdown;
+    }
+
+    /**
+     * Get bonuses breakdown for employee
+     */
+    private function getEmployeeBonusesBreakdown(Employee $employee, Payroll $payroll)
+    {
+        $breakdown = [];
+        
+        // Get active bonus settings that apply to this employee's benefit status
+        $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+                                                         ->where('type', 'bonus')
+                                                         ->forBenefitStatus($employee->benefits_status)
+                                                         ->orderBy('sort_order')
+                                                         ->get();
+        
+        foreach ($bonusSettings as $setting) {
+            // Calculate hours data for this employee
+            $timeLogs = TimeLog::where('employee_id', $employee->id)
+                              ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+                              ->where('status', 'approved')
+                              ->get();
+            
+            $regularHours = $timeLogs->sum('regular_hours') ?? 0;
+            $overtimeHours = $timeLogs->sum('overtime_hours') ?? 0;
+            $holidayHours = $timeLogs->sum('holiday_hours') ?? 0;
+            
+            $amount = $this->calculateAllowanceBonusAmountForPayroll(
+                $setting, 
+                $employee, 
+                $payroll, 
+                $regularHours, 
+                $overtimeHours, 
+                $holidayHours
+            );
+            
+            if ($amount > 0) {
+                $breakdown[] = [
+                    'name' => $setting->name,
+                    'code' => $setting->code ?? $setting->name,
+                    'amount' => $amount,
+                    'is_taxable' => $setting->is_taxable ?? true,
+                    'calculation_type' => $setting->calculation_type,
+                    'description' => $setting->description ?? ''
+                ];
+            }
+        }
+        
+        return $breakdown;
+    }
+
+    /**
+     * Get deductions breakdown for employee
+     */
+    private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail)
+    {
+        $breakdown = [];
+        
+        // Standard government deductions
+        if ($detail->sss_contribution > 0) {
+            $breakdown[] = [
+                'name' => 'SSS Contribution',
+                'code' => 'sss',
+                'amount' => $detail->sss_contribution,
+                'type' => 'government'
+            ];
+        }
+        
+        if ($detail->philhealth_contribution > 0) {
+            $breakdown[] = [
+                'name' => 'PhilHealth Contribution',
+                'code' => 'philhealth',
+                'amount' => $detail->philhealth_contribution,
+                'type' => 'government'
+            ];
+        }
+        
+        if ($detail->pagibig_contribution > 0) {
+            $breakdown[] = [
+                'name' => 'Pag-IBIG Contribution',
+                'code' => 'pagibig',
+                'amount' => $detail->pagibig_contribution,
+                'type' => 'government'
+            ];
+        }
+        
+        if ($detail->withholding_tax > 0) {
+            $breakdown[] = [
+                'name' => 'Withholding Tax',
+                'code' => 'withholding_tax',
+                'amount' => $detail->withholding_tax,
+                'type' => 'tax'
+            ];
+        }
+        
+        // Time-based deductions
+        if ($detail->late_deductions > 0) {
+            $breakdown[] = [
+                'name' => 'Late Deductions',
+                'code' => 'late',
+                'amount' => $detail->late_deductions,
+                'type' => 'time'
+            ];
+        }
+        
+        if ($detail->undertime_deductions > 0) {
+            $breakdown[] = [
+                'name' => 'Undertime Deductions',
+                'code' => 'undertime',
+                'amount' => $detail->undertime_deductions,
+                'type' => 'time'
+            ];
+        }
+        
+        if ($detail->cash_advance_deductions > 0) {
+            $breakdown[] = [
+                'name' => 'Cash Advance',
+                'code' => 'cash_advance',
+                'amount' => $detail->cash_advance_deductions,
+                'type' => 'loan'
+            ];
+        }
+        
+        if ($detail->other_deductions > 0) {
+            $breakdown[] = [
+                'name' => 'Other Deductions',
+                'code' => 'other',
+                'amount' => $detail->other_deductions,
+                'type' => 'other'
+            ];
+        }
+        
+        return $breakdown;
+    }
+
+    /**
+     * Get current settings snapshot for employee
+     */
+    private function getCurrentSettingsSnapshot(Employee $employee)
+    {
+        return [
+            'benefit_status' => $employee->benefits_status,
+            'pay_schedule' => $employee->pay_schedule,
+            'allowance_settings' => \App\Models\AllowanceBonusSetting::where('is_active', true)
+                                                                    ->where('type', 'allowance')
+                                                                    ->forBenefitStatus($employee->benefits_status)
+                                                                    ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
+                                                                    ->get()
+                                                                    ->toArray(),
+            'bonus_settings' => \App\Models\AllowanceBonusSetting::where('is_active', true)
+                                                                ->where('type', 'bonus')
+                                                                ->forBenefitStatus($employee->benefits_status)
+                                                                ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
+                                                                ->get()
+                                                                ->toArray(),
+            'deduction_settings' => \App\Models\DeductionTaxSetting::active()
+                                                                  ->forBenefitStatus($employee->benefits_status)
+                                                                  ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
+                                                                  ->get()
+                                                                  ->toArray(),
+            'captured_at' => now()->toISOString(),
+        ];
     }
 }

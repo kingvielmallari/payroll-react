@@ -714,4 +714,46 @@ class DTRController extends Controller
             $headers
         );
     }
+
+    /**
+     * Delete DTR record.
+     */
+    public function destroy($id)
+    {
+        $this->authorize('delete time logs');
+        
+        try {
+            // Get DTR by ID
+            $dtrRecord = DB::table('d_t_r_s')->where('id', $id)->first();
+            
+            if (!$dtrRecord) {
+                return redirect()->route('dtr.index')->with('error', "DTR with ID {$id} not found.");
+            }
+            
+            // Delete related time logs first (if any)
+            TimeLog::where('employee_id', $dtrRecord->employee_id)
+                    ->whereBetween('log_date', [$dtrRecord->period_start, $dtrRecord->period_end])
+                    ->delete();
+            
+            // Delete DTR record
+            DB::table('d_t_r_s')->where('id', $id)->delete();
+            
+            Log::info('DTR Deleted Successfully', [
+                'dtr_id' => $id,
+                'employee_id' => $dtrRecord->employee_id,
+                'deleted_by' => Auth::id()
+            ]);
+            
+            return redirect()->route('dtr.index')->with('success', 'DTR record deleted successfully!');
+            
+        } catch (\Exception $e) {
+            Log::error('DTR Delete Error', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return redirect()->back()->with('error', 'Error deleting DTR: ' . $e->getMessage());
+        }
+    }
 }

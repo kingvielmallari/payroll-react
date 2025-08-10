@@ -54,13 +54,32 @@
                     <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
                             <h4 class="text-sm font-medium text-gray-900">Status</h4>
-                            <span class="mt-1 inline-flex px-3 py-1 text-sm font-semibold rounded-full 
-                                {{ $payroll->status == 'paid' ? 'bg-green-100 text-green-800' : 
-                                   ($payroll->status == 'approved' ? 'bg-blue-100 text-blue-800' : 
-                                    ($payroll->status == 'processing' ? 'bg-yellow-100 text-yellow-800' : 
-                                     ($payroll->status == 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'))) }}">
-                                {{ ucfirst($payroll->status) }}
-                            </span>
+                            <div class="mt-1 flex items-center space-x-2">
+                                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full 
+                                    {{ $payroll->status == 'paid' ? 'bg-green-100 text-green-800' : 
+                                       ($payroll->status == 'approved' ? 'bg-blue-100 text-blue-800' : 
+                                        ($payroll->status == 'processing' ? 'bg-yellow-100 text-yellow-800' : 
+                                         ($payroll->status == 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'))) }}">
+                                    {{ ucfirst($payroll->status) }}
+                                </span>
+                                @if(isset($isDynamic))
+                                    @if($isDynamic)
+                                        <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                            </svg>
+                                            Dynamic
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-gray-50 text-gray-700">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                            </svg>
+                                            Locked
+                                        </span>
+                                    @endif
+                                @endif
+                            </div>
                         </div>
                         <div>
                             <h4 class="text-sm font-medium text-gray-900">Type</h4>
@@ -72,12 +91,7 @@
                         </div>
                     </div>
 
-                    @if($payroll->description)
-                    <div class="mt-6">
-                        <h4 class="text-sm font-medium text-gray-900">Description</h4>
-                        <p class="mt-1 text-sm text-gray-600">{{ $payroll->description }}</p>
-                    </div>
-                    @endif
+                   
 
                     <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
@@ -126,6 +140,22 @@
                                     class="inline-flex items-center px-4 py-2 bg-purple-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-purple-700 focus:bg-purple-700 active:bg-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition ease-in-out duration-150"
                                     onclick="return confirm('Approve this payroll?')">
                                 Approve Payroll
+                            </button>
+                        </form>
+                        @endif
+                        @endcan
+
+                        @can('edit payrolls')
+                        @if($payroll->status == 'processing')
+                        <form method="POST" action="{{ route('payrolls.back-to-draft', $payroll) }}" class="inline">
+                            @csrf
+                            <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-yellow-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-yellow-700 focus:bg-yellow-700 active:bg-yellow-900 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Move this payroll back to draft? This will clear all snapshots and make it dynamic again.')">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
+                                </svg>
+                                Back to Draft
                             </button>
                         </form>
                         @endif
@@ -234,151 +264,93 @@
                                         <div class="text-xs text-gray-500">{{ number_format($detail->overtime_hours ?? 0, 1) }} hrs</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
-                                       
-                                        <div class="text-xs text-gray-500 space-y-1">
-                                            @php
-                                                $activeAllowances = App\Models\AllowanceBonusSetting::active()->allowances()->get();
-                                                $activeBonuses = App\Models\AllowanceBonusSetting::active()->bonuses()->get();
-                                                $hasEarnings = false;
-                                            @endphp
-                                            
+                                        <div class="space-y-1">
                                             @if($detail->allowances > 0)
-                                                @php $hasEarnings = true; @endphp
-                                                @if($activeAllowances->count() > 0)
-                                                    @foreach($activeAllowances as $allowance)
-                                                        <div class="flex justify-between">
-                                                            <span>{{ $allowance->code }}:</span>
-                                                            <span>₱{{ number_format($allowance->fixed_amount, 2) }}</span>
-                                                        </div>
-                                                    @endforeach
-                                                @else
-                                                    <div class="flex justify-between">
-                                                        <span>Allowances:</span>
-                                                        <span>₱{{ number_format($detail->allowances, 2) }}</span>
+                                                <!-- Active Allowance Settings (if dynamic) -->
+                                                @if(isset($isDynamic) && $isDynamic && $allowanceSettings->isNotEmpty())
+                                                    <div class="mb-2 p-2 bg-green-50 rounded border border-green-200">
+                                                        <div class="text-xs font-medium text-green-800 mb-1">Active Settings:</div>
+                                                        @foreach($allowanceSettings as $setting)
+                                                            <div class="text-xs text-green-700 flex justify-between">
+                                                                <span>{{ $setting->name }}:</span>
+                                                                <span>
+                                                                    @if($setting->calculation_type === 'fixed_amount')
+                                                                        ₱{{ number_format($setting->fixed_amount, 2) }}
+                                                                    @elseif($setting->calculation_type === 'percentage')
+                                                                        {{ $setting->rate_percentage }}%
+                                                                    @else
+                                                                        {{ ucfirst(str_replace('_', ' ', $setting->calculation_type)) }}
+                                                                    @endif
+                                                                </span>
+                                                            </div>
+                                                        @endforeach
                                                     </div>
                                                 @endif
+                                                
+                                                <div class="font-medium text-green-600">
+                                                    ₱{{ number_format($detail->allowances, 2) }}
+                                                </div>
+                                                @if(isset($isDynamic) && $isDynamic)
+                                                    <div class="text-xs text-green-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                                            </svg>
+                                                            Current settings
+                                                        </span>
+                                                    </div>
+                                                @else
+                                                    <div class="text-xs text-gray-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                                            </svg>
+                                                            Locked snapshot
+                                                        </span>
+                                                    </div>
+                                                @endif
+                                            @else
+                                                <div class="text-gray-400">₱0.00</div>
                                             @endif
                                             
                                             @if($detail->bonuses > 0)
-                                                @php $hasEarnings = true; @endphp
-                                                @if($activeBonuses->count() > 0)
-                                                    @foreach($activeBonuses as $bonus)
-                                                        <div class="flex justify-between">
-                                                            <span>{{ $bonus->name }}:</span>
-                                                            <span>₱{{ number_format($detail->bonuses / $activeBonuses->count(), 2) }}</span>
-                                                        </div>
-                                                    @endforeach
-                                                @else
-                                                    <div class="flex justify-between">
-                                                        <span>Bonuses:</span>
-                                                        <span>₱{{ number_format($detail->bonuses, 2) }}</span>
-                                                    </div>
-                                                @endif
-                                            @endif
-                                            
-                                            @if($detail->other_earnings > 0)
-                                                @php $hasEarnings = true; @endphp
-                                                <div class="flex justify-between">
-                                                    <span>Other Earnings:</span>
-                                                    <span>₱{{ number_format($detail->other_earnings, 2) }}</span>
+                                                <div class="text-xs border-t pt-1">
+                                                    <span class="text-blue-600">Bonus: ₱{{ number_format($detail->bonuses, 2) }}</span>
                                                 </div>
                                             @endif
-                                            
-                                            @if(!$hasEarnings)
-                                                <div class="text-gray-400">No additional earnings</div>
-                                            @endif
-                                            
-                                        </div>
-                                         <div class="font-bold text-yellow-600">₱{{ number_format($detail->allowances + $detail->bonuses + $detail->other_earnings, 2) }}</div>
-                                    </td>
-                                    <td>
-                                       
-                                        <div  class="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 text-right">
-                                             ₱{{ number_format($detail->gross_pay, 2) }}    
                                         </div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-right">
-                                       
-                                        <div class="text-xs text-gray-500 space-y-1">
-                                            @php
-                                                $deductionSettings = App\Models\DeductionSetting::active()->get();
-                                                $deductionNames = $deductionSettings->pluck('name', 'code')->toArray();
-                                                $hasDeductions = false;
-                                            @endphp
-                                            
-                                            @if($detail->sss_contribution > 0)
-                                                @php $hasDeductions = true; @endphp
-                                                <div class="flex justify-between">
-                                                    <span>{{ $deductionNames['sss'] ?? 'SSS' }}:</span>
-                                                    <span>₱{{ number_format($detail->sss_contribution, 2) }}</span>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                        <div class="font-bold text-green-600">₱{{ number_format($detail->gross_pay, 2) }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                        <div class="space-y-1">
+                                            <div class="font-medium text-red-600">
+                                                ₱{{ number_format($detail->total_deductions, 2) }}
+                                            </div>
+                                            @if(isset($isDynamic) && $isDynamic)
+                                                <div class="text-xs text-red-500">
+                                                    <span class="inline-flex items-center">
+                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                                        </svg>
+                                                        Current rates
+                                                    </span>
                                                 </div>
-                                            @endif
-                                            
-                                            @if($detail->philhealth_contribution > 0)
-                                                @php $hasDeductions = true; @endphp
-                                                <div class="flex justify-between">
-                                                    <span>{{ $deductionNames['philhealth'] ?? 'PhilHealth' }}:</span>
-                                                    <span>₱{{ number_format($detail->philhealth_contribution, 2) }}</span>
+                                            @else
+                                                <div class="text-xs text-gray-500">
+                                                    <span class="inline-flex items-center">
+                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                                        </svg>
+                                                        Locked snapshot
+                                                    </span>
                                                 </div>
-                                            @endif
-                                            
-                                            @if($detail->pagibig_contribution > 0)
-                                                @php $hasDeductions = true; @endphp
-                                                <div class="flex justify-between">
-                                                    <span>{{ $deductionNames['pagibig'] ?? 'Pag-IBIG' }}:</span>
-                                                    <span>₱{{ number_format($detail->pagibig_contribution, 2) }}</span>
-                                                </div>
-                                            @endif
-                                            
-                                            @if($detail->withholding_tax > 0)
-                                                @php $hasDeductions = true; @endphp
-                                                <div class="flex justify-between">
-                                                    <span>{{ $deductionNames['withholding_tax'] ?? 'Tax' }}:</span>
-                                                    <span>₱{{ number_format($detail->withholding_tax, 2) }}</span>
-                                                </div>
-                                            @endif
-                                            
-                                            @if($detail->late_deductions > 0)
-                                                @php $hasDeductions = true; @endphp
-                                                <div class="flex justify-between">
-                                                    <span>{{ $deductionNames['late'] ?? 'Late' }}:</span>
-                                                    <span>₱{{ number_format($detail->late_deductions, 2) }}</span>
-                                                </div>
-                                            @endif
-                                            
-                                            @if($detail->undertime_deductions > 0)
-                                                @php $hasDeductions = true; @endphp
-                                                <div class="flex justify-between">
-                                                    <span>{{ $deductionNames['undertime'] ?? 'Undertime' }}:</span>
-                                                    <span>₱{{ number_format($detail->undertime_deductions, 2) }}</span>
-                                                </div>
-                                            @endif
-                                            
-                                            @if($detail->cash_advance_deductions > 0)
-                                                @php $hasDeductions = true; @endphp
-                                                <div class="flex justify-between">
-                                                    <span>{{ $deductionNames['cash_advance'] ?? 'Cash Advance' }}:</span>
-                                                    <span>₱{{ number_format($detail->cash_advance_deductions, 2) }}</span>
-                                                </div>
-                                            @endif
-                                            
-                                            @if($detail->other_deductions > 0)
-                                                @php $hasDeductions = true; @endphp
-                                                <div class="flex justify-between">
-                                                    <span>{{ $deductionNames['other'] ?? 'Other' }}:</span>
-                                                    <span>₱{{ number_format($detail->other_deductions, 2) }}</span>
-                                                </div>
-                                            @endif
-                                            
-                                            @if(!$hasDeductions)
-                                                <div class="text-gray-400">No deductions</div>
                                             @endif
                                         </div>
-
-                                         <div class="text-sm text-red-600 font-bold">₱{{ number_format($detail->total_deductions, 2) }}</div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-purple-600 text-right">
-                                        ₱{{ number_format($detail->net_pay, 2) }}
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                        <div class="font-bold text-purple-600">₱{{ number_format($detail->net_pay, 2) }}</div>
                                     </td>
                                     {{-- @if($payroll->status == 'approved')
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">

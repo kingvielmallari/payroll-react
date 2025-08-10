@@ -46,6 +46,7 @@ class PaidLeaveSettingController extends Controller
             'applicable_employment_status' => 'nullable|array',
             'is_active' => 'boolean',
             'sort_order' => 'nullable|integer',
+            'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
         ]);
 
         PaidLeaveSetting::create($validated);
@@ -89,6 +90,7 @@ class PaidLeaveSettingController extends Controller
             'applicable_employment_status' => 'nullable|array',
             'is_active' => 'boolean',
             'sort_order' => 'nullable|integer',
+            'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
         ]);
 
         $leave->update($validated);

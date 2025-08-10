@@ -188,6 +188,26 @@
                 <label for="is_active" class="ml-2 block text-sm text-gray-700">Active</label>
             </div>
 
+            <div class="mt-6">
+                <label for="benefit_eligibility" class="block text-sm font-medium text-gray-700 mb-2">Apply To</label>
+                <select name="benefit_eligibility" id="benefit_eligibility" required
+                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                    <option value="both" {{ old('benefit_eligibility', 'both') == 'both' ? 'selected' : '' }}>
+                        Both (With Benefits & Without Benefits)
+                    </option>
+                    <option value="with_benefits" {{ old('benefit_eligibility') == 'with_benefits' ? 'selected' : '' }}>
+                        Only Employees With Benefits
+                    </option>
+                    <option value="without_benefits" {{ old('benefit_eligibility') == 'without_benefits' ? 'selected' : '' }}>
+                        Only Employees Without Benefits
+                    </option>
+                </select>
+                @error('benefit_eligibility')
+                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                @enderror
+                <p class="mt-1 text-xs text-gray-500">Choose which employees this deduction/tax setting applies to based on their benefit status.</p>
+            </div>
+
             <div class="mt-8 flex justify-end space-x-3">
                 <a href="{{ route('settings.deductions.index') }}" 
                    class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">

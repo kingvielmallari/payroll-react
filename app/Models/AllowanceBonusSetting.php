@@ -32,6 +32,7 @@ class AllowanceBonusSetting extends Model
         'is_active',
         'is_system_default',
         'sort_order',
+        'benefit_eligibility',
     ];
 
     protected $casts = [
@@ -194,5 +195,28 @@ class AllowanceBonusSetting extends Model
             default:
                 return false;
         }
+    }
+
+    /**
+     * Check if this setting applies to the given employee based on their benefit status
+     */
+    public function appliesTo($employee)
+    {
+        if ($this->benefit_eligibility === 'both') {
+            return true;
+        }
+        
+        return $this->benefit_eligibility === $employee->benefits_status;
+    }
+
+    /**
+     * Scope to filter settings by benefit eligibility
+     */
+    public function scopeForBenefitStatus($query, $benefitStatus)
+    {
+        return $query->where(function ($q) use ($benefitStatus) {
+            $q->where('benefit_eligibility', 'both')
+              ->orWhere('benefit_eligibility', $benefitStatus);
+        });
     }
 }

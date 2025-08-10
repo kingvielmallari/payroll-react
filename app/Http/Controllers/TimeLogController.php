@@ -20,37 +20,63 @@ class TimeLogController extends Controller
     use AuthorizesRequests;
 
     /**
-     * Display a listing of time logs.
+     * Display a listing of DTR batches.
      */
     public function index(Request $request)
     {
         $this->authorize('view time logs');
 
-        // Build query for time logs with relationships
-        $query = TimeLog::with(['employee.user', 'employee.department', 'approver.user'])
-                        ->orderBy('log_date', 'desc')
-                        ->orderBy('created_at', 'desc');
+        // Build query for DTR batches with relationships
+        $query = DB::table('d_t_r_s as dtr')
+                   ->join('employees as e', 'dtr.employee_id', '=', 'e.id')
+                   ->join('users as u', 'e.user_id', '=', 'u.id')
+                   ->leftJoin('departments as d', 'e.department_id', '=', 'd.id')
+                   ->leftJoin('payrolls as p', 'dtr.payroll_id', '=', 'p.id')
+                   ->select([
+                       'dtr.id',
+                       'dtr.employee_id',
+                       'dtr.payroll_id',
+                       'dtr.period_start',
+                       'dtr.period_end',
+                       'dtr.total_regular_hours',
+                       'dtr.total_overtime_hours',
+                       'dtr.total_late_hours',
+                       'dtr.regular_days',
+                       'dtr.status',
+                       'dtr.created_at',
+                       'dtr.updated_at',
+                       'e.first_name',
+                       'e.last_name',
+                       'e.employee_number',
+                       'u.name as user_name',
+                       'u.email',
+                       'd.name as department_name',
+                       'p.payroll_type',
+                       'p.period_label'
+                   ])
+                   ->orderBy('dtr.period_start', 'desc')
+                   ->orderBy('dtr.created_at', 'desc');
 
         // Filter by employee if specified
         if ($request->filled('employee_id')) {
-            $query->where('employee_id', $request->employee_id);
+            $query->where('dtr.employee_id', $request->employee_id);
         }
 
         // Filter by date range if specified
         if ($request->filled('start_date')) {
-            $query->where('log_date', '>=', $request->start_date);
+            $query->where('dtr.period_start', '>=', $request->start_date);
         }
         if ($request->filled('end_date')) {
-            $query->where('log_date', '<=', $request->end_date);
+            $query->where('dtr.period_end', '<=', $request->end_date);
         }
 
-        // Filter by status if specified
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+        // Filter by department if specified
+        if ($request->filled('department_id')) {
+            $query->where('e.department_id', $request->department_id);
         }
 
         // Paginate results
-        $timeLogs = $query->paginate(20)->withQueryString();
+        $dtrBatches = $query->paginate(20)->withQueryString();
 
         // Get employees for filter dropdown
         $employees = Employee::with('user')
@@ -58,12 +84,15 @@ class TimeLogController extends Controller
                             ->orderBy('first_name')
                             ->get();
 
-        // Get statistics
-        $totalTimeLogs = TimeLog::count();
-        $pendingTimeLogs = TimeLog::where('status', 'pending')->count();
-        $approvedTimeLogs = TimeLog::where('status', 'approved')->count();
+        // Get departments for filter dropdown
+        $departments = DB::table('departments')->orderBy('name')->get();
 
-        return view('time-logs.index', compact('timeLogs', 'employees', 'totalTimeLogs', 'pendingTimeLogs', 'approvedTimeLogs'));
+        // Get statistics
+        $totalDTRBatches = DB::table('d_t_r_s')->count();
+        $totalEmployeesWithDTR = DB::table('d_t_r_s')->distinct('employee_id')->count();
+        $totalRegularHours = DB::table('d_t_r_s')->sum('total_regular_hours');
+
+        return view('time-logs.index', compact('dtrBatches', 'employees', 'departments', 'totalDTRBatches', 'totalEmployeesWithDTR', 'totalRegularHours'));
     }
 
     /**
@@ -180,7 +209,7 @@ class TimeLogController extends Controller
     }
 
     /**
-     * Display the specified time log.
+     * Display the specified DTR batch.
      */
     public function show(TimeLog $timeLog)
     {
@@ -189,6 +218,79 @@ class TimeLogController extends Controller
         $timeLog->load(['employee.user', 'employee.department', 'approver']);
 
         return view('time-logs.show', compact('timeLog'));
+    }
+
+    /**
+     * Display detailed DTR records for a specific batch.
+     */
+    public function showDTRBatch($dtrId)
+    {
+        $this->authorize('view time logs');
+
+        // Get DTR batch details
+        $dtrBatch = DB::table('d_t_r_s as dtr')
+                      ->join('employees as e', 'dtr.employee_id', '=', 'e.id')
+                      ->join('users as u', 'e.user_id', '=', 'u.id')
+                      ->leftJoin('departments as d', 'e.department_id', '=', 'd.id')
+                      ->leftJoin('payrolls as p', 'dtr.payroll_id', '=', 'p.id')
+                      ->select([
+                          'dtr.*',
+                          'e.first_name',
+                          'e.last_name',
+                          'e.employee_number',
+                          'u.name as user_name',
+                          'u.email',
+                          'd.name as department_name',
+                          'p.payroll_type',
+                          'p.period_label'
+                      ])
+                      ->where('dtr.id', $dtrId)
+                      ->first();
+
+        if (!$dtrBatch) {
+            return redirect()->route('time-logs.index')->with('error', 'DTR batch not found.');
+        }
+
+        // Parse DTR data
+        $dtrData = json_decode($dtrBatch->dtr_data, true) ?? [];
+
+        // Get individual time logs for the period (if any exist)
+        $timeLogs = TimeLog::where('employee_id', $dtrBatch->employee_id)
+                           ->whereBetween('log_date', [$dtrBatch->period_start, $dtrBatch->period_end])
+                           ->orderBy('log_date')
+                           ->get();
+
+        // Create period dates array for display
+        $periodDates = [];
+        $current = Carbon::parse($dtrBatch->period_start);
+        $end = Carbon::parse($dtrBatch->period_end);
+        
+        while ($current->lte($end)) {
+            $dateStr = $current->format('Y-m-d');
+            $dayData = $dtrData[$dateStr] ?? [
+                'date' => $dateStr,
+                'day_name' => $current->format('l'),
+                'is_weekend' => $current->isWeekend(),
+                'time_in' => null,
+                'time_out' => null,
+                'break_start' => null,
+                'break_end' => null,
+                'regular_hours' => 0,
+                'overtime_hours' => 0,
+                'late_minutes' => 0,
+                'status' => 'no_record',
+                'remarks' => null
+            ];
+            
+            $periodDates[] = array_merge($dayData, [
+                'carbon' => $current->copy(),
+                'formatted' => $current->format('M d')
+            ]);
+            
+            $current->addDay();
+        }
+
+        return view('time-logs.dtr-batch', compact('dtrBatch', 'periodDates', 'timeLogs'));
     }
 
     /**
@@ -320,25 +422,43 @@ class TimeLogController extends Controller
     }
 
     /**
-     * Approve a time log.
+     * Remove the specified DTR batch.
      */
-    public function approve(TimeLog $timeLog)
+    public function destroyDTRBatch($dtrId)
     {
-        $this->authorize('approve time logs');
+        $this->authorize('delete time logs');
 
-        if ($timeLog->status === 'approved') {
-            return redirect()->route('time-logs.show', $timeLog)
-                           ->with('error', 'Time log is already approved.');
+        $dtrBatch = DB::table('d_t_r_s')->where('id', $dtrId)->first();
+        
+        if (!$dtrBatch) {
+            return redirect()->route('time-logs.index')->with('error', 'DTR batch not found.');
         }
 
-        $timeLog->update([
-            'status' => 'approved',
-            'approved_by' => Auth::id(),
-            'approved_at' => now(),
-        ]);
+        // Delete related time logs first
+        TimeLog::where('employee_id', $dtrBatch->employee_id)
+                ->whereBetween('log_date', [$dtrBatch->period_start, $dtrBatch->period_end])
+                ->delete();
 
-        return redirect()->route('time-logs.show', $timeLog)
-                        ->with('success', 'Time log approved successfully!');
+        // Delete DTR batch
+        DB::table('d_t_r_s')->where('id', $dtrId)->delete();
+
+        return redirect()->route('time-logs.index')->with('success', 'DTR batch deleted successfully!');
+    }
+
+    /**
+     * Show payroll for the DTR batch.
+     */
+    public function showPayroll($dtrId)
+    {
+        $this->authorize('view payrolls');
+
+        $dtrBatch = DB::table('d_t_r_s')->where('id', $dtrId)->first();
+        
+        if (!$dtrBatch || !$dtrBatch->payroll_id) {
+            return redirect()->route('time-logs.index')->with('error', 'Payroll not found for this DTR batch.');
+        }
+
+        return redirect()->route('payrolls.show', $dtrBatch->payroll_id);
     }
 
     /**

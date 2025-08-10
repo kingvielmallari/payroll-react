@@ -125,6 +125,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('payrolls/{payroll}/process', [PayrollController::class, 'process'])
             ->name('payrolls.process')
             ->middleware('can:process payrolls');
+        Route::post('payrolls/{payroll}/back-to-draft', [PayrollController::class, 'backToDraft'])
+            ->name('payrolls.back-to-draft')
+            ->middleware('can:edit payrolls');
     });
 
     // Payslip Management
@@ -212,12 +215,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/{dtr}', [DTRController::class, 'show'])->name('show');
             Route::get('/{dtr}/edit', [DTRController::class, 'edit'])->name('edit');
             Route::put('/{dtr}', [DTRController::class, 'update'])->name('update');
+            Route::delete('/{dtr}', [DTRController::class, 'destroy'])->name('destroy');
             Route::get('/{dtr}/pdf', [DTRController::class, 'pdf'])->name('pdf');
-            Route::post('/{dtr}/approve', [DTRController::class, 'approve'])->name('approve')->middleware('can:approve time logs');
         });
 
         // DTR main routes (old system - keep for compatibility)
         Route::get('time-logs', [TimeLogController::class, 'index'])->name('time-logs.index');
+        Route::get('time-logs/dtr-batch/{dtrId}', [TimeLogController::class, 'showDTRBatch'])->name('time-logs.dtr-batch');
+        Route::delete('time-logs/dtr-batch/{dtrId}', [TimeLogController::class, 'destroyDTRBatch'])->name('time-logs.destroy-dtr-batch');
+        Route::get('time-logs/dtr-batch/{dtrId}/payroll', [TimeLogController::class, 'showPayroll'])->name('time-logs.dtr-batch-payroll');
         Route::get('time-logs/create', [TimeLogController::class, 'create'])->name('time-logs.create');
         Route::get('time-logs/create-bulk', [TimeLogController::class, 'createBulk'])->name('time-logs.create-bulk');
         Route::get('time-logs/create-bulk/employee/{employee_id}', [TimeLogController::class, 'createBulkForEmployee'])->name('time-logs.create-bulk-employee');
@@ -230,11 +236,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('time-logs/{employee}/dtr', [TimeLogController::class, 'showDTR'])->name('time-logs.show-dtr');
         Route::get('time-logs/{employee}/simple-dtr', [TimeLogController::class, 'simpleDTR'])->name('time-logs.simple-dtr');
         Route::post('time-logs/update-time-entry', [TimeLogController::class, 'updateTimeEntry'])->name('time-logs.update-time-entry');
-        
-        // Legacy approval route for existing time logs
-        Route::post('time-logs/{timeLog}/approve', [TimeLogController::class, 'approve'])
-            ->name('time-logs.approve')
-            ->middleware('can:approve time logs');
         
         // DTR Import routes
         Route::get('time-logs/import/form', [TimeLogController::class, 'importForm'])

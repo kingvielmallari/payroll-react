@@ -83,6 +83,14 @@ class Payroll extends Model
     }
 
     /**
+     * Get the payroll snapshots for the payroll.
+     */
+    public function snapshots()
+    {
+        return $this->hasMany(PayrollSnapshot::class);
+    }
+
+    /**
      * Check if payroll is approved.
      */
     public function isApproved()
@@ -104,6 +112,30 @@ class Payroll extends Model
     public function canBeEdited()
     {
         return in_array($this->status, ['draft', 'processing']);
+    }
+
+    /**
+     * Check if payroll can be deleted.
+     */
+    public function canBeDeleted()
+    {
+        return $this->status !== 'approved';
+    }
+
+    /**
+     * Check if payroll uses dynamic calculations.
+     */
+    public function isDynamic()
+    {
+        return $this->status === 'draft';
+    }
+
+    /**
+     * Check if payroll uses snapshot data.
+     */
+    public function usesSnapshot()
+    {
+        return in_array($this->status, ['processing', 'approved']);
     }
 
     /**

@@ -33,6 +33,7 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>                     
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deduct</th>
                          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Apply To</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     </tr>
                 </thead>
@@ -104,6 +105,26 @@
                                 </div>
                             </td>
                            
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-700' }}">
+                                    @if($deduction->benefit_eligibility === 'both')
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            Both
+                                        </span>
+                                    @elseif($deduction->benefit_eligibility === 'with_benefits')
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            With Benefits
+                                        </span>
+                                    @elseif($deduction->benefit_eligibility === 'without_benefits')
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            Without Benefits
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400">Both</span>
+                                    @endif
+                                </div>
+                            </td>
+
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                     {{ $deduction->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">

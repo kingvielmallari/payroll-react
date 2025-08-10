@@ -52,6 +52,7 @@ class DeductionTaxSettingController extends Controller
             'share_with_employer' => 'boolean',
             'is_active' => 'boolean',
             'sort_order' => 'nullable|integer',
+            'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
         ]);
 
         // Convert tax table types to bracket with appropriate tax_table_type
@@ -104,6 +105,7 @@ class DeductionTaxSettingController extends Controller
             'share_with_employer' => 'boolean',
             'is_active' => 'boolean',
             'sort_order' => 'nullable|integer',
+            'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
         ]);
 
         // Convert tax table types to bracket with appropriate tax_table_type

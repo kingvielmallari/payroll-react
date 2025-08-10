@@ -47,6 +47,7 @@ class AllowanceBonusSettingController extends Controller
             'max_days_per_period' => 'nullable|integer|min:1',
             'is_active' => 'boolean',
             'sort_order' => 'nullable|integer',
+            'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
         ]);
 
         AllowanceBonusSetting::create($validated);
@@ -88,6 +89,7 @@ class AllowanceBonusSettingController extends Controller
             'max_days_per_period' => 'nullable|integer|min:1',
             'is_active' => 'boolean',
             'sort_order' => 'nullable|integer',
+            'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
         ]);
 
         $allowance->update($validated);

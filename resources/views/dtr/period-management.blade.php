@@ -111,17 +111,16 @@
                                                 <a href="{{ route('dtr.edit', $dtr) }}" 
                                                    class="text-indigo-600 hover:text-indigo-900">Edit</a>
                                             @endcan
-                                            @can('approve time logs')
-                                                @if($dtr->status === 'pending' || $dtr->status === 'draft')
-                                                    <form action="{{ route('dtr.approve', $dtr) }}" method="POST" class="inline">
-                                                        @csrf
-                                                        <button type="submit" 
-                                                                class="text-green-600 hover:text-green-900"
-                                                                onclick="return confirm('Are you sure you want to approve this DTR?')">
-                                                            Approve
-                                                        </button>
-                                                    </form>
-                                                @endif
+                                            @can('delete time logs')
+                                                <form action="{{ route('dtr.destroy', $dtr) }}" method="POST" class="inline">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" 
+                                                            class="text-red-600 hover:text-red-900"
+                                                            onclick="return confirm('Are you sure you want to delete this DTR?')">
+                                                        Delete
+                                                    </button>
+                                                </form>
                                             @endcan
                                         </td>
                                     </tr>
@@ -157,7 +156,7 @@
                                         <ul class="list-disc list-inside space-y-1">
                                             <li>Click "Edit" to update time logs for each employee</li>
                                             <li>Use "View" to see detailed DTR information</li>
-                                            <li>DTR records must be approved before payroll processing</li>
+                                            <li>DTR records can be deleted if needed</li>
                                             <li>Regular hours are calculated based on employee schedule</li>
                                         </ul>
                                     </div>
