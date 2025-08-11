@@ -298,6 +298,7 @@
             document.getElementById('contextMenuEdit').style.display = 'none';
             document.getElementById('contextMenuProcess').style.display = 'none';
             document.getElementById('contextMenuApprove').style.display = 'none';
+            document.getElementById('contextMenuDelete').style.display = 'none';
             
             // Show Edit if payroll can be edited and user has permission
             @can('edit payrolls')
@@ -317,6 +318,20 @@
             @can('approve payrolls')
             if (status === 'processing') {
                 document.getElementById('contextMenuApprove').style.display = 'flex';
+            }
+            @endcan
+            
+            // Show Delete if user has permission
+            @can('delete payrolls')
+            if (status === 'draft' || status === 'processing') {
+                document.getElementById('contextMenuDelete').style.display = 'flex';
+            }
+            @endcan
+            
+            // Show Delete for approved payrolls if user has special permission
+            @can('delete approved payrolls')
+            if (status === 'approved') {
+                document.getElementById('contextMenuDelete').style.display = 'flex';
             }
             @endcan
         }

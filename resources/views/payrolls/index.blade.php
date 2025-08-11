@@ -307,6 +307,7 @@
             document.getElementById('contextMenuProcess').style.display = 'none';
             document.getElementById('contextMenuApprove').style.display = 'none';
             document.getElementById('contextMenuSendPayroll').style.display = 'none';
+            document.getElementById('contextMenuDelete').style.display = 'none';
             
             // Show Edit if payroll can be edited and user has permission
             @can('edit payrolls')
@@ -333,6 +334,20 @@
             @can('email all payslips')
             if (status === 'approved') {
                 document.getElementById('contextMenuSendPayroll').style.display = 'flex';
+            }
+            @endcan
+            
+            // Show Delete if user has permission
+            @can('delete payrolls')
+            if (status === 'draft' || status === 'processing') {
+                document.getElementById('contextMenuDelete').style.display = 'flex';
+            }
+            @endcan
+            
+            // Show Delete for approved payrolls if user has special permission
+            @can('delete approved payrolls')
+            if (status === 'approved') {
+                document.getElementById('contextMenuDelete').style.display = 'flex';
             }
             @endcan
         }

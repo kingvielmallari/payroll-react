@@ -41,6 +41,7 @@ class RoleAndPermissionSeeder extends Seeder
             'create payrolls',
             'edit payrolls',
             'delete payrolls',
+            'delete approved payrolls',
             'approve payrolls',
             'process payrolls',
             'generate payslips',
@@ -149,7 +150,7 @@ class RoleAndPermissionSeeder extends Seeder
         $hrHead->syncPermissions([
             'view dashboard',
             'view employees', 'create employees', 'edit employees', 'delete employees', 'manage employee documents',
-            'view payrolls', 'create payrolls', 'edit payrolls', 'approve payrolls', 'process payrolls', 'generate payslips', 'send payslips',
+            'view payrolls', 'create payrolls', 'edit payrolls', 'delete payrolls', 'delete approved payrolls', 'approve payrolls', 'process payrolls', 'generate payslips', 'send payslips',
             'view time logs', 'create time logs', 'edit time logs', 'approve time logs', 'delete time logs', 'import time logs',
             'view leave requests', 'edit leave requests', 'approve leave requests',
             'view deductions', 'create deductions', 'edit deductions', 'delete deductions',

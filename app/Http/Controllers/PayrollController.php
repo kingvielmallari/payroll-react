@@ -1360,10 +1360,29 @@ class PayrollController extends Controller
     {
         $this->authorize('delete payrolls');
 
-        if (!$payroll->canBeEdited()) {
+        // Check if user can delete approved payrolls
+        $canDeleteApproved = Auth::user()->can('delete approved payrolls');
+        
+        // If payroll is approved and user doesn't have permission to delete approved payrolls
+        if ($payroll->status === 'approved' && !$canDeleteApproved) {
+            return redirect()->route('payrolls.index')
+                           ->with('error', 'You do not have permission to delete approved payrolls.');
+        }
+
+        // If payroll is not approved, use the standard canBeEdited check
+        if ($payroll->status !== 'approved' && !$payroll->canBeEdited()) {
             return redirect()->route('payrolls.index')
                            ->with('error', 'This payroll cannot be deleted.');
         }
+
+        // Log the deletion for audit purposes
+        Log::info('Payroll deleted', [
+            'payroll_id' => $payroll->id,
+            'payroll_number' => $payroll->payroll_number,
+            'status' => $payroll->status,
+            'deleted_by' => Auth::id(),
+            'deleted_by_name' => Auth::user()->name
+        ]);
 
         $payroll->delete();
 
