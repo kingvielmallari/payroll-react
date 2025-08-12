@@ -28,34 +28,34 @@ class TimeLogController extends Controller
 
         // Build query for DTR batches with relationships
         $query = DB::table('d_t_r_s as dtr')
-                   ->join('employees as e', 'dtr.employee_id', '=', 'e.id')
-                   ->join('users as u', 'e.user_id', '=', 'u.id')
-                   ->leftJoin('departments as d', 'e.department_id', '=', 'd.id')
-                   ->leftJoin('payrolls as p', 'dtr.payroll_id', '=', 'p.id')
-                   ->select([
-                       'dtr.id',
-                       'dtr.employee_id',
-                       'dtr.payroll_id',
-                       'dtr.period_start',
-                       'dtr.period_end',
-                       'dtr.total_regular_hours',
-                       'dtr.total_overtime_hours',
-                       'dtr.total_late_hours',
-                       'dtr.regular_days',
-                       'dtr.status',
-                       'dtr.created_at',
-                       'dtr.updated_at',
-                       'e.first_name',
-                       'e.last_name',
-                       'e.employee_number',
-                       'u.name as user_name',
-                       'u.email',
-                       'd.name as department_name',
-                       'p.payroll_type',
-                       'p.period_label'
-                   ])
-                   ->orderBy('dtr.period_start', 'desc')
-                   ->orderBy('dtr.created_at', 'desc');
+            ->join('employees as e', 'dtr.employee_id', '=', 'e.id')
+            ->join('users as u', 'e.user_id', '=', 'u.id')
+            ->leftJoin('departments as d', 'e.department_id', '=', 'd.id')
+            ->leftJoin('payrolls as p', 'dtr.payroll_id', '=', 'p.id')
+            ->select([
+                'dtr.id',
+                'dtr.employee_id',
+                'dtr.payroll_id',
+                'dtr.period_start',
+                'dtr.period_end',
+                'dtr.total_regular_hours',
+                'dtr.total_overtime_hours',
+                'dtr.total_late_hours',
+                'dtr.regular_days',
+                'dtr.status',
+                'dtr.created_at',
+                'dtr.updated_at',
+                'e.first_name',
+                'e.last_name',
+                'e.employee_number',
+                'u.name as user_name',
+                'u.email',
+                'd.name as department_name',
+                'p.payroll_type',
+                'p.period_label'
+            ])
+            ->orderBy('dtr.period_start', 'desc')
+            ->orderBy('dtr.created_at', 'desc');
 
         // Filter by employee if specified
         if ($request->filled('employee_id')) {
@@ -80,9 +80,9 @@ class TimeLogController extends Controller
 
         // Get employees for filter dropdown
         $employees = Employee::with('user')
-                            ->where('employment_status', 'active')
-                            ->orderBy('first_name')
-                            ->get();
+            ->where('employment_status', 'active')
+            ->orderBy('first_name')
+            ->get();
 
         // Get departments for filter dropdown
         $departments = DB::table('departments')->orderBy('name')->get();
@@ -103,9 +103,9 @@ class TimeLogController extends Controller
         $this->authorize('create time logs');
 
         $employees = Employee::with('user')
-                            ->where('employment_status', 'active')
-                            ->orderBy('first_name')
-                            ->get();
+            ->where('employment_status', 'active')
+            ->orderBy('first_name')
+            ->get();
 
         return view('time-logs.create', compact('employees'));
     }
@@ -119,6 +119,7 @@ class TimeLogController extends Controller
 
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
+            'payroll_id' => 'nullable|exists:payrolls,id',
             'log_date' => 'required|date|before_or_equal:today',
             'time_in' => 'required|date_format:H:i',
             'time_out' => 'nullable|date_format:H:i|after:time_in',
@@ -130,20 +131,35 @@ class TimeLogController extends Controller
             'is_rest_day' => 'boolean',
         ]);
 
+        // If no payroll_id provided, try to find a matching payroll for the date and employee
+        if (!$validated['payroll_id']) {
+            $matchingPayroll = Payroll::whereHas('payrollDetails', function ($query) use ($validated) {
+                $query->where('employee_id', $validated['employee_id']);
+            })
+                ->where('period_start', '<=', $validated['log_date'])
+                ->where('period_end', '>=', $validated['log_date'])
+                ->where('status', 'draft') // Only link to draft payrolls
+                ->first();
+
+            if ($matchingPayroll) {
+                $validated['payroll_id'] = $matchingPayroll->id;
+            }
+        }
+
         // Check if time log already exists for this employee and date
         $existingLog = TimeLog::where('employee_id', $validated['employee_id'])
-                             ->where('log_date', $validated['log_date'])
-                             ->first();
+            ->where('log_date', $validated['log_date'])
+            ->first();
 
         if ($existingLog) {
             return back()->withErrors(['error' => 'Time log already exists for this employee on this date.'])
-                        ->withInput();
+                ->withInput();
         }
 
         // Calculate hours
         $timeIn = Carbon::createFromFormat('H:i', $validated['time_in']);
         $timeOut = $validated['time_out'] ? Carbon::createFromFormat('H:i', $validated['time_out']) : null;
-        
+
         $breakIn = $validated['break_in'] ? Carbon::createFromFormat('H:i', $validated['break_in']) : null;
         $breakOut = $validated['break_out'] ? Carbon::createFromFormat('H:i', $validated['break_out']) : null;
 
@@ -155,7 +171,7 @@ class TimeLogController extends Controller
 
         if ($timeOut) {
             $totalMinutes = $timeIn->diffInMinutes($timeOut);
-            
+
             // Subtract break time if both break_in and break_out are provided
             if ($breakIn && $breakOut) {
                 $breakMinutes = $breakIn->diffInMinutes($breakOut);
@@ -187,6 +203,7 @@ class TimeLogController extends Controller
 
         $timeLog = TimeLog::create([
             'employee_id' => $validated['employee_id'],
+            'payroll_id' => $validated['payroll_id'],
             'log_date' => $validated['log_date'],
             'time_in' => $validated['time_in'],
             'time_out' => $validated['time_out'],
@@ -207,7 +224,7 @@ class TimeLogController extends Controller
         ]);
 
         return redirect()->route('time-logs.show', $timeLog)
-                        ->with('success', 'Time log created successfully!');
+            ->with('success', 'Time log created successfully!');
     }
 
     /**
@@ -231,23 +248,23 @@ class TimeLogController extends Controller
 
         // Get DTR batch details
         $dtrBatch = DB::table('d_t_r_s as dtr')
-                      ->join('employees as e', 'dtr.employee_id', '=', 'e.id')
-                      ->join('users as u', 'e.user_id', '=', 'u.id')
-                      ->leftJoin('departments as d', 'e.department_id', '=', 'd.id')
-                      ->leftJoin('payrolls as p', 'dtr.payroll_id', '=', 'p.id')
-                      ->select([
-                          'dtr.*',
-                          'e.first_name',
-                          'e.last_name',
-                          'e.employee_number',
-                          'u.name as user_name',
-                          'u.email',
-                          'd.name as department_name',
-                          'p.payroll_type',
-                          'p.period_label'
-                      ])
-                      ->where('dtr.id', $dtrId)
-                      ->first();
+            ->join('employees as e', 'dtr.employee_id', '=', 'e.id')
+            ->join('users as u', 'e.user_id', '=', 'u.id')
+            ->leftJoin('departments as d', 'e.department_id', '=', 'd.id')
+            ->leftJoin('payrolls as p', 'dtr.payroll_id', '=', 'p.id')
+            ->select([
+                'dtr.*',
+                'e.first_name',
+                'e.last_name',
+                'e.employee_number',
+                'u.name as user_name',
+                'u.email',
+                'd.name as department_name',
+                'p.payroll_type',
+                'p.period_label'
+            ])
+            ->where('dtr.id', $dtrId)
+            ->first();
 
         if (!$dtrBatch) {
             return redirect()->route('time-logs.index')->with('error', 'DTR batch not found.');
@@ -258,15 +275,15 @@ class TimeLogController extends Controller
 
         // Get individual time logs for the period (if any exist)
         $timeLogs = TimeLog::where('employee_id', $dtrBatch->employee_id)
-                           ->whereBetween('log_date', [$dtrBatch->period_start, $dtrBatch->period_end])
-                           ->orderBy('log_date')
-                           ->get();
+            ->whereBetween('log_date', [$dtrBatch->period_start, $dtrBatch->period_end])
+            ->orderBy('log_date')
+            ->get();
 
         // Create period dates array for display
         $periodDates = [];
         $current = Carbon::parse($dtrBatch->period_start);
         $end = Carbon::parse($dtrBatch->period_end);
-        
+
         while ($current->lte($end)) {
             $dateStr = $current->format('Y-m-d');
             $dayData = $dtrData[$dateStr] ?? [
@@ -283,12 +300,12 @@ class TimeLogController extends Controller
                 'status' => 'no_record',
                 'remarks' => null
             ];
-            
+
             $periodDates[] = array_merge($dayData, [
                 'carbon' => $current->copy(),
                 'formatted' => $current->format('M d')
             ]);
-            
+
             $current->addDay();
         }
 
@@ -304,13 +321,13 @@ class TimeLogController extends Controller
 
         if ($timeLog->status === 'approved') {
             return redirect()->route('time-logs.show', $timeLog)
-                           ->with('error', 'Approved time logs cannot be edited.');
+                ->with('error', 'Approved time logs cannot be edited.');
         }
 
         $employees = Employee::with('user')
-                            ->where('employment_status', 'active')
-                            ->orderBy('first_name')
-                            ->get();
+            ->where('employment_status', 'active')
+            ->orderBy('first_name')
+            ->get();
 
         return view('time-logs.edit', compact('timeLog', 'employees'));
     }
@@ -324,11 +341,12 @@ class TimeLogController extends Controller
 
         if ($timeLog->status === 'approved') {
             return redirect()->route('time-logs.show', $timeLog)
-                           ->with('error', 'Approved time logs cannot be edited.');
+                ->with('error', 'Approved time logs cannot be edited.');
         }
 
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
+            'payroll_id' => 'nullable|exists:payrolls,id',
             'log_date' => 'required|date|before_or_equal:today',
             'time_in' => 'required|date_format:H:i',
             'time_out' => 'nullable|date_format:H:i|after:time_in',
@@ -340,10 +358,25 @@ class TimeLogController extends Controller
             'is_rest_day' => 'boolean',
         ]);
 
+        // If no payroll_id provided, try to find a matching payroll for the date and employee
+        if (!$validated['payroll_id']) {
+            $matchingPayroll = Payroll::whereHas('payrollDetails', function ($query) use ($validated) {
+                $query->where('employee_id', $validated['employee_id']);
+            })
+                ->where('period_start', '<=', $validated['log_date'])
+                ->where('period_end', '>=', $validated['log_date'])
+                ->where('status', 'draft') // Only link to draft payrolls
+                ->first();
+
+            if ($matchingPayroll) {
+                $validated['payroll_id'] = $matchingPayroll->id;
+            }
+        }
+
         // Recalculate hours (same logic as store method)
         $timeIn = Carbon::createFromFormat('H:i', $validated['time_in']);
         $timeOut = $validated['time_out'] ? Carbon::createFromFormat('H:i', $validated['time_out']) : null;
-        
+
         $breakIn = $validated['break_in'] ? Carbon::createFromFormat('H:i', $validated['break_in']) : null;
         $breakOut = $validated['break_out'] ? Carbon::createFromFormat('H:i', $validated['break_out']) : null;
 
@@ -355,7 +388,7 @@ class TimeLogController extends Controller
 
         if ($timeOut) {
             $totalMinutes = $timeIn->diffInMinutes($timeOut);
-            
+
             if ($breakIn && $breakOut) {
                 $breakMinutes = $breakIn->diffInMinutes($breakOut);
                 $totalMinutes -= $breakMinutes;
@@ -383,6 +416,7 @@ class TimeLogController extends Controller
 
         $timeLog->update([
             'employee_id' => $validated['employee_id'],
+            'payroll_id' => $validated['payroll_id'],
             'log_date' => $validated['log_date'],
             'time_in' => $validated['time_in'],
             'time_out' => $validated['time_out'],
@@ -400,7 +434,7 @@ class TimeLogController extends Controller
         ]);
 
         return redirect()->route('time-logs.show', $timeLog)
-                        ->with('success', 'Time log updated successfully!');
+            ->with('success', 'Time log updated successfully!');
     }
 
     /**
@@ -414,13 +448,13 @@ class TimeLogController extends Controller
         $user = Auth::user();
         if ($timeLog->status === 'approved' && !$user->hasRole(['System Admin', 'HR Head'])) {
             return redirect()->route('time-logs.index')
-                           ->with('error', 'Only System Admin or HR Head can delete approved time logs.');
+                ->with('error', 'Only System Admin or HR Head can delete approved time logs.');
         }
 
         $timeLog->delete();
 
         return redirect()->route('time-logs.index')
-                        ->with('success', 'Time log deleted successfully!');
+            ->with('success', 'Time log deleted successfully!');
     }
 
     /**
@@ -431,15 +465,15 @@ class TimeLogController extends Controller
         $this->authorize('delete time logs');
 
         $dtrBatch = DB::table('d_t_r_s')->where('id', $dtrId)->first();
-        
+
         if (!$dtrBatch) {
             return redirect()->route('time-logs.index')->with('error', 'DTR batch not found.');
         }
 
         // Delete related time logs first
         TimeLog::where('employee_id', $dtrBatch->employee_id)
-                ->whereBetween('log_date', [$dtrBatch->period_start, $dtrBatch->period_end])
-                ->delete();
+            ->whereBetween('log_date', [$dtrBatch->period_start, $dtrBatch->period_end])
+            ->delete();
 
         // Delete DTR batch
         DB::table('d_t_r_s')->where('id', $dtrId)->delete();
@@ -455,7 +489,7 @@ class TimeLogController extends Controller
         $this->authorize('view payrolls');
 
         $dtrBatch = DB::table('d_t_r_s')->where('id', $dtrId)->first();
-        
+
         if (!$dtrBatch || !$dtrBatch->payroll_id) {
             return redirect()->route('time-logs.index')->with('error', 'Payroll not found for this DTR batch.');
         }
@@ -469,7 +503,7 @@ class TimeLogController extends Controller
     public function importForm()
     {
         $this->authorize('import time logs');
-        
+
         return view('time-logs.import');
     }
 
@@ -498,23 +532,22 @@ class TimeLogController extends Controller
             $errorCount = $import->getErrorCount();
 
             $message = "DTR import completed! Imported: {$importedCount}, Skipped: {$skippedCount}, Errors: {$errorCount}";
-            
+
             if ($errorCount > 0) {
                 $errors = $import->getErrors();
                 return redirect()->route('time-logs.index')
-                               ->with('warning', $message)
-                               ->with('import_errors', $errors);
+                    ->with('warning', $message)
+                    ->with('import_errors', $errors);
             }
 
             return redirect()->route('time-logs.index')
-                           ->with('success', $message);
-
+                ->with('success', $message);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('DTR Import Error: ' . $e->getMessage());
-            
+
             return back()->withErrors(['error' => 'Failed to import DTR: ' . $e->getMessage()])
-                        ->withInput();
+                ->withInput();
         }
     }
 
@@ -541,10 +574,10 @@ class TimeLogController extends Controller
         $this->authorize('view own time logs');
 
         $employee = Employee::where('user_id', Auth::id())->first();
-        
+
         if (!$employee) {
             return redirect()->route('dashboard')
-                           ->with('error', 'Employee profile not found.');
+                ->with('error', 'Employee profile not found.');
         }
 
         $query = TimeLog::where('employee_id', $employee->id);
@@ -558,7 +591,7 @@ class TimeLogController extends Controller
         }
 
         $timeLogs = $query->orderBy('log_date', 'desc')
-                          ->paginate(20);
+            ->paginate(20);
 
         return view('time-logs.my-time-logs', compact('timeLogs', 'employee'));
     }
@@ -571,10 +604,10 @@ class TimeLogController extends Controller
         $this->authorize('create own time logs');
 
         $employee = Employee::where('user_id', Auth::id())->first();
-        
+
         if (!$employee) {
             return redirect()->route('dashboard')
-                           ->with('error', 'Employee profile not found.');
+                ->with('error', 'Employee profile not found.');
         }
 
         $validated = $request->validate([
@@ -588,18 +621,18 @@ class TimeLogController extends Controller
 
         // Check if time log already exists
         $existingLog = TimeLog::where('employee_id', $employee->id)
-                             ->where('log_date', $validated['log_date'])
-                             ->first();
+            ->where('log_date', $validated['log_date'])
+            ->first();
 
         if ($existingLog) {
             return back()->withErrors(['error' => 'Time log already exists for this date.'])
-                        ->withInput();
+                ->withInput();
         }
 
         // Calculate hours (same logic as store method)
         $timeIn = Carbon::createFromFormat('H:i', $validated['time_in']);
         $timeOut = $validated['time_out'] ? Carbon::createFromFormat('H:i', $validated['time_out']) : null;
-        
+
         $breakIn = $validated['break_in'] ? Carbon::createFromFormat('H:i', $validated['break_in']) : null;
         $breakOut = $validated['break_out'] ? Carbon::createFromFormat('H:i', $validated['break_out']) : null;
 
@@ -611,7 +644,7 @@ class TimeLogController extends Controller
 
         if ($timeOut) {
             $totalMinutes = $timeIn->diffInMinutes($timeOut);
-            
+
             if ($breakIn && $breakOut) {
                 $breakMinutes = $breakIn->diffInMinutes($breakOut);
                 $totalMinutes -= $breakMinutes;
@@ -657,7 +690,7 @@ class TimeLogController extends Controller
         ]);
 
         return redirect()->route('my-time-logs')
-                        ->with('success', 'Time log submitted successfully!');
+            ->with('success', 'Time log submitted successfully!');
     }
 
     /**
@@ -669,7 +702,7 @@ class TimeLogController extends Controller
 
         // Get payroll settings to determine current period
         $payrollSettings = \App\Models\PayrollScheduleSetting::first();
-        
+
         if (!$payrollSettings) {
             return redirect()->back()->with('error', 'Payroll schedule settings not configured.');
         }
@@ -689,7 +722,7 @@ class TimeLogController extends Controller
 
         // Get payroll settings to determine current period
         $payrollSettings = \App\Models\PayrollScheduleSetting::first();
-        
+
         if (!$payrollSettings) {
             return redirect()->back()->with('error', 'Payroll schedule settings not configured.');
         }
@@ -746,7 +779,6 @@ class TimeLogController extends Controller
             $this->calculateHours($timeLog);
 
             return response()->json(['success' => true, 'message' => 'Time entry updated successfully']);
-
         } catch (\Exception $e) {
             Log::error('Error updating time entry: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Error updating time entry'], 500);
@@ -759,10 +791,10 @@ class TimeLogController extends Controller
     private function getCurrentPayrollPeriod($payrollSettings)
     {
         $today = Carbon::now();
-        
+
         if ($payrollSettings->frequency === 'semi_monthly') {
             $day = $today->day;
-            
+
             if ($day <= 15) {
                 // First half of the month
                 $startDate = $today->copy()->startOfMonth();
@@ -797,7 +829,7 @@ class TimeLogController extends Controller
     {
         $startDate = $currentPeriod['start_date'];
         $endDate = $currentPeriod['end_date'];
-        
+
         // Get all time logs for the period
         $timeLogs = TimeLog::where('employee_id', $employee->id)
             ->whereBetween('log_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
@@ -810,16 +842,16 @@ class TimeLogController extends Controller
             ->keyBy('date');
 
         $dtrData = [];
-        
+
         // Generate data for each day in the period
         $currentDate = $startDate->copy();
         while ($currentDate->lte($endDate)) {
             $dateStr = $currentDate->format('Y-m-d');
             $timeLog = $timeLogs->get($dateStr);
             $holiday = $holidays->get($dateStr);
-            
+
             $isWeekend = $currentDate->isWeekend();
-            
+
             $dayData = [
                 'date' => $currentDate->copy(),
                 'day' => $currentDate->format('d'),
@@ -837,11 +869,11 @@ class TimeLogController extends Controller
                 'late_hours' => $timeLog ? $timeLog->late_hours : 0,
                 'total_hours' => $timeLog ? $timeLog->total_hours : 0,
             ];
-            
+
             $dtrData[] = $dayData;
             $currentDate->addDay();
         }
-        
+
         return $dtrData;
     }
 
@@ -852,14 +884,14 @@ class TimeLogController extends Controller
     {
         $startDate = Carbon::parse($startDateStr);
         $endDate = Carbon::parse($endDateStr);
-        
+
         Log::info('Generating DTR data for period', [
             'employee_id' => $employee->id,
             'employee_name' => $employee->user->name,
             'start_date' => $startDate->format('Y-m-d'),
             'end_date' => $endDate->format('Y-m-d')
         ]);
-        
+
         // Get all time logs for the period - ensure we include all required fields
         $timeLogs = TimeLog::where('employee_id', $employee->id)
             ->whereBetween('log_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
@@ -880,28 +912,28 @@ class TimeLogController extends Controller
             ->keyBy('date');
 
         $dtrData = [];
-        
+
         // Generate data for each day in the period
         $currentDate = $startDate->copy();
         while ($currentDate->lte($endDate)) {
             $dateStr = $currentDate->format('Y-m-d');
             $timeLog = $timeLogs->get($dateStr);
             $holiday = $holidays->get($dateStr);
-            
+
             $isWeekend = $currentDate->isWeekend();
-            
+
             // Ensure time values are properly formatted
             $timeIn = null;
             $timeOut = null;
             $breakIn = null;
             $breakOut = null;
-            
+
             if ($timeLog) {
                 $timeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : null;
                 $timeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : null;
                 $breakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
                 $breakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
-                
+
                 Log::debug('Time log found for date', [
                     'date' => $dateStr,
                     'time_in' => $timeIn ? $timeIn->format('H:i') : null,
@@ -910,7 +942,7 @@ class TimeLogController extends Controller
                     'break_out' => $breakOut ? $breakOut->format('H:i') : null,
                 ]);
             }
-            
+
             $dayData = [
                 'date' => $currentDate->copy(),
                 'day' => $currentDate->format('d'),
@@ -928,16 +960,18 @@ class TimeLogController extends Controller
                 'late_hours' => $timeLog ? ($timeLog->late_hours ?? 0) : 0,
                 'total_hours' => $timeLog ? ($timeLog->total_hours ?? 0) : 0,
             ];
-            
+
             $dtrData[] = $dayData;
             $currentDate->addDay();
         }
-        
+
         Log::info('Generated DTR data', [
             'total_days' => count($dtrData),
-            'days_with_time_logs' => count(array_filter($dtrData, function($day) { return $day['time_log'] !== null; }))
+            'days_with_time_logs' => count(array_filter($dtrData, function ($day) {
+                return $day['time_log'] !== null;
+            }))
         ]);
-        
+
         return $dtrData;
     }
 
@@ -958,19 +992,19 @@ class TimeLogController extends Controller
 
         $timeIn = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_in);
         $timeOut = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_out);
-        
+
         // Handle next day time out
         if ($timeOut->lt($timeIn)) {
             $timeOut->addDay();
         }
 
         $totalMinutes = $timeOut->diffInMinutes($timeIn);
-        
+
         // Subtract break time if both break_in and break_out are provided
         if ($timeLog->break_in && $timeLog->break_out) {
             $breakIn = Carbon::parse($timeLog->log_date . ' ' . $timeLog->break_in);
             $breakOut = Carbon::parse($timeLog->log_date . ' ' . $timeLog->break_out);
-            
+
             if ($breakOut->gt($breakIn)) {
                 $breakMinutes = $breakOut->diffInMinutes($breakIn);
                 $totalMinutes -= $breakMinutes;
@@ -978,13 +1012,13 @@ class TimeLogController extends Controller
         }
 
         $totalHours = $totalMinutes / 60;
-        
+
         // Standard work hours (8 hours)
         $standardHours = 8;
-        
+
         $regularHours = min($totalHours, $standardHours);
         $overtimeHours = max(0, $totalHours - $standardHours);
-        
+
         // Calculate late hours (assuming standard start time is 8:00 AM)
         $standardStartTime = Carbon::parse($timeLog->log_date . ' 08:00:00');
         $lateMinutes = max(0, $timeIn->diffInMinutes($standardStartTime));
@@ -1006,9 +1040,9 @@ class TimeLogController extends Controller
         $this->authorize('create time logs');
 
         $employees = Employee::with('user')
-                            ->where('employment_status', 'active')
-                            ->orderBy('first_name')
-                            ->get();
+            ->where('employment_status', 'active')
+            ->orderBy('first_name')
+            ->get();
 
         $selectedEmployee = null;
         $dtrData = [];
@@ -1016,14 +1050,14 @@ class TimeLogController extends Controller
 
         if ($request->filled('employee_id')) {
             Log::info('Bulk creation: Employee ID selected', ['employee_id' => $request->employee_id]);
-            
+
             $selectedEmployee = Employee::with('user')->findOrFail($request->employee_id);
             Log::info('Bulk creation: Employee found', ['employee' => $selectedEmployee->first_name . ' ' . $selectedEmployee->last_name]);
-            
+
             // Get payroll settings to determine current period
             $payrollSettings = \App\Models\PayrollScheduleSetting::first();
             Log::info('Bulk creation: PayrollSettings check', ['has_settings' => $payrollSettings ? 'yes' : 'no']);
-            
+
             if ($payrollSettings) {
                 $currentPeriod = $this->getCurrentPayrollPeriod($payrollSettings);
                 $dtrData = $this->generateDTRData($selectedEmployee, $currentPeriod, $payrollSettings);
@@ -1033,7 +1067,7 @@ class TimeLogController extends Controller
                 $currentPeriod = $this->getDefaultPayrollPeriod();
                 $dtrData = $this->generateDTRDataWithoutSettings($selectedEmployee, $currentPeriod);
             }
-            
+
             Log::info('Bulk creation: Generated data', [
                 'period' => $currentPeriod['period_label'] ?? 'none',
                 'dtr_data_count' => count($dtrData)
@@ -1051,24 +1085,24 @@ class TimeLogController extends Controller
         $this->authorize('create time logs');
 
         $selectedEmployee = Employee::with(['user', 'daySchedule', 'timeSchedule'])->findOrFail($employee_id);
-        
+
         // Get period data from request (passed from payroll)
         $periodStart = $request->input('period_start');
         $periodEnd = $request->input('period_end');
         $payrollId = $request->input('payroll_id');
-        
+
         // Generate DTR data for the specific period
         $currentPeriod = [
             'start' => $periodStart,
             'end' => $periodEnd,
             'period_label' => date('M d', strtotime($periodStart)) . ' - ' . date('M d, Y', strtotime($periodEnd))
         ];
-        
+
         $dtrData = $this->generateDTRDataForPeriod($selectedEmployee, $periodStart, $periodEnd);
-        
+
         return view('time-logs.create-bulk-employee', compact(
-            'selectedEmployee', 
-            'dtrData', 
+            'selectedEmployee',
+            'dtrData',
             'currentPeriod',
             'payrollId',
             'periodStart',
@@ -1090,6 +1124,7 @@ class TimeLogController extends Controller
 
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
+            'payroll_id' => 'nullable|exists:payrolls,id',
             'time_logs' => 'required|array',
             'time_logs.*.log_date' => 'required|date',
             'time_logs.*.time_in' => 'nullable|date_format:H:i',
@@ -1122,13 +1157,13 @@ class TimeLogController extends Controller
 
                 // Find existing time log or create new one
                 $existingLog = TimeLog::where('employee_id', $validated['employee_id'])
-                                    ->where('log_date', $logData['log_date'])
-                                    ->first();
+                    ->where('log_date', $logData['log_date'])
+                    ->first();
 
                 // Calculate hours
                 $timeIn = Carbon::createFromFormat('H:i', $logData['time_in']);
                 $timeOut = !empty($logData['time_out']) ? Carbon::createFromFormat('H:i', $logData['time_out']) : null;
-                
+
                 $breakIn = !empty($logData['break_in']) ? Carbon::createFromFormat('H:i', $logData['break_in']) : null;
                 $breakOut = !empty($logData['break_out']) ? Carbon::createFromFormat('H:i', $logData['break_out']) : null;
 
@@ -1140,7 +1175,7 @@ class TimeLogController extends Controller
 
                 if ($timeOut) {
                     $totalMinutes = $timeIn->diffInMinutes($timeOut);
-                    
+
                     if ($breakIn && $breakOut) {
                         $breakMinutes = $breakIn->diffInMinutes($breakOut);
                         $totalMinutes -= $breakMinutes;
@@ -1168,6 +1203,7 @@ class TimeLogController extends Controller
 
                 $timeLogData = [
                     'employee_id' => $validated['employee_id'],
+                    'payroll_id' => $validated['payroll_id'],
                     'log_date' => $logData['log_date'],
                     'time_in' => $logData['time_in'],
                     'time_out' => $logData['time_out'],
@@ -1197,30 +1233,29 @@ class TimeLogController extends Controller
             DB::commit();
 
             $message = "Bulk time logs processed! Created: {$createdCount}, Updated: {$updatedCount}, Skipped: {$skippedCount}";
-            
+
             // Check if we should redirect back to payroll
             if ($request->filled('redirect_to_payroll') && $request->filled('payroll_id')) {
                 // Get date range from time logs to refresh payroll calculations
                 $dates = collect($validated['time_logs'])->pluck('log_date');
                 $startDate = $dates->min();
                 $endDate = $dates->max();
-                
+
                 // Refresh payroll calculations by recalculating the specific employee's payroll
                 $this->refreshPayrollCalculations($validated['employee_id'], $startDate, $endDate);
-                
-                return redirect()->route('payrolls.show', $request->payroll_id)
-                               ->with('success', $message . ' Payroll calculations updated.');
-            }
-            
-            return redirect()->route('time-logs.index')
-                           ->with('success', $message);
 
+                return redirect()->route('payrolls.show', $request->payroll_id)
+                    ->with('success', $message . ' Payroll calculations updated.');
+            }
+
+            return redirect()->route('time-logs.index')
+                ->with('success', $message);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Bulk Time Log Creation Error: ' . $e->getMessage());
-            
+
             return back()->withErrors(['error' => 'Failed to create bulk time logs: ' . $e->getMessage()])
-                        ->withInput();
+                ->withInput();
         }
     }
 
@@ -1230,10 +1265,10 @@ class TimeLogController extends Controller
     private function getDefaultPayrollPeriod()
     {
         $today = Carbon::now();
-        
+
         // Default to semi-monthly: 1st-15th or 16th-end of month
         $day = $today->day;
-        
+
         if ($day <= 15) {
             // First half of the month
             $startDate = $today->copy()->startOfMonth();
@@ -1262,7 +1297,7 @@ class TimeLogController extends Controller
     {
         $startDate = $currentPeriod['start_date'];
         $endDate = $currentPeriod['end_date'];
-        
+
         // Get all time logs for the period
         $timeLogs = TimeLog::where('employee_id', $employee->id)
             ->whereBetween('log_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
@@ -1278,16 +1313,16 @@ class TimeLogController extends Controller
         }
 
         $dtrData = [];
-        
+
         // Generate data for each day in the period
         $currentDate = $startDate->copy();
         while ($currentDate->lte($endDate)) {
             $dateStr = $currentDate->format('Y-m-d');
             $timeLog = $timeLogs->get($dateStr);
             $holiday = $holidays->get($dateStr);
-            
+
             $isWeekend = $currentDate->isWeekend();
-            
+
             $dayData = [
                 'date' => $currentDate->copy(),
                 'day' => $currentDate->format('d'),
@@ -1305,11 +1340,11 @@ class TimeLogController extends Controller
                 'late_hours' => $timeLog ? $timeLog->late_hours : 0,
                 'total_hours' => $timeLog ? $timeLog->total_hours : 0,
             ];
-            
+
             $dtrData[] = $dayData;
             $currentDate->addDay();
         }
-        
+
         return $dtrData;
     }
 
@@ -1321,10 +1356,10 @@ class TimeLogController extends Controller
         try {
             // Get employee
             $employee = Employee::findOrFail($employeeId);
-            
+
             // Update payroll totals for this employee and period
             $this->updatePayrollTotals($employeeId, $startDate, $endDate);
-            
+
             return true;
         } catch (\Exception $e) {
             Log::error('Failed to refresh payroll calculations: ' . $e->getMessage());
@@ -1383,7 +1418,7 @@ class TimeLogController extends Controller
     {
         try {
             $employee = $payroll->employee;
-            
+
             // Get hourly rate
             $hourlyRate = $employee->hourly_rate ?? 0;
             $overtimeRate = $hourlyRate * 1.25; // 25% overtime
@@ -1391,10 +1426,10 @@ class TimeLogController extends Controller
             // Calculate basic pay
             $basicPay = $payroll->regular_hours * $hourlyRate;
             $overtimePay = $payroll->overtime_hours * $overtimeRate;
-            
+
             // Calculate gross pay
             $grossPay = $basicPay + $overtimePay + ($payroll->allowances ?? 0);
-            
+
             // Calculate net pay (gross - deductions)
             $netPay = $grossPay - ($payroll->deductions ?? 0);
 

@@ -13,6 +13,7 @@ class TimeLog extends Model
 
     protected $fillable = [
         'employee_id',
+        'payroll_id',
         'log_date',
         'time_in',
         'time_out',
@@ -68,6 +69,14 @@ class TimeLog extends Model
     }
 
     /**
+     * Get the payroll that this time log belongs to.
+     */
+    public function payroll()
+    {
+        return $this->belongsTo(Payroll::class);
+    }
+
+    /**
      * Get the user who approved the time log.
      */
     public function approver()
@@ -86,9 +95,9 @@ class TimeLog extends Model
 
         $timeIn = \Carbon\Carbon::parse($this->time_in);
         $timeOut = \Carbon\Carbon::parse($this->time_out);
-        
+
         $totalMinutes = $timeOut->diffInMinutes($timeIn);
-        
+
         // Subtract break time if available
         if ($this->break_in && $this->break_out) {
             $breakIn = \Carbon\Carbon::parse($this->break_in);
@@ -114,6 +123,14 @@ class TimeLog extends Model
     public function scopeByEmployee($query, $employeeId)
     {
         return $query->where('employee_id', $employeeId);
+    }
+
+    /**
+     * Scope to filter by payroll.
+     */
+    public function scopeByPayroll($query, $payrollId)
+    {
+        return $query->where('payroll_id', $payrollId);
     }
 
     /**

@@ -17,8 +17,8 @@ class DeductionSettingController extends Controller
         $this->authorize('view deduction settings');
 
         $deductionSettings = DeductionSetting::orderBy('type')
-                                            ->orderBy('name')
-                                            ->paginate(15);
+            ->orderBy('name')
+            ->paginate(15);
 
         return view('deduction-settings.index', compact('deductionSettings'));
     }
@@ -29,7 +29,7 @@ class DeductionSettingController extends Controller
     public function create()
     {
         $this->authorize('create deduction settings');
-        
+
         return view('deduction-settings.create');
     }
 
@@ -60,7 +60,7 @@ class DeductionSettingController extends Controller
         DeductionSetting::create($validated);
 
         return redirect()->route('deduction-settings.index')
-                        ->with('success', 'Deduction setting created successfully!');
+            ->with('success', 'Deduction setting created successfully!');
     }
 
     /**
@@ -110,7 +110,7 @@ class DeductionSettingController extends Controller
         $deductionSetting->update($validated);
 
         return redirect()->route('deduction-settings.index')
-                        ->with('success', 'Deduction setting updated successfully!');
+            ->with('success', 'Deduction setting updated successfully!');
     }
 
     /**
@@ -123,7 +123,7 @@ class DeductionSettingController extends Controller
         $deductionSetting->delete();
 
         return redirect()->route('deduction-settings.index')
-                        ->with('success', 'Deduction setting deleted successfully!');
+            ->with('success', 'Deduction setting deleted successfully!');
     }
 
     /**
@@ -136,9 +136,9 @@ class DeductionSettingController extends Controller
         $deductionSetting->update(['is_active' => !$deductionSetting->is_active]);
 
         $status = $deductionSetting->is_active ? 'activated' : 'deactivated';
-        
+
         return redirect()->back()
-                        ->with('success', "Deduction setting {$status} successfully!");
+            ->with('success', "Deduction setting {$status} successfully!");
     }
 
     /**

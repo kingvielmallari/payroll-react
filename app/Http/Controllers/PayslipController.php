@@ -30,7 +30,7 @@ class PayslipController extends Controller
             'employee.position'
         ]);
 
-        // Check if user can view this payslip
+        // Check if user can view this payslip  
         if (!Auth::user()->can('view all payslips')) {
             $employee = Employee::where('user_id', Auth::id())->first();
             if (!$employee || $payrollDetail->employee_id !== $employee->id) {

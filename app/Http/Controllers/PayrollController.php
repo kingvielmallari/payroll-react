@@ -27,8 +27,8 @@ class PayrollController extends Controller
 
         // Get all payrolls with filters
         $query = Payroll::with(['creator', 'approver'])
-                        ->withCount('payrollDetails')
-                        ->orderBy('created_at', 'desc');
+            ->withCount('payrollDetails')
+            ->orderBy('created_at', 'desc');
 
         // Filter by schedule
         if ($request->filled('schedule')) {
@@ -54,8 +54,8 @@ class PayrollController extends Controller
 
         // Get available schedule settings for filter options
         $scheduleSettings = \App\Models\PayScheduleSetting::systemDefaults()
-                          ->orderBy('sort_order')
-                          ->get();
+            ->orderBy('sort_order')
+            ->get();
 
         return view('payrolls.index-all', compact('payrolls', 'scheduleSettings'));
     }
@@ -69,20 +69,20 @@ class PayrollController extends Controller
 
         // Get the selected pay schedule filter
         $selectedSchedule = $request->input('schedule');
-        
+
         // If no schedule is selected, show schedule selection page
         if (!$selectedSchedule) {
             // Get all payroll schedule settings for selection (including disabled ones)
             $scheduleSettings = \App\Models\PayScheduleSetting::systemDefaults()
-                              ->orderBy('sort_order')
-                              ->get();
+                ->orderBy('sort_order')
+                ->get();
 
             // Calculate current periods for each schedule to display
             foreach ($scheduleSettings as $setting) {
                 $currentPeriods = $this->getCurrentPeriodDisplayForSchedule($setting);
                 $setting->current_period_display = $currentPeriods;
             }
-            
+
             return view('payrolls.schedule-selection', [
                 'scheduleSettings' => $scheduleSettings
             ]);
@@ -90,9 +90,9 @@ class PayrollController extends Controller
 
         // Show payrolls for selected schedule
         $query = Payroll::with(['creator', 'approver'])
-                        ->withCount('payrollDetails')
-                        ->where('pay_schedule', $selectedSchedule)
-                        ->orderBy('created_at', 'desc');
+            ->withCount('payrollDetails')
+            ->where('pay_schedule', $selectedSchedule)
+            ->orderBy('created_at', 'desc');
 
         // Filter by status
         if ($request->filled('status')) {
@@ -113,8 +113,8 @@ class PayrollController extends Controller
 
         // Get the schedule setting for display
         $scheduleSetting = \App\Models\PayScheduleSetting::systemDefaults()
-                         ->where('code', $selectedSchedule)
-                         ->first();
+            ->where('code', $selectedSchedule)
+            ->first();
 
         return view('payrolls.index', compact('payrolls', 'selectedSchedule', 'scheduleSetting'));
     }
@@ -128,11 +128,11 @@ class PayrollController extends Controller
 
         // Get the selected pay schedule filter
         $selectedSchedule = $request->input('schedule');
-        
+
         // Get all payroll schedule settings (both active and inactive for display)
         $scheduleSettings = \App\Models\PayScheduleSetting::systemDefaults()
-                          ->orderBy('sort_order')
-                          ->get();
+            ->orderBy('sort_order')
+            ->get();
 
         // If no schedule is selected, show all available schedules for selection
         if (!$selectedSchedule) {
@@ -143,7 +143,7 @@ class PayrollController extends Controller
                     $setting->current_period_display = $currentPeriods;
                 }
             }
-            
+
             return view('payrolls.create', [
                 'scheduleSettings' => $scheduleSettings,
                 'selectedSchedule' => null,
@@ -157,7 +157,7 @@ class PayrollController extends Controller
         $scheduleSetting = $scheduleSettings->firstWhere('code', $selectedSchedule);
         if (!$scheduleSetting) {
             return redirect()->route('payrolls.create')
-                           ->withErrors(['schedule' => 'Invalid pay schedule selected.']);
+                ->withErrors(['schedule' => 'Invalid pay schedule selected.']);
         }
 
         // Get current month periods only for the selected schedule
@@ -182,19 +182,19 @@ class PayrollController extends Controller
         if ($selectedPeriod) {
             // Get employees for this schedule - handle different naming conventions
             $payScheduleVariations = $this->getPayScheduleVariations($selectedPeriod['pay_schedule']);
-            
+
             $employees = Employee::with(['user', 'department', 'position'])
-                               ->where('employment_status', 'active')
-                               ->whereIn('pay_schedule', $payScheduleVariations)
-                               ->orderBy('first_name')
-                               ->get();
+                ->where('employment_status', 'active')
+                ->whereIn('pay_schedule', $payScheduleVariations)
+                ->orderBy('first_name')
+                ->get();
         }
 
         return view('payrolls.create', compact(
-            'scheduleSettings', 
-            'selectedSchedule', 
-            'availablePeriods', 
-            'selectedPeriod', 
+            'scheduleSettings',
+            'selectedSchedule',
+            'availablePeriods',
+            'selectedPeriod',
             'employees'
         ));
     }
@@ -214,7 +214,7 @@ class PayrollController extends Controller
 
         // Parse the selected period data
         $periodData = json_decode(base64_decode($validated['selected_period']), true);
-        
+
         if (!$periodData) {
             return back()->withErrors(['selected_period' => 'Invalid period selection.'])->withInput();
         }
@@ -222,7 +222,7 @@ class PayrollController extends Controller
         // Validate that selected employees match the pay schedule
         $selectedEmployees = Employee::whereIn('id', $validated['employee_ids'])->get();
         $invalidEmployees = $selectedEmployees->where('pay_schedule', '!=', $periodData['pay_schedule']);
-        
+
         if ($invalidEmployees->count() > 0) {
             return back()->withErrors([
                 'employee_ids' => 'All selected employees must have the same pay schedule as the selected period.'
@@ -253,20 +253,19 @@ class PayrollController extends Controller
             foreach ($validated['employee_ids'] as $employeeId) {
                 try {
                     $employee = Employee::find($employeeId);
-                    
+
                     if (!$employee) {
                         Log::warning("Employee with ID {$employeeId} not found");
                         continue;
                     }
-                    
+
                     // Calculate payroll details
                     $payrollDetail = $this->calculateEmployeePayroll($employee, $payroll);
-                    
+
                     $totalGross += $payrollDetail->gross_pay;
                     $totalDeductions += $payrollDetail->total_deductions;
                     $totalNet += $payrollDetail->net_pay;
                     $processedEmployees++;
-                    
                 } catch (\Exception $e) {
                     Log::error("Failed to process employee {$employeeId}: " . $e->getMessage());
                     // Continue with other employees rather than failing the entire payroll
@@ -285,16 +284,18 @@ class PayrollController extends Controller
                 'total_net' => $totalNet,
             ]);
 
+            // Auto-link existing time logs to this payroll
+            $this->autoLinkTimeLogs($payroll);
+
             DB::commit();
 
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('success', "Payroll created successfully! {$processedEmployees} employees processed.");
-
+                ->with('success', "Payroll created successfully! {$processedEmployees} employees processed.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to create payroll: ' . $e->getMessage());
             return back()->withErrors(['error' => 'Failed to create payroll: ' . $e->getMessage()])
-                        ->withInput();
+                ->withInput();
         }
     }
 
@@ -304,113 +305,114 @@ class PayrollController extends Controller
     public function automationIndex()
     {
         $this->authorize('view payrolls');
-        
+
         // Get only active payroll schedule settings for selection
         $scheduleSettings = \App\Models\PayScheduleSetting::systemDefaults()
-                          ->active()
-                          ->orderBy('sort_order')
-                          ->get();
+            ->active()
+            ->orderBy('sort_order')
+            ->get();
 
         // Calculate current periods and employee counts for each schedule
         foreach ($scheduleSettings as $setting) {
             // Get current period display
             $currentPeriods = $this->getCurrentPeriodDisplayForSchedule($setting);
             $setting->current_period_display = $currentPeriods;
-            
+
             // Calculate current pay period (not next)
             $setting->next_period = $this->calculateCurrentPayPeriod($setting);
-            
+
             // Count active employees for this schedule
             $setting->active_employees_count = \App\Models\Employee::where('pay_schedule', $setting->code)
-                                                                  ->where('employment_status', 'active')
-                                                                  ->count();
-            
+                ->where('employment_status', 'active')
+                ->count();
+
             // Get last payroll date if exists
             $lastPayroll = \App\Models\Payroll::where('pay_schedule', $setting->code)
-                                             ->orderBy('pay_date', 'desc')
-                                             ->first();
-            
+                ->orderBy('pay_date', 'desc')
+                ->first();
+
             if ($lastPayroll) {
                 $setting->last_payroll_date = $lastPayroll->pay_date;
             }
         }
-        
+
         return view('payrolls.automation.index', [
             'scheduleSettings' => $scheduleSettings
         ]);
-    }    /**
+    }
+    /**
      * Automation Payroll - Create payroll for selected schedule
      */
     public function automationCreate(Request $request)
     {
         Log::info('Automation Create called with: ' . json_encode($request->all()));
-        
+
         $this->authorize('create payrolls');
 
         // Get the selected pay schedule
         $scheduleCode = $request->input('schedule');
-        
+
         Log::info('Schedule Code: ' . $scheduleCode);
-        
+
         if (!$scheduleCode) {
             Log::warning('No schedule code provided');
             return redirect()->route('payrolls.automation.index')
-                           ->with('error', 'Please select a pay schedule.');
+                ->with('error', 'Please select a pay schedule.');
         }
 
         // Get schedule setting
         $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
-                         ->where('code', $scheduleCode)
-                         ->first();
+            ->where('code', $scheduleCode)
+            ->first();
 
         if (!$selectedSchedule) {
             return redirect()->route('payrolls.automation.index')
-                           ->with('error', 'Invalid pay schedule selected.');
+                ->with('error', 'Invalid pay schedule selected.');
         }
 
         // Check if we should show payrolls list or creation form
         if (!$request->has('action') || $request->input('action') !== 'create') {
             // Check if we need to auto-create a payroll for the current period
             $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
-            
+
             // Check if payrolls exist for current period (since we create individual payrolls per employee)
             $existingPayrolls = Payroll::where('pay_schedule', $scheduleCode)
-                                    ->where('period_start', $currentPeriod['start'])
-                                    ->where('period_end', $currentPeriod['end'])
-                                    ->where('payroll_type', 'automated')
-                                    ->get();
-            
+                ->where('period_start', $currentPeriod['start'])
+                ->where('period_end', $currentPeriod['end'])
+                ->where('payroll_type', 'automated')
+                ->get();
+
             // If no payrolls exist for current period and we have active employees, auto-create them
             if ($existingPayrolls->count() === 0) {
                 $activeEmployees = Employee::where('pay_schedule', $scheduleCode)
-                                         ->where('employment_status', 'active')
-                                         ->get();
-                
+                    ->where('employment_status', 'active')
+                    ->get();
+
                 Log::info('Active employees found: ' . $activeEmployees->count() . ' for schedule: ' . $scheduleCode);
-                
+
                 if ($activeEmployees->count() > 0) {
                     try {
                         // Auto-create individual payrolls for current period
                         $this->autoCreatePayrollForPeriod($selectedSchedule, $currentPeriod, $activeEmployees);
-                        
+
                         // Redirect to the automation list to show all created payrolls
                         return redirect()->route('payrolls.automation.list', $scheduleCode)
-                                       ->with('success', "Automated payrolls created successfully! {$activeEmployees->count()} individual payrolls generated.");
+                            ->with('success', "Automated payrolls created successfully! {$activeEmployees->count()} individual payrolls generated.");
                     } catch (\Exception $e) {
                         Log::error('Failed to auto-create payrolls: ' . $e->getMessage());
                         return redirect()->route('payrolls.automation.index')
-                                       ->withErrors(['error' => 'Failed to create automated payrolls: ' . $e->getMessage()]);
+                            ->withErrors(['error' => 'Failed to create automated payrolls: ' . $e->getMessage()]);
                     }
                 } else {
                     return redirect()->route('payrolls.automation.index')
-                                   ->withErrors(['employees' => 'No active employees found for this pay schedule.']);
+                        ->withErrors(['employees' => 'No active employees found for this pay schedule.']);
                 }
             } else {
                 // If payrolls already exist, show the automation list
                 return redirect()->route('payrolls.automation.list', $scheduleCode)
-                               ->with('info', "Payrolls already exist for current period ({$existingPayrolls->count()} payrolls found).");
+                    ->with('info', "Payrolls already exist for current period ({$existingPayrolls->count()} payrolls found).");
             }
-            
+
             // This code should not be reached since we handle both cases above
             return redirect()->route('payrolls.automation.index');
         }
@@ -418,16 +420,16 @@ class PayrollController extends Controller
         // Show creation form
         // Get suggested pay period (current period, not next)
         $suggestedPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
-        
+
         // Get suggested payroll number
         $suggestedPayrollNumber = $this->generatePayrollNumber($scheduleCode);
 
         // Get ALL active employees for this schedule (automatic)
         $employees = Employee::with(['user', 'department', 'position'])
-                           ->where('pay_schedule', $scheduleCode)
-                           ->where('employment_status', 'active')
-                           ->orderBy('first_name')
-                           ->get();
+            ->where('pay_schedule', $scheduleCode)
+            ->where('employment_status', 'active')
+            ->orderBy('first_name')
+            ->get();
 
         return view('payrolls.automation.create', compact(
             'selectedSchedule',
@@ -446,12 +448,12 @@ class PayrollController extends Controller
 
         // Get schedule setting
         $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
-                         ->where('code', $schedule)
-                         ->first();
+            ->where('code', $schedule)
+            ->first();
 
         if (!$selectedSchedule) {
             return redirect()->route('payrolls.automation.index')
-                           ->with('error', 'Invalid pay schedule selected.');
+                ->with('error', 'Invalid pay schedule selected.');
         }
 
         // Calculate current period to filter payrolls
@@ -459,13 +461,13 @@ class PayrollController extends Controller
 
         // Get paginated payrolls for this schedule AND current period only
         $payrolls = Payroll::with(['creator', 'approver'])
-                          ->withCount('payrollDetails')
-                          ->where('pay_schedule', $schedule)
-                          ->where('payroll_type', 'automated')
-                          ->where('period_start', $currentPeriod['start'])
-                          ->where('period_end', $currentPeriod['end'])
-                          ->orderBy('created_at', 'desc')
-                          ->paginate(15);
+            ->withCount('payrollDetails')
+            ->where('pay_schedule', $schedule)
+            ->where('payroll_type', 'automated')
+            ->where('period_start', $currentPeriod['start'])
+            ->where('period_end', $currentPeriod['end'])
+            ->orderBy('created_at', 'desc')
+            ->paginate(15);
 
         return view('payrolls.automation.list', compact(
             'payrolls',
@@ -480,23 +482,23 @@ class PayrollController extends Controller
     private function autoCreatePayrollForPeriod($scheduleSetting, $period, $employees)
     {
         DB::beginTransaction();
-        
+
         try {
             Log::info("Starting individual payroll creation for {$employees->count()} employees");
-            
+
             $createdPayrolls = [];
-            
+
             // Create individual payroll for each employee
             foreach ($employees as $employee) {
                 Log::info("Creating payroll for employee: {$employee->id} - {$employee->first_name} {$employee->last_name}");
-                
+
                 try {
                     // Generate unique payroll number for this employee
                     $payrollNumber = $this->generatePayrollNumber($scheduleSetting->code);
-                    
+
                     // Calculate payroll details for this employee
                     $payrollCalculation = $this->calculateEmployeePayrollForPeriod($employee, $period['start'], $period['end']);
-                    
+
                     // Create individual payroll for this employee
                     $payroll = Payroll::create([
                         'payroll_number' => $payrollNumber,
@@ -512,9 +514,9 @@ class PayrollController extends Controller
                         'total_deductions' => $payrollCalculation['total_deductions'] ?? 0,
                         'total_net' => $payrollCalculation['net_pay'] ?? 0,
                     ]);
-                    
+
                     Log::info("Created payroll {$payrollNumber} for employee {$employee->id}");
-                    
+
                     // Create payroll detail for this employee
                     $payrollDetail = PayrollDetail::create([
                         'payroll_id' => $payroll->id,
@@ -535,24 +537,22 @@ class PayrollController extends Controller
                         'regular_hours' => $payrollCalculation['hours_worked'] ?? 0,
                         'days_worked' => $payrollCalculation['days_worked'] ?? 0,
                     ]);
-                    
+
                     Log::info("Created payroll detail for employee {$employee->id}: Gross: {$payrollCalculation['gross_pay']}, Net: {$payrollCalculation['net_pay']}");
-                    
+
                     $createdPayrolls[] = $payroll;
-                    
                 } catch (\Exception $e) {
                     Log::warning("Failed to create payroll for employee {$employee->id}: " . $e->getMessage());
                     // Continue with other employees
                 }
             }
-            
+
             DB::commit();
-            
+
             Log::info("Successfully created " . count($createdPayrolls) . " individual payrolls for {$scheduleSetting->name} schedule");
-            
+
             // Return the first payroll (we'll redirect to the list instead)
             return $createdPayrolls[0] ?? null;
-            
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to auto-create payrolls: ' . $e->getMessage());
@@ -563,19 +563,25 @@ class PayrollController extends Controller
     /**
      * Calculate payroll details for an employee for a specific period
      */
-    private function calculateEmployeePayrollForPeriod($employee, $periodStart, $periodEnd)
+    private function calculateEmployeePayrollForPeriod($employee, $periodStart, $periodEnd, $payroll = null)
     {
         // Basic salary calculation based on employee's salary and period
         $basicSalary = $employee->basic_salary ?? 0;
-        
-        // Get time logs for the period
-        $timeLogs = TimeLog::where('employee_id', $employee->id)
-                          ->whereBetween('log_date', [$periodStart, $periodEnd])
-                          ->get();
-        
+
+        // Get time logs - prioritize payroll_id if available, otherwise use period
+        if ($payroll) {
+            $timeLogs = TimeLog::where('employee_id', $employee->id)
+                ->where('payroll_id', $payroll->id)
+                ->get();
+        } else {
+            $timeLogs = TimeLog::where('employee_id', $employee->id)
+                ->whereBetween('log_date', [$periodStart, $periodEnd])
+                ->get();
+        }
+
         $hoursWorked = 0;
         $daysWorked = 0;
-        
+
         // Calculate total hours and days worked
         foreach ($timeLogs as $timeLog) {
             $hoursWorked += $timeLog->total_hours ?? 0;
@@ -583,29 +589,29 @@ class PayrollController extends Controller
                 $daysWorked++;
             }
         }
-        
+
         // Calculate gross pay based on schedule type
         $grossPay = $this->calculateGrossPay($employee, $basicSalary, $hoursWorked, $daysWorked, $periodStart, $periodEnd);
-        
+
         // Calculate allowances using dynamic settings
         $allowancesData = $this->calculateAllowances($employee, $basicSalary, $daysWorked, $hoursWorked);
         $allowancesTotal = $allowancesData['total'];
-        
+
         // Calculate bonuses using dynamic settings
         $bonusesData = $this->calculateBonuses($employee, $basicSalary, $daysWorked, $hoursWorked);
         $bonusesTotal = $bonusesData['total'];
-        
+
         // Calculate overtime pay (simplified for now)
         $overtimePay = 0; // TODO: Implement detailed overtime calculation based on time logs
-        
+
         // Total gross pay including allowances and bonuses
         $totalGrossPay = $grossPay + $allowancesTotal + $bonusesTotal + $overtimePay;
-        
+
         // Calculate deductions using dynamic settings
         $deductions = $this->calculateDeductions($employee, $totalGrossPay, $basicSalary, $overtimePay, $allowancesTotal, $bonusesTotal);
-        
+
         $netPay = $totalGrossPay - $deductions['total'];
-        
+
         return [
             'basic_salary' => $basicSalary,
             'overtime_pay' => $overtimePay,
@@ -626,47 +632,47 @@ class PayrollController extends Controller
             'days_worked' => $daysWorked,
         ];
     }
-    
+
     /**
      * Calculate gross pay based on schedule type and actual time worked
      */
     private function calculateGrossPay($employee, $basicSalary, $hoursWorked, $daysWorked, $periodStart, $periodEnd)
     {
         $paySchedule = $employee->pay_schedule;
-        
+
         // If no time worked, no pay (except for manual adjustments)
         if ($hoursWorked <= 0 && $daysWorked <= 0) {
             return 0;
         }
-        
+
         // Calculate based on actual time worked, not full salary
         switch ($paySchedule) {
             case 'daily':
                 // For daily, basic salary is daily rate
                 return $basicSalary * $daysWorked;
-                
+
             case 'weekly':
                 // Calculate hourly rate from weekly salary and pay based on hours worked
                 $hourlyRate = $basicSalary / 40; // Assuming 40 hours per week
                 return $hourlyRate * $hoursWorked;
-                
+
             case 'semi_monthly':
                 // Calculate hourly rate from semi-monthly salary and pay based on hours worked
                 $hourlyRate = $basicSalary / 86.67; // Assuming ~86.67 hours per semi-month
                 return $hourlyRate * $hoursWorked;
-                
+
             case 'monthly':
                 // Calculate hourly rate from monthly salary and pay based on hours worked
                 $hourlyRate = $basicSalary / 173.33; // Assuming ~173.33 hours per month
                 return $hourlyRate * $hoursWorked;
-                
+
             default:
                 // Default to hourly calculation
                 $hourlyRate = $employee->hourly_rate ?? ($basicSalary / 173.33);
                 return $hourlyRate * $hoursWorked;
         }
     }
-    
+
     /**
      * Calculate deductions for an employee using dynamic settings
      */
@@ -675,21 +681,21 @@ class PayrollController extends Controller
         $basicPay = $basicPay ?? $grossPay;
         $deductions = [];
         $total = 0;
-        
+
         // Get active deduction settings that apply to this employee's benefit status
         $deductionSettings = \App\Models\DeductionTaxSetting::active()
             ->where('type', 'government')
             ->forBenefitStatus($employee->benefits_status)
             ->orderBy('sort_order')
             ->get();
-        
+
         $governmentTotal = 0;
-        
+
         // Calculate government deductions (SSS, PhilHealth, Pag-IBIG)
         foreach ($deductionSettings as $setting) {
             if ($setting->tax_table_type !== 'withholding_tax') {
                 $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay);
-                
+
                 if ($amount > 0) {
                     $deductions[$setting->code] = $amount;
                     $total += $amount;
@@ -697,54 +703,54 @@ class PayrollController extends Controller
                 }
             }
         }
-        
+
         // Calculate taxable income (gross pay minus government deductions)
         $taxableIncome = $grossPay - $governmentTotal;
-        
+
         // Calculate withholding tax based on taxable income
         $taxSettings = \App\Models\DeductionTaxSetting::active()
             ->where('type', 'government')
             ->where('tax_table_type', 'withholding_tax')
             ->forBenefitStatus($employee->benefits_status)
             ->get();
-        
+
         foreach ($taxSettings as $setting) {
             $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome);
-            
+
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
                 $total += $amount;
             }
         }
-        
+
         // Get other custom deductions
         $customDeductions = \App\Models\DeductionSetting::where('is_active', true)
             ->where('type', 'custom')
             ->get();
-        
+
         foreach ($customDeductions as $setting) {
             $amount = $this->calculateCustomDeduction($setting, $employee, $basicPay, $grossPay);
-            
+
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
                 $total += $amount;
             }
         }
-        
+
         // Return standard structure for backward compatibility
         return [
             'sss' => $deductions['sss'] ?? 0,
             'philhealth' => $deductions['philhealth'] ?? 0,
             'pagibig' => $deductions['pagibig'] ?? 0,
             'tax' => $deductions['withholding_tax'] ?? 0,
-            'other' => array_sum(array_filter($deductions, function($key) {
+            'other' => array_sum(array_filter($deductions, function ($key) {
                 return !in_array($key, ['sss', 'philhealth', 'pagibig', 'withholding_tax']);
             }, ARRAY_FILTER_USE_KEY)),
             'total' => $total,
             'details' => $deductions
         ];
     }
-    
+
     /**
      * Calculate custom deduction amount
      */
@@ -753,17 +759,17 @@ class PayrollController extends Controller
         switch ($setting->calculation_type) {
             case 'percentage':
                 return ($grossPay * $setting->rate) / 100;
-                
+
             case 'fixed':
                 return $setting->fixed_amount;
-                
+
             case 'tiered':
                 // Implement tiered calculation based on salary thresholds
                 if ($setting->salary_threshold && $grossPay >= $setting->salary_threshold) {
                     return $setting->fixed_amount;
                 }
                 return 0;
-                
+
             case 'table_based':
                 // Implement table-based calculation using rate_table
                 if ($setting->rate_table) {
@@ -778,12 +784,12 @@ class PayrollController extends Controller
                     }
                 }
                 return 0;
-                
+
             default:
                 return 0;
         }
     }
-    
+
     /**
      * Calculate allowances for an employee using dynamic settings
      */
@@ -791,17 +797,17 @@ class PayrollController extends Controller
     {
         $total = 0;
         $details = [];
-        
+
         // Get active allowance settings that apply to this employee's benefit status
         $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
             ->where('type', 'allowance')
             ->forBenefitStatus($employee->benefits_status)
             ->orderBy('sort_order')
             ->get();
-        
+
         foreach ($allowanceSettings as $setting) {
             $amount = $this->calculateAllowanceBonusAmount($setting, $employee, $basicPay, $daysWorked, $hoursWorked);
-            
+
             if ($amount > 0) {
                 $details[$setting->code] = [
                     'name' => $setting->name,
@@ -811,13 +817,13 @@ class PayrollController extends Controller
                 $total += $amount;
             }
         }
-        
+
         return [
             'total' => $total,
             'details' => $details
         ];
     }
-    
+
     /**
      * Calculate bonuses for an employee using dynamic settings
      */
@@ -825,17 +831,17 @@ class PayrollController extends Controller
     {
         $total = 0;
         $details = [];
-        
+
         // Get active bonus settings that apply to this employee's benefit status
         $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
             ->where('type', 'bonus')
             ->forBenefitStatus($employee->benefits_status)
             ->orderBy('sort_order')
             ->get();
-        
+
         foreach ($bonusSettings as $setting) {
             $amount = $this->calculateAllowanceBonusAmount($setting, $employee, $basicPay, $daysWorked, $hoursWorked);
-            
+
             if ($amount > 0) {
                 $details[$setting->code] = [
                     'name' => $setting->name,
@@ -845,39 +851,39 @@ class PayrollController extends Controller
                 $total += $amount;
             }
         }
-        
+
         return [
             'total' => $total,
             'details' => $details
         ];
     }
-    
+
     /**
      * Calculate allowance/bonus amount based on setting configuration
      */
     private function calculateAllowanceBonusAmount($setting, $employee, $basicPay, $daysWorked, $hoursWorked)
     {
         $amount = 0;
-        
+
         switch ($setting->calculation_type) {
             case 'percentage':
                 $amount = ($basicPay * $setting->rate_percentage) / 100;
                 break;
-                
+
             case 'fixed_amount':
                 $amount = $setting->fixed_amount;
-                
+
                 // Apply frequency multiplier
                 if ($setting->frequency === 'daily' && $daysWorked > 0) {
                     $maxDays = $setting->max_days_per_period ?? $daysWorked;
                     $amount = $amount * min($daysWorked, $maxDays);
                 }
                 break;
-                
+
             case 'daily_rate_multiplier':
                 if ($employee->daily_rate) {
                     $amount = $employee->daily_rate * ($setting->multiplier ?? 1);
-                    
+
                     if ($setting->frequency === 'daily' && $daysWorked > 0) {
                         $maxDays = $setting->max_days_per_period ?? $daysWorked;
                         $amount = $amount * min($daysWorked, $maxDays);
@@ -885,16 +891,16 @@ class PayrollController extends Controller
                 }
                 break;
         }
-        
+
         // Apply minimum and maximum constraints
         if ($setting->minimum_amount && $amount < $setting->minimum_amount) {
             $amount = $setting->minimum_amount;
         }
-        
+
         if ($setting->maximum_amount && $amount > $setting->maximum_amount) {
             $amount = $setting->maximum_amount;
         }
-        
+
         return $amount;
     }
 
@@ -907,7 +913,7 @@ class PayrollController extends Controller
         if ($grossPay <= 20833) {
             return 0; // Tax exempt
         }
-        
+
         return ($grossPay - 20833) * 0.20; // 20% on excess
     }
 
@@ -937,37 +943,37 @@ class PayrollController extends Controller
 
         // Get all payroll schedule settings for selection (including disabled ones)
         $scheduleSettings = \App\Models\PayScheduleSetting::systemDefaults()
-                          ->orderBy('sort_order')
-                          ->get();
+            ->orderBy('sort_order')
+            ->get();
 
         // Calculate current periods and employee counts for each schedule
         foreach ($scheduleSettings as $setting) {
             // Get current period display
             $currentPeriods = $this->getCurrentPeriodDisplayForSchedule($setting);
             $setting->current_period_display = $currentPeriods;
-            
+
             // Calculate next pay period (use current for manual too)
             $setting->next_period = $this->calculateCurrentPayPeriod($setting);
-            
+
             // Count all employees for this schedule (active and inactive)
             $setting->total_employees_count = \App\Models\Employee::where('pay_schedule', $setting->code)
-                                                                 ->count();
-                                                                 
+                ->count();
+
             // Count active employees for this schedule
             $setting->active_employees_count = \App\Models\Employee::where('pay_schedule', $setting->code)
-                                                                  ->where('employment_status', 'active')
-                                                                  ->count();
-            
+                ->where('employment_status', 'active')
+                ->count();
+
             // Get last payroll date if exists
             $lastPayroll = \App\Models\Payroll::where('pay_schedule', $setting->code)
-                                             ->orderBy('pay_date', 'desc')
-                                             ->first();
-            
+                ->orderBy('pay_date', 'desc')
+                ->first();
+
             if ($lastPayroll) {
                 $setting->last_payroll_date = $lastPayroll->pay_date;
             }
         }
-        
+
         return view('payrolls.manual.index', [
             'scheduleSettings' => $scheduleSettings
         ]);
@@ -982,34 +988,34 @@ class PayrollController extends Controller
 
         // Get the selected pay schedule
         $scheduleCode = $request->input('schedule');
-        
+
         if (!$scheduleCode) {
             return redirect()->route('payrolls.manual.index')
-                           ->with('error', 'Please select a pay schedule.');
+                ->with('error', 'Please select a pay schedule.');
         }
 
         // Get schedule setting
         $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
-                         ->where('code', $scheduleCode)
-                         ->first();
+            ->where('code', $scheduleCode)
+            ->first();
 
         if (!$selectedSchedule) {
             return redirect()->route('payrolls.manual.index')
-                           ->with('error', 'Invalid pay schedule selected.');
+                ->with('error', 'Invalid pay schedule selected.');
         }
 
         // Get suggested pay period (current period)
         $suggestedPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
-        
+
         // Get suggested payroll number
         $suggestedPayrollNumber = $this->generatePayrollNumber($scheduleCode);
 
         // Get employees for this schedule (both active and inactive for manual selection)
         $employees = Employee::with(['user', 'department', 'position'])
-                           ->where('pay_schedule', $scheduleCode)
-                           ->orderByRaw("CASE WHEN employment_status = 'active' THEN 0 ELSE 1 END")
-                           ->orderBy('first_name')
-                           ->get();
+            ->where('pay_schedule', $scheduleCode)
+            ->orderByRaw("CASE WHEN employment_status = 'active' THEN 0 ELSE 1 END")
+            ->orderBy('first_name')
+            ->get();
 
         // Get departments for filtering
         $departments = \App\Models\Department::orderBy('name')->get();
@@ -1047,7 +1053,7 @@ class PayrollController extends Controller
     {
         // Parse the selected period data
         $periodData = json_decode(base64_decode($validated['selected_period']), true);
-        
+
         if (!$periodData) {
             return back()->withErrors(['selected_period' => 'Invalid period selection.'])->withInput();
         }
@@ -1055,7 +1061,7 @@ class PayrollController extends Controller
         // Validate that selected employees match the pay schedule
         $selectedEmployees = Employee::whereIn('id', $validated['employee_ids'])->get();
         $invalidEmployees = $selectedEmployees->where('pay_schedule', '!=', $periodData['pay_schedule']);
-        
+
         if ($invalidEmployees->count() > 0) {
             return back()->withErrors([
                 'employee_ids' => 'All selected employees must have the same pay schedule as the selected period.'
@@ -1086,20 +1092,19 @@ class PayrollController extends Controller
             foreach ($validated['employee_ids'] as $employeeId) {
                 try {
                     $employee = Employee::find($employeeId);
-                    
+
                     if (!$employee) {
                         Log::warning("Employee with ID {$employeeId} not found");
                         continue;
                     }
-                    
+
                     // Calculate payroll details
                     $payrollDetail = $this->calculateEmployeePayroll($employee, $payroll);
-                    
+
                     $totalGross += $payrollDetail->gross_pay;
                     $totalDeductions += $payrollDetail->total_deductions;
                     $totalNet += $payrollDetail->net_pay;
                     $processedEmployees++;
-                    
                 } catch (\Exception $e) {
                     Log::error("Failed to process employee {$employeeId}: " . $e->getMessage());
                     continue;
@@ -1120,13 +1125,12 @@ class PayrollController extends Controller
             DB::commit();
 
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('success', "Payroll created successfully! {$processedEmployees} employees processed.");
-
+                ->with('success', "Payroll created successfully! {$processedEmployees} employees processed.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to create payroll: ' . $e->getMessage());
             return back()->withErrors(['error' => 'Failed to create payroll: ' . $e->getMessage()])
-                        ->withInput();
+                ->withInput();
         }
     }
 
@@ -1136,6 +1140,9 @@ class PayrollController extends Controller
     public function show(Payroll $payroll)
     {
         $this->authorize('view payrolls');
+
+        // Auto-link existing time logs to payroll (for backwards compatibility)
+        $this->autoLinkTimeLogs($payroll);
 
         // Auto-recalculate if needed (for draft payrolls)
         $this->autoRecalculateIfNeeded($payroll);
@@ -1152,34 +1159,34 @@ class PayrollController extends Controller
 
         // Get DTR data for all employees in the payroll period
         $employeeIds = $payroll->payrollDetails->pluck('employee_id');
-        
+
         // Create array of all dates in the payroll period
         $startDate = \Carbon\Carbon::parse($payroll->period_start);
         $endDate = \Carbon\Carbon::parse($payroll->period_end);
         $periodDates = [];
-        
+
         for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
             $periodDates[] = $date->format('Y-m-d');
         }
-        
-        // Get all time logs for the period with proper data
+
+        // Get all time logs for this specific payroll
         $timeLogs = TimeLog::whereIn('employee_id', $employeeIds)
-                          ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-                          ->orderBy('log_date')
-                          ->get()
-                          ->groupBy(['employee_id', 'log_date']);
-        
+            ->where('payroll_id', $payroll->id)
+            ->orderBy('log_date')
+            ->get()
+            ->groupBy(['employee_id', 'log_date']);
+
         // Organize DTR data by employee and date
         $dtrData = [];
         foreach ($payroll->payrollDetails as $detail) {
             $employeeTimeLogs = $timeLogs->get($detail->employee_id, collect());
             $employeeDtr = [];
-            
+
             foreach ($periodDates as $date) {
                 $timeLog = $employeeTimeLogs->get($date, collect())->first();
                 $employeeDtr[$date] = $timeLog;
             }
-            
+
             $dtrData[$detail->employee_id] = $employeeDtr;
         }
 
@@ -1187,22 +1194,22 @@ class PayrollController extends Controller
         $isDynamic = $payroll->isDynamic();
         $allowanceSettings = collect();
         $deductionSettings = collect();
-        
+
         if ($isDynamic) {
             // Get current active settings
             $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
-                                                                 ->where('type', 'allowance')
-                                                                 ->orderBy('sort_order')
-                                                                 ->get();
+                ->where('type', 'allowance')
+                ->orderBy('sort_order')
+                ->get();
             $deductionSettings = \App\Models\DeductionTaxSetting::active()
-                                                               ->orderBy('sort_order')
-                                                               ->get();
+                ->orderBy('sort_order')
+                ->get();
         } else {
             // For processing/approved payrolls, get settings from snapshots if available
             $firstSnapshot = $payroll->snapshots()->first();
             if ($firstSnapshot && $firstSnapshot->settings_snapshot) {
                 $settingsSnapshot = $firstSnapshot->settings_snapshot;
-                
+
                 if (isset($settingsSnapshot['allowance_settings'])) {
                     $allowanceSettings = collect($settingsSnapshot['allowance_settings']);
                 }
@@ -1213,10 +1220,10 @@ class PayrollController extends Controller
         }
 
         return view('payrolls.show', compact(
-            'payroll', 
-            'dtrData', 
-            'periodDates', 
-            'allowanceSettings', 
+            'payroll',
+            'dtrData',
+            'periodDates',
+            'allowanceSettings',
             'deductionSettings',
             'isDynamic'
         ));
@@ -1260,7 +1267,7 @@ class PayrollController extends Controller
 
         if (!$payroll->canBeEdited()) {
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('error', 'This payroll cannot be edited.');
+                ->with('error', 'This payroll cannot be edited.');
         }
 
         $payroll->load([
@@ -1281,7 +1288,7 @@ class PayrollController extends Controller
 
         if (!$payroll->canBeEdited()) {
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('error', 'This payroll cannot be edited.');
+                ->with('error', 'This payroll cannot be edited.');
         }
 
         $validated = $request->validate([
@@ -1318,10 +1325,10 @@ class PayrollController extends Controller
                     ]);
 
                     // Recalculate totals
-                    $detail->gross_pay = $detail->regular_pay + $detail->overtime_pay + 
-                                       $detail->holiday_pay + $detail->night_differential_pay + 
-                                       $detail->allowances + $detail->bonuses + $detail->other_earnings;
-                    
+                    $detail->gross_pay = $detail->regular_pay + $detail->overtime_pay +
+                        $detail->holiday_pay + $detail->night_differential_pay +
+                        $detail->allowances + $detail->bonuses + $detail->other_earnings;
+
                     $detail->calculateGovernmentContributions();
                     $detail->calculateWithholdingTax();
                     $detail->calculateTotalDeductions();
@@ -1344,12 +1351,11 @@ class PayrollController extends Controller
             DB::commit();
 
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('success', 'Payroll updated successfully!');
-
+                ->with('success', 'Payroll updated successfully!');
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Failed to update payroll: ' . $e->getMessage()])
-                        ->withInput();
+                ->withInput();
         }
     }
 
@@ -1362,17 +1368,17 @@ class PayrollController extends Controller
 
         // Check if user can delete approved payrolls
         $canDeleteApproved = Auth::user()->can('delete approved payrolls');
-        
+
         // If payroll is approved and user doesn't have permission to delete approved payrolls
         if ($payroll->status === 'approved' && !$canDeleteApproved) {
             return redirect()->route('payrolls.index')
-                           ->with('error', 'You do not have permission to delete approved payrolls.');
+                ->with('error', 'You do not have permission to delete approved payrolls.');
         }
 
         // If payroll is not approved, use the standard canBeEdited check
         if ($payroll->status !== 'approved' && !$payroll->canBeEdited()) {
             return redirect()->route('payrolls.index')
-                           ->with('error', 'This payroll cannot be deleted.');
+                ->with('error', 'This payroll cannot be deleted.');
         }
 
         // Log the deletion for audit purposes
@@ -1387,7 +1393,7 @@ class PayrollController extends Controller
         $payroll->delete();
 
         return redirect()->route('payrolls.index')
-                       ->with('success', 'Payroll deleted successfully!');
+            ->with('success', 'Payroll deleted successfully!');
     }
 
     /**
@@ -1399,7 +1405,7 @@ class PayrollController extends Controller
 
         if ($payroll->status !== 'processing') {
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('error', 'Only processing payrolls can be approved.');
+                ->with('error', 'Only processing payrolls can be approved.');
         }
 
         DB::beginTransaction();
@@ -1413,8 +1419,7 @@ class PayrollController extends Controller
             DB::commit();
 
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('success', 'Payroll approved successfully!');
-
+                ->with('success', 'Payroll approved successfully!');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to approve payroll', [
@@ -1423,7 +1428,7 @@ class PayrollController extends Controller
             ]);
 
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('error', 'Failed to approve payroll: ' . $e->getMessage());
+                ->with('error', 'Failed to approve payroll: ' . $e->getMessage());
         }
     }
 
@@ -1436,7 +1441,7 @@ class PayrollController extends Controller
 
         if ($payroll->status !== 'draft') {
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('error', 'Only draft payrolls can be processed.');
+                ->with('error', 'Only draft payrolls can be processed.');
         }
 
         DB::beginTransaction();
@@ -1454,8 +1459,7 @@ class PayrollController extends Controller
             DB::commit();
 
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('success', 'Payroll submitted for processing! Data has been locked as snapshots.');
-
+                ->with('success', 'Payroll submitted for processing! Data has been locked as snapshots.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to process payroll', [
@@ -1464,29 +1468,29 @@ class PayrollController extends Controller
             ]);
 
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('error', 'Failed to process payroll: ' . $e->getMessage());
+                ->with('error', 'Failed to process payroll: ' . $e->getMessage());
         }
     }
-    
+
     /**
      * Show dynamic payroll settings test page
      */
     public function testDynamic()
     {
         $this->authorize('view payrolls');
-        
+
         // Get active deduction settings
         $deductionSettings = \App\Models\DeductionTaxSetting::active()
             ->orderBy('type')
             ->orderBy('sort_order')
             ->get();
-        
+
         // Get active allowance/bonus settings
         $allowanceSettings = \App\Models\AllowanceBonusSetting::active()
             ->orderBy('type')
             ->orderBy('sort_order')
             ->get();
-        
+
         return view('payrolls.test-dynamic', compact('deductionSettings', 'allowanceSettings'));
     }
 
@@ -1510,7 +1514,7 @@ class PayrollController extends Controller
     private function getEmployeePayrollFromSnapshot(Employee $employee, Payroll $payroll)
     {
         $snapshot = $payroll->snapshots()->where('employee_id', $employee->id)->first();
-        
+
         if (!$snapshot) {
             throw new \Exception("No snapshot found for employee {$employee->employee_number} in payroll {$payroll->payroll_number}");
         }
@@ -1559,13 +1563,18 @@ class PayrollController extends Controller
      */
     private function calculateEmployeePayrollDynamic(Employee $employee, Payroll $payroll)
     {
-        // Get approved time logs for the payroll period
-        $timeLogs = TimeLog::where('employee_id', $employee->id)
-                          ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-                          ->where('status', 'approved')
-                          ->get();
+        // Get time logs for this specific payroll (include pending for draft payrolls)
+        $query = TimeLog::where('employee_id', $employee->id)
+            ->where('payroll_id', $payroll->id);
 
-        // Initialize counters
+        // For draft payrolls, include pending time logs; for others, only approved
+        if ($payroll->status === 'draft') {
+            $query->whereIn('status', ['pending', 'approved']);
+        } else {
+            $query->where('status', 'approved');
+        }
+
+        $timeLogs = $query->get();        // Initialize counters
         $daysWorked = 0;
         $regularHours = 0;
         $overtimeHours = 0;
@@ -1616,30 +1625,30 @@ class PayrollController extends Controller
         }
 
         $dailyRate = $hourlyRate * 8; // 8 hours per day
-        
+
         // If no DTR records, set basic pay to zero (only pay for actual recorded hours)
         if ($timeLogs->isEmpty()) {
             $daysWorked = 0;
             $regularHours = 0; // No DTR records = no basic pay
         }
-        
+
         // Calculate pay components
         $regularPay = $regularHours * $hourlyRate;
         $overtimePay = $overtimeHours * $hourlyRate * 1.25; // 25% overtime premium
         $holidayPay = $holidayHours * $hourlyRate * 2.0; // 100% holiday premium
         $nightDifferentialPay = $nightDifferentialHours * $hourlyRate * 0.10; // 10% night differential
-        
+
         // Calculate late and undertime deductions
         $lateDeductions = $lateHours * $hourlyRate;
         $undertimeDeductions = $undertimeHours * $hourlyRate;
-        
+
         // Calculate allowances and bonuses from settings
         $allowancesTotal = $this->calculateEmployeeAllowances($employee, $payroll, $regularHours, $overtimeHours, $holidayHours);
         $bonusesTotal = $this->calculateEmployeeBonuses($employee, $payroll, $regularHours, $overtimeHours, $holidayHours);
-        
+
         // Calculate cash advance deductions
         $cashAdvanceDeductions = $this->calculateCashAdvanceDeductions($employee, $payroll);
-        
+
         // Create or update payroll detail
         $payrollDetail = PayrollDetail::updateOrCreate(
             [
@@ -1670,20 +1679,20 @@ class PayrollController extends Controller
         );
 
         // Calculate gross pay
-        $payrollDetail->gross_pay = $payrollDetail->regular_pay + 
-                                   $payrollDetail->overtime_pay + 
-                                   $payrollDetail->holiday_pay + 
-                                   $payrollDetail->night_differential_pay + 
-                                   $payrollDetail->allowances + 
-                                   $payrollDetail->bonuses + 
-                                   $payrollDetail->other_earnings;
+        $payrollDetail->gross_pay = $payrollDetail->regular_pay +
+            $payrollDetail->overtime_pay +
+            $payrollDetail->holiday_pay +
+            $payrollDetail->night_differential_pay +
+            $payrollDetail->allowances +
+            $payrollDetail->bonuses +
+            $payrollDetail->other_earnings;
 
         // Calculate deductions using the PayrollDetail model methods with employer sharing
         $payrollDetail->calculateGovernmentContributionsWithSharing();
         $payrollDetail->calculateWithholdingTax();
         $payrollDetail->calculateTotalDeductions();
         $payrollDetail->calculateNetPay();
-        
+
         $payrollDetail->save();
 
         return $payrollDetail;
@@ -1696,26 +1705,26 @@ class PayrollController extends Controller
     {
         // Get current active allowance settings that apply to this employee's benefit status
         $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
-                                                             ->where('type', 'allowance')
-                                                             ->forBenefitStatus($employee->benefits_status)
-                                                             ->orderBy('sort_order')
-                                                             ->get();
-        
+            ->where('type', 'allowance')
+            ->forBenefitStatus($employee->benefits_status)
+            ->orderBy('sort_order')
+            ->get();
+
         $totalAllowances = 0;
-        
+
         foreach ($allowanceSettings as $setting) {
             $allowanceAmount = $this->calculateAllowanceBonusAmountForPayroll(
-                $setting, 
-                $employee, 
-                $payroll, 
-                $regularHours, 
-                $overtimeHours, 
+                $setting,
+                $employee,
+                $payroll,
+                $regularHours,
+                $overtimeHours,
                 $holidayHours
             );
-            
+
             $totalAllowances += $allowanceAmount;
         }
-        
+
         return $totalAllowances;
     }
 
@@ -1726,26 +1735,26 @@ class PayrollController extends Controller
     {
         // Get current active bonus settings that apply to this employee's benefit status
         $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
-                                                         ->where('type', 'bonus')
-                                                         ->forBenefitStatus($employee->benefits_status)
-                                                         ->orderBy('sort_order')
-                                                         ->get();
-        
+            ->where('type', 'bonus')
+            ->forBenefitStatus($employee->benefits_status)
+            ->orderBy('sort_order')
+            ->get();
+
         $totalBonuses = 0;
-        
+
         foreach ($bonusSettings as $setting) {
             $bonusAmount = $this->calculateAllowanceBonusAmountForPayroll(
-                $setting, 
-                $employee, 
-                $payroll, 
-                $regularHours, 
-                $overtimeHours, 
+                $setting,
+                $employee,
+                $payroll,
+                $regularHours,
+                $overtimeHours,
                 $holidayHours
             );
-            
+
             $totalBonuses += $bonusAmount;
         }
-        
+
         return $totalBonuses;
     }
 
@@ -1755,11 +1764,11 @@ class PayrollController extends Controller
     private function calculateAllowanceBonusAmountForPayroll($setting, $employee, $payroll, $regularHours, $overtimeHours, $holidayHours)
     {
         $amount = 0;
-        
+
         switch ($setting->calculation_type) {
             case 'fixed_amount':
                 $amount = $setting->fixed_amount ?? 0;
-                
+
                 // Apply frequency-based calculation
                 if ($setting->frequency === 'daily') {
                     $daysWorked = $this->calculateDaysWorked($employee, $payroll);
@@ -1770,55 +1779,55 @@ class PayrollController extends Controller
                     $amount = $amount * $weeksInPeriod;
                 }
                 break;
-                
+
             case 'percentage':
                 // Calculate percentage of basic salary
                 $baseAmount = $employee->basic_salary ?? 0;
                 $amount = $baseAmount * (($setting->rate_percentage ?? 0) / 100);
                 break;
-                
+
             case 'per_day':
                 // Calculate based on actual days worked
                 $daysWorked = $this->calculateDaysWorked($employee, $payroll);
                 $amount = ($setting->fixed_amount ?? 0) * $daysWorked;
                 break;
-                
+
             case 'per_hour':
                 // Calculate based on hours worked
                 $totalHours = $regularHours;
-                
+
                 if ($setting->apply_to_overtime ?? false) {
                     $totalHours += $overtimeHours;
                 }
-                
+
                 if ($setting->apply_to_holidays ?? false) {
                     $totalHours += $holidayHours;
                 }
-                
+
                 $amount = ($setting->fixed_amount ?? 0) * $totalHours;
                 break;
-                
+
             case 'multiplier':
                 // Calculate as multiplier of hourly rate
                 $hourlyRate = $employee->hourly_rate ?? ($employee->basic_salary / 173.33); // Default monthly to hourly
                 $amount = $hourlyRate * ($setting->multiplier ?? 0) * $regularHours;
                 break;
-                
+
             case 'basic_salary_multiplier':
                 // Calculate as multiplier of basic salary
                 $amount = ($employee->basic_salary ?? 0) * ($setting->multiplier ?? 0);
                 break;
         }
-        
+
         // Apply minimum and maximum limits
         if ($setting->minimum_amount && $amount < $setting->minimum_amount) {
             $amount = $setting->minimum_amount;
         }
-        
+
         if ($setting->maximum_amount && $amount > $setting->maximum_amount) {
             $amount = $setting->maximum_amount;
         }
-        
+
         return round($amount, 2);
     }
 
@@ -1828,11 +1837,11 @@ class PayrollController extends Controller
     private function calculateDaysWorked(Employee $employee, Payroll $payroll)
     {
         $timeLogs = TimeLog::where('employee_id', $employee->id)
-                          ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-                          ->where('status', 'approved')
-                          ->where('regular_hours', '>', 0)
-                          ->count();
-        
+            ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+            ->where('status', 'approved')
+            ->where('regular_hours', '>', 0)
+            ->count();
+
         return $timeLogs;
     }
 
@@ -1843,7 +1852,7 @@ class PayrollController extends Controller
     {
         $startDate = Carbon::parse($payroll->period_start);
         $endDate = Carbon::parse($payroll->period_end);
-        
+
         return ceil($startDate->diffInDays($endDate) / 7);
     }
 
@@ -1855,29 +1864,28 @@ class PayrollController extends Controller
         try {
             // Get pending cash advances for this employee
             $cashAdvances = \App\Models\CashAdvance::where('employee_id', $employee->id)
-                                                  ->where('status', 'approved')
-                                                  ->get();
-            
+                ->where('status', 'approved')
+                ->get();
+
             $totalDeductions = 0;
-            
+
             foreach ($cashAdvances as $cashAdvance) {
                 // Calculate deduction amount based on payment schedule
                 $remainingBalance = $cashAdvance->remaining_balance ?? $cashAdvance->amount ?? 0;
-                
+
                 if ($remainingBalance > 0) {
                     $deductionAmount = min(
                         $cashAdvance->monthly_deduction_amount ?? 0,
                         $remainingBalance
                     );
-                    
+
                     if ($deductionAmount > 0) {
                         $totalDeductions += $deductionAmount;
                     }
                 }
             }
-            
+
             return $totalDeductions;
-            
         } catch (\Exception $e) {
             // If there's an error (like missing table), return 0
             Log::warning('Cash advance calculation failed: ' . $e->getMessage());
@@ -1894,31 +1902,41 @@ class PayrollController extends Controller
             return 0;
         }
 
-        $nightStart = Carbon::createFromFormat('H:i', '22:00');
-        $nightEnd = Carbon::createFromFormat('H:i', '06:00')->addDay();
-        
-        $timeIn = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_in->format('H:i'));
-        $timeOut = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_out->format('H:i'));
-        
-        // If time out is earlier than time in, it means work continued to next day
-        if ($timeOut->lessThan($timeIn)) {
-            $timeOut->addDay();
+        try {
+            $nightStart = Carbon::createFromFormat('H:i', '22:00');
+            $nightEnd = Carbon::createFromFormat('H:i', '06:00')->addDay();
+
+            // Get just the time part for comparison
+            $timeInStr = is_string($timeLog->time_in) ? $timeLog->time_in : $timeLog->time_in->format('H:i:s');
+            $timeOutStr = is_string($timeLog->time_out) ? $timeLog->time_out : $timeLog->time_out->format('H:i:s');
+
+            $timeIn = Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $timeInStr);
+            $timeOut = Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $timeOutStr);
+
+            // If time out is earlier than time in, it means work continued to next day
+            if ($timeOut->lessThan($timeIn)) {
+                $timeOut->addDay();
+            }
+
+            $nightDifferentialHours = 0;
+
+            // Check overlap with night hours (10PM - 6AM)
+            $nightStartDate = Carbon::parse($timeLog->log_date->format('Y-m-d') . ' 22:00');
+            $nightEndDate = Carbon::parse($timeLog->log_date->format('Y-m-d') . ' 06:00')->addDay();
+
+            $overlapStart = $timeIn->greaterThan($nightStartDate) ? $timeIn : $nightStartDate;
+            $overlapEnd = $timeOut->lessThan($nightEndDate) ? $timeOut : $nightEndDate;
+
+            if ($overlapStart->lessThan($overlapEnd)) {
+                $nightDifferentialHours = $overlapEnd->diffInHours($overlapStart, true);
+            }
+
+            return $nightDifferentialHours;
+        } catch (\Exception $e) {
+            // If there's an error parsing times, return 0 night differential
+            Log::warning('Error calculating night differential for time log ' . $timeLog->id . ': ' . $e->getMessage());
+            return 0;
         }
-
-        $nightDifferentialHours = 0;
-
-        // Check overlap with night hours (10PM - 6AM)
-        $nightStartDate = Carbon::parse($timeLog->log_date . ' 22:00');
-        $nightEndDate = Carbon::parse($timeLog->log_date . ' 06:00')->addDay();
-
-        $overlapStart = $timeIn->greaterThan($nightStartDate) ? $timeIn : $nightStartDate;
-        $overlapEnd = $timeOut->lessThan($nightEndDate) ? $timeOut : $nightEndDate;
-
-        if ($overlapStart->lessThan($overlapEnd)) {
-            $nightDifferentialHours = $overlapEnd->diffInHours($overlapStart, true);
-        }
-
-        return $nightDifferentialHours;
     }
 
     /**
@@ -1937,13 +1955,13 @@ class PayrollController extends Controller
         ]);
 
         // Get employees with approved DTR records in the period
-        $employeesWithDTR = Employee::whereHas('timeLogs', function($query) use ($validated) {
+        $employeesWithDTR = Employee::whereHas('timeLogs', function ($query) use ($validated) {
             $query->whereBetween('log_date', [$validated['period_start'], $validated['period_end']])
-                  ->where('status', 'approved');
+                ->where('status', 'approved');
         })
-        ->with(['user', 'department', 'position'])
-        ->where('employment_status', 'active')
-        ->get();
+            ->with(['user', 'department', 'position'])
+            ->where('employment_status', 'active')
+            ->get();
 
         if ($employeesWithDTR->isEmpty()) {
             return back()->withErrors(['error' => 'No employees with approved DTR records found for the selected period.']);
@@ -1970,7 +1988,7 @@ class PayrollController extends Controller
             // Create payroll details for each employee with approved DTR
             foreach ($employeesWithDTR as $employee) {
                 $payrollDetail = $this->calculateEmployeePayroll($employee, $payroll);
-                
+
                 $totalGross += $payrollDetail->gross_pay;
                 $totalDeductions += $payrollDetail->total_deductions;
                 $totalNet += $payrollDetail->net_pay;
@@ -1986,13 +2004,12 @@ class PayrollController extends Controller
             DB::commit();
 
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('success', "Payroll generated successfully from DTR records! {$employeesWithDTR->count()} employees included.");
-
+                ->with('success', "Payroll generated successfully from DTR records! {$employeesWithDTR->count()} employees included.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to generate payroll from DTR: ' . $e->getMessage());
             return back()->withErrors(['error' => 'Failed to generate payroll from DTR: ' . $e->getMessage()])
-                        ->withInput();
+                ->withInput();
         }
     }
 
@@ -2002,10 +2019,10 @@ class PayrollController extends Controller
     private function calculateAutomaticPayrollPeriod($scheduleType = 'weekly')
     {
         $today = \Carbon\Carbon::now();
-        
+
         // Get the specific schedule setting for the requested type
         $setting = \App\Models\PayrollScheduleSetting::where('pay_type', $scheduleType)->first();
-        
+
         if ($setting) {
             $period = $this->calculatePeriodForSchedule($setting, $today);
             if ($period) {
@@ -2020,7 +2037,7 @@ class PayrollController extends Controller
                 ];
             }
         }
-        
+
         // Fallback calculation based on schedule type
         return $this->getFallbackPeriod($scheduleType, $today);
     }
@@ -2040,7 +2057,7 @@ class PayrollController extends Controller
                     $weekStart = $today->copy()->addWeeks($i)->startOfWeek(\Carbon\Carbon::MONDAY);
                     $weekEnd = $weekStart->copy()->endOfWeek(\Carbon\Carbon::SUNDAY);
                     $payDate = $weekEnd->copy()->addDays($setting->payday_offset_days);
-                    
+
                     $periods[] = [
                         'id' => $setting->pay_type . '_' . $weekStart->format('Y_m_d'),
                         'pay_schedule' => $setting->pay_type,
@@ -2059,7 +2076,7 @@ class PayrollController extends Controller
                 for ($i = 0; $i < 3; $i++) {
                     $baseDate = $today->copy()->addMonths(floor($i / 2));
                     $isSecondHalf = ($i % 2 === 1);
-                    
+
                     if ($isSecondHalf || ($i === 0 && $today->day > 15)) {
                         // Second half of month (16th to end)
                         $periodStart = $baseDate->copy()->startOfMonth()->addDays(15); // 16th
@@ -2073,7 +2090,7 @@ class PayrollController extends Controller
                         $payDate = $baseDate->copy()->startOfMonth()->addDays(19); // 20th of same month
                         $period = $periodStart->format('M j') . ' - ' . $periodEnd->format('j, Y');
                     }
-                    
+
                     $periods[] = [
                         'id' => $setting->pay_type . '_' . $periodStart->format('Y_m_d'),
                         'pay_schedule' => $setting->pay_type,
@@ -2094,7 +2111,7 @@ class PayrollController extends Controller
                     $periodStart = $monthDate->copy()->startOfMonth();
                     $periodEnd = $monthDate->copy()->endOfMonth();
                     $payDate = $monthDate->copy()->addMonth()->startOfMonth()->addDays(4); // 5th of next month
-                    
+
                     $periods[] = [
                         'id' => $setting->pay_type . '_' . $periodStart->format('Y_m'),
                         'pay_schedule' => $setting->pay_type,
@@ -2118,7 +2135,7 @@ class PayrollController extends Controller
     private function getPayScheduleVariations($paySchedule)
     {
         $variations = [$paySchedule]; // Include the original
-        
+
         switch (strtolower($paySchedule)) {
             case 'weekly':
                 $variations = ['weekly', 'Weekly', 'WEEKLY'];
@@ -2130,7 +2147,7 @@ class PayrollController extends Controller
                 $variations = ['monthly', 'Monthly', 'MONTHLY'];
                 break;
         }
-        
+
         return array_unique($variations);
     }
 
@@ -2150,10 +2167,10 @@ class PayrollController extends Controller
                     'end_day' => 'friday',
                     'pay_day' => 'friday'
                 ];
-                
+
                 $startDayNum = $this->getDayOfWeekNumber($weeklyConfig['start_day'] ?? 'monday');
                 $endDayNum = $this->getDayOfWeekNumber($weeklyConfig['end_day'] ?? 'friday');
-                
+
                 // Find current week period
                 $currentWeekStart = $today->copy()->startOfWeek(\Carbon\Carbon::MONDAY);
                 while ($currentWeekStart->dayOfWeek !== $startDayNum) {
@@ -2163,20 +2180,20 @@ class PayrollController extends Controller
                         break;
                     }
                 }
-                
+
                 // Generate only current period initially, then next periods if current date has passed
                 for ($i = 0; $i < 4; $i++) {
                     $weekStart = $currentWeekStart->copy()->addWeeks($i);
                     $weekEnd = $weekStart->copy();
-                    
+
                     // Calculate end day of week
                     $daysToAdd = ($endDayNum - $startDayNum);
                     if ($daysToAdd < 0) $daysToAdd += 7; // Handle week wrap-around
                     $weekEnd->addDays($daysToAdd);
-                    
+
                     $isCurrent = $today->between($weekStart, $weekEnd);
                     $isPast = $today->gt($weekEnd);
-                    
+
                     // Show current period always, future periods only if current period has ended
                     if ($isCurrent || ($i > 0 && !$this->hasCurrentPeriod($periods))) {
                         // Calculate pay date
@@ -2185,12 +2202,12 @@ class PayrollController extends Controller
                         while ($payDate->dayOfWeek !== $payDayNum) {
                             $payDate->addDay();
                         }
-                        
+
                         // Adjust for holidays if configured
                         if ($setting->move_if_holiday || $setting->move_if_weekend) {
                             $payDate = $this->adjustDateForHolidays($setting, $payDate);
                         }
-                        
+
                         $periods[] = [
                             'id' => $setting->code . '_' . $weekStart->format('Y_m_d'),
                             'pay_schedule' => $setting->code,
@@ -2202,7 +2219,7 @@ class PayrollController extends Controller
                             'setting_id' => $setting->id,
                             'is_current' => $isCurrent
                         ];
-                        
+
                         // If this is current period, we're done
                         if ($isCurrent) break;
                     }
@@ -2211,22 +2228,22 @@ class PayrollController extends Controller
 
             case 'semi_monthly':
                 // Get semi-monthly configuration from cutoff_periods
-                $semiConfig = is_string($setting->cutoff_periods) 
-                    ? json_decode($setting->cutoff_periods, true) 
+                $semiConfig = is_string($setting->cutoff_periods)
+                    ? json_decode($setting->cutoff_periods, true)
                     : $setting->cutoff_periods;
-                
+
                 if (is_array($semiConfig) && count($semiConfig) >= 2) {
                     // Determine current period
                     $currentDay = $today->day;
                     $showFirstPeriod = $currentDay <= 15;
                     $showSecondPeriod = $currentDay >= 16;
-                    
+
                     // First period (1st-15th) - show if we're in it or if it's future
                     if ($showFirstPeriod) {
                         $firstPeriod = $semiConfig[0];
                         $firstStart = $this->setDayOfMonth($today->copy(), $firstPeriod['start_day'] ?? 1);
                         $firstEnd = $this->setDayOfMonth($today->copy(), $firstPeriod['end_day'] ?? 15);
-                        
+
                         // Calculate pay date for first period
                         $payDay = $firstPeriod['pay_day'] ?? 15;
                         if ($payDay === -1 || $payDay === 'last') {
@@ -2234,11 +2251,11 @@ class PayrollController extends Controller
                         } else {
                             $firstPayDate = $this->setDayOfMonth($today->copy(), $payDay);
                         }
-                        
+
                         if ($setting->move_if_holiday || $setting->move_if_weekend) {
                             $firstPayDate = $this->adjustDateForHolidays($setting, $firstPayDate);
                         }
-                        
+
                         $periods[] = [
                             'id' => $setting->code . '_' . $firstStart->format('Y_m') . '_1',
                             'pay_schedule' => $setting->code,
@@ -2251,12 +2268,12 @@ class PayrollController extends Controller
                             'is_current' => $today->between($firstStart, $firstEnd)
                         ];
                     }
-                    
+
                     // Second period (16th-end of month) - show if we're in it or if first period has passed
                     if ($showSecondPeriod) {
                         $secondPeriod = $semiConfig[1];
                         $secondStart = $this->setDayOfMonth($today->copy(), $secondPeriod['start_day'] ?? 16);
-                        
+
                         // Handle end day
                         $endDay = $secondPeriod['end_day'] ?? -1;
                         if ($endDay === -1 || $endDay === 'last') {
@@ -2264,7 +2281,7 @@ class PayrollController extends Controller
                         } else {
                             $secondEnd = $this->setDayOfMonth($today->copy(), $endDay);
                         }
-                        
+
                         // Calculate pay date for second period
                         $payDay = $secondPeriod['pay_day'] ?? -1;
                         if ($payDay === -1 || $payDay === 'last') {
@@ -2272,11 +2289,11 @@ class PayrollController extends Controller
                         } else {
                             $secondPayDate = $this->setDayOfMonth($today->copy(), $payDay);
                         }
-                        
+
                         if ($setting->move_if_holiday || $setting->move_if_weekend) {
                             $secondPayDate = $this->adjustDateForHolidays($setting, $secondPayDate);
                         }
-                        
+
                         $periods[] = [
                             'id' => $setting->code . '_' . $secondStart->format('Y_m') . '_2',
                             'pay_schedule' => $setting->code,
@@ -2299,18 +2316,18 @@ class PayrollController extends Controller
                     'end_day' => 'last',
                     'pay_day' => 'last'
                 ];
-                
+
                 // Full month period using configured start/end days
                 $startDay = $monthlyConfig['start_day'] ?? 1;
                 $periodStart = $this->setDayOfMonth($today->copy(), $startDay);
-                
+
                 $endDay = $monthlyConfig['end_day'] ?? 'last';
                 if ($endDay === 'last' || $endDay === -1) {
                     $periodEnd = $today->copy()->endOfMonth();
                 } else {
                     $periodEnd = $this->setDayOfMonth($today->copy(), $endDay);
                 }
-                
+
                 // Calculate pay date
                 $payDay = $monthlyConfig['pay_day'] ?? 'last';
                 if ($payDay === 'last' || $payDay === -1) {
@@ -2318,11 +2335,11 @@ class PayrollController extends Controller
                 } else {
                     $payDate = $this->setDayOfMonth($today->copy(), $payDay);
                 }
-                
+
                 if ($setting->move_if_holiday || $setting->move_if_weekend) {
                     $payDate = $this->adjustDateForHolidays($setting, $payDate);
                 }
-                
+
                 $periods[] = [
                     'id' => $setting->code . '_' . $periodStart->format('Y_m'),
                     'pay_schedule' => $setting->code,
@@ -2339,7 +2356,7 @@ class PayrollController extends Controller
 
         return $periods;
     }
-    
+
     /**
      * Check if periods array has a current period
      */
@@ -2359,7 +2376,7 @@ class PayrollController extends Controller
     private function getCurrentPeriodDisplayForSchedule($setting)
     {
         $today = \Carbon\Carbon::now();
-        
+
         switch ($setting->code) {
             case 'weekly':
                 // Find current week period using cutoff_periods configuration
@@ -2368,24 +2385,24 @@ class PayrollController extends Controller
                     'end_day' => 'friday',
                     'pay_day' => 'friday'
                 ];
-                
+
                 $startDayNum = $this->getDayOfWeekNumber($weeklyConfig['start_day'] ?? 'monday');
                 $endDayNum = $this->getDayOfWeekNumber($weeklyConfig['end_day'] ?? 'friday');
-                
+
                 // Find the start of current week containing today
                 $weekStart = $today->copy();
-                
+
                 // Go backward to find the correct start day
                 while ($weekStart->dayOfWeek !== $startDayNum) {
                     $weekStart->subDay();
                 }
-                
+
                 // Calculate the end day
                 $weekEnd = $weekStart->copy();
                 $daysToAdd = ($endDayNum - $startDayNum);
                 if ($daysToAdd < 0) $daysToAdd += 7;
                 $weekEnd->addDays($daysToAdd);
-                
+
                 // Make sure today falls within this period, if not adjust
                 if (!$today->between($weekStart, $weekEnd)) {
                     if ($today->lt($weekStart)) {
@@ -2398,28 +2415,28 @@ class PayrollController extends Controller
                         $weekEnd->addWeek();
                     }
                 }
-                
+
                 return $weekStart->format('M j') . '–' . $weekEnd->format('j');
-                
+
             case 'semi_monthly':
                 // Use cutoff_periods configuration for semi-monthly periods
                 $semiConfig = $setting->cutoff_periods ?? [];
-                $semiConfig = is_string($semiConfig) 
-                    ? json_decode($semiConfig, true) 
+                $semiConfig = is_string($semiConfig)
+                    ? json_decode($semiConfig, true)
                     : $semiConfig;
-                
+
                 if (is_array($semiConfig) && count($semiConfig) >= 2) {
                     $currentDay = $today->day;
-                    
+
                     // Check which period we're currently in based on configured cutoff dates
                     $firstPeriod = $semiConfig[0];
                     $secondPeriod = $semiConfig[1];
-                    
+
                     $firstStart = $firstPeriod['start_day'] ?? 1;
                     $firstEnd = $firstPeriod['end_day'] ?? 15;
                     $secondStart = $secondPeriod['start_day'] ?? 16;
                     $secondEnd = $secondPeriod['end_day'] ?? 'last';
-                    
+
                     // Determine if we're in first or second period
                     if ($currentDay >= $firstStart && $currentDay <= $firstEnd) {
                         // First period
@@ -2437,21 +2454,21 @@ class PayrollController extends Controller
                         return $today->format('M') . ' 16–' . $today->copy()->endOfMonth()->format('j');
                     }
                 }
-                
+
             case 'monthly':
                 // Use cutoff_periods configuration for monthly period
                 $monthlyConfig = $setting->cutoff_periods[0] ?? [
                     'start_day' => 1,
                     'end_day' => 'last'
                 ];
-                
+
                 $startDay = $monthlyConfig['start_day'] ?? 1;
                 $endDay = $monthlyConfig['end_day'] ?? 'last';
-                
+
                 $endDisplay = ($endDay === 'last') ? $today->copy()->endOfMonth()->format('d') : $endDay;
-                
+
                 return $today->format('M') . ' ' . $startDay . '–' . $endDisplay;
-                
+
             default:
                 return 'Current Period';
         }
@@ -2464,24 +2481,24 @@ class PayrollController extends Controller
     {
         $weeklyConfig = $setting->cutoff_periods[0] ?? [
             'start_day' => 'monday',
-            'end_day' => 'friday', 
+            'end_day' => 'friday',
             'pay_day' => 'friday'
         ];
-        
+
         $payDayName = $weeklyConfig['pay_day'];
         $payDayNum = $this->getDayOfWeekNumber($payDayName);
-        
+
         // Find the pay day in the same week as week end
         $payDate = $weekEnd->copy()->startOfWeek(\Carbon\Carbon::MONDAY);
         while ($payDate->dayOfWeek !== $payDayNum) {
             $payDate->addDay();
         }
-        
+
         // If pay day is before week end, it might be next week
         if ($payDate->lt($weekEnd->copy()->startOfWeek())) {
             $payDate->addWeek();
         }
-        
+
         return $this->adjustDateForHolidays($setting, $payDate);
     }
 
@@ -2494,7 +2511,7 @@ class PayrollController extends Controller
         if ($setting->code === 'weekly') {
             return $this->calculatePayDateForWeekly($setting, $cutoffEnd);
         }
-        
+
         // Default pay date calculation for semi-monthly and monthly
         switch ($setting->code) {
             case 'semi_monthly':
@@ -2516,7 +2533,7 @@ class PayrollController extends Controller
                     }
                 }
                 return $setting->adjustDateForHolidays($payDate);
-                
+
             case 'monthly':
                 if ($setting->monthly_pay_day === -1 || $setting->monthly_pay_day === 'last') {
                     $payDate = $cutoffEnd->copy(); // Last day of month
@@ -2524,7 +2541,7 @@ class PayrollController extends Controller
                     $payDate = $this->setDayOfMonth($cutoffEnd->copy(), $setting->monthly_pay_day);
                 }
                 return $setting->adjustDateForHolidays($payDate);
-                
+
             default:
                 return $cutoffEnd->copy()->addDays($setting->payday_offset_days ?? 0);
         }
@@ -2536,10 +2553,15 @@ class PayrollController extends Controller
     private function getDayOfWeekNumber($dayName)
     {
         $days = [
-            'sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3,
-            'thursday' => 4, 'friday' => 5, 'saturday' => 6
+            'sunday' => 0,
+            'monday' => 1,
+            'tuesday' => 2,
+            'wednesday' => 3,
+            'thursday' => 4,
+            'friday' => 5,
+            'saturday' => 6
         ];
-        
+
         return $days[strtolower($dayName)] ?? 5; // Default to Friday
     }
     private function getFallbackPeriod($scheduleType, $today)
@@ -2555,7 +2577,7 @@ class PayrollController extends Controller
                     'pay_date' => $endOfWeek->addDays(3)->format('Y-m-d'), // Pay on Wednesday after week ends
                     'period_name' => $startOfWeek->format('M j') . ' - ' . $endOfWeek->format('M j, Y')
                 ];
-            
+
             case 'semi_monthly':
                 $day = $today->day;
                 if ($day <= 15) {
@@ -2574,7 +2596,7 @@ class PayrollController extends Controller
                     'pay_date' => $payDate->format('Y-m-d'),
                     'period_name' => $start->format('M j') . ' - ' . $end->format('M j, Y')
                 ];
-            
+
             case 'monthly':
             default:
                 $start = $today->copy()->startOfMonth();
@@ -2588,7 +2610,7 @@ class PayrollController extends Controller
                 ];
         }
     }
-    
+
     /**
      * Calculate the appropriate period for a specific schedule type
      */
@@ -2605,7 +2627,7 @@ class PayrollController extends Controller
                 return null;
         }
     }
-    
+
     /**
      * Calculate weekly period
      */
@@ -2614,12 +2636,12 @@ class PayrollController extends Controller
         // Find the current week period
         $startOfWeek = $currentDate->copy()->startOfWeek(\Carbon\Carbon::MONDAY);
         $endOfWeek = $currentDate->copy()->endOfWeek(\Carbon\Carbon::SUNDAY);
-        
+
         $payDate = $endOfWeek->copy();
         if ($setting->payday_offset_days) {
             $payDate = $endOfWeek->copy()->addDays($setting->payday_offset_days);
         }
-        
+
         return [
             'start' => $startOfWeek->format('Y-m-d'),
             'end' => $endOfWeek->format('Y-m-d'),
@@ -2627,7 +2649,7 @@ class PayrollController extends Controller
             'name' => $startOfWeek->format('M j') . ' - ' . $endOfWeek->format('M j, Y')
         ];
     }
-    
+
     /**
      * Calculate semi-monthly period
      */
@@ -2636,7 +2658,7 @@ class PayrollController extends Controller
         $day = $currentDate->day;
         $month = $currentDate->month;
         $year = $currentDate->year;
-        
+
         if ($day <= 15) {
             // First half of the month (1st to 15th)
             $start = \Carbon\Carbon::create($year, $month, 1);
@@ -2648,12 +2670,12 @@ class PayrollController extends Controller
             $end = \Carbon\Carbon::create($year, $month)->endOfMonth();
             $periodName = $start->format('M') . ' 16-' . $end->day;
         }
-        
+
         $payDate = $end->copy();
         if ($setting->payday_offset_days) {
             $payDate = $end->copy()->addDays($setting->payday_offset_days);
         }
-        
+
         return [
             'start' => $start->format('Y-m-d'),
             'end' => $end->format('Y-m-d'),
@@ -2661,7 +2683,7 @@ class PayrollController extends Controller
             'name' => $periodName
         ];
     }
-    
+
     /**
      * Calculate monthly period
      */
@@ -2669,12 +2691,12 @@ class PayrollController extends Controller
     {
         $start = $currentDate->copy()->startOfMonth();
         $end = $currentDate->copy()->endOfMonth();
-        
+
         $payDate = $end->copy();
         if ($setting->payday_offset_days) {
             $payDate = $end->copy()->addDays($setting->payday_offset_days);
         }
-        
+
         return [
             'start' => $start->format('Y-m-d'),
             'end' => $end->format('Y-m-d'),
@@ -2682,7 +2704,7 @@ class PayrollController extends Controller
             'name' => $start->format('M Y')
         ];
     }
-    
+
     /**
      * Safe way to set day of month avoiding Carbon 3.x type issues
      */
@@ -2691,11 +2713,11 @@ class PayrollController extends Controller
         if ($day === 'last' || $day === -1) {
             return $carbon->endOfMonth();
         }
-        
+
         // Ensure day is integer and within valid range
         $dayInt = (int) $day;
         $dayInt = max(1, min(31, $dayInt));
-        
+
         return $carbon->startOfMonth()->addDays($dayInt - 1);
     }
 
@@ -2718,12 +2740,12 @@ class PayrollController extends Controller
                 }
             }
         }
-        
+
         // Additional holiday checking could be implemented here
         // if ($setting->move_if_holiday) {
         //     // Check against holiday table and adjust
         // }
-        
+
         return $date;
     }
 
@@ -2733,20 +2755,20 @@ class PayrollController extends Controller
     private function calculateCurrentPayPeriod($scheduleSetting)
     {
         $today = Carbon::now();
-        
+
         switch ($scheduleSetting->code) {
             case 'weekly':
                 return $this->calculateCurrentWeeklyPayPeriod($scheduleSetting, $today);
-                
+
             case 'semi_monthly':
                 return $this->calculateCurrentSemiMonthlyPayPeriod($scheduleSetting, $today);
-                
+
             case 'monthly':
                 return $this->calculateCurrentMonthlyPayPeriod($scheduleSetting, $today);
-                
+
             case 'daily':
                 return $this->calculateCurrentDailyPayPeriod($scheduleSetting, $today);
-                
+
             default:
                 // Fallback to weekly if unknown
                 return $this->calculateCurrentWeeklyPayPeriod($scheduleSetting, $today);
@@ -2775,7 +2797,7 @@ class PayrollController extends Controller
         // Find the current period that contains today's date
         $periodStart = $this->getWeekStartForDay($currentDate, $startDay);
         $periodEnd = $this->getWeekDayForDate($periodStart, $endDay);
-        
+
         // Check if current date is within this period
         if ($currentDate->lt($periodStart)) {
             // We're before the current period, move back one week
@@ -2794,7 +2816,7 @@ class PayrollController extends Controller
         }
 
         $payDate = $this->getWeekDayForDate($periodStart, $payDay);
-        
+
         // Adjust pay date if it's before period end
         if ($payDate->lt($periodEnd)) {
             $payDate = $payDate->addWeek();
@@ -2825,13 +2847,13 @@ class PayrollController extends Controller
         }
 
         $currentDay = $currentDate->day;
-        
+
         // Parse cutoff periods to get numeric days
         $firstPeriodStart = $this->parseDayNumber($cutoffPeriods[0]['start_day']);
         $firstPeriodEnd = $this->parseDayNumber($cutoffPeriods[0]['end_day']);
         $secondPeriodStart = $this->parseDayNumber($cutoffPeriods[1]['start_day']);
         $secondPeriodEnd = $this->parseDayNumber($cutoffPeriods[1]['end_day']);
-        
+
         // Determine which period we're currently in
         if ($currentDay >= $firstPeriodStart && $currentDay <= $firstPeriodEnd) {
             // We're in the first period
@@ -2848,7 +2870,7 @@ class PayrollController extends Controller
             }
             $payDay = $this->parseDayNumber($cutoffPeriods[1]['pay_date'] ?? $secondPeriodEnd);
         }
-        
+
         // Set pay date
         if ($payDay == 31) {
             $payDate = $periodEnd->copy()->endOfMonth();
@@ -2887,7 +2909,7 @@ class PayrollController extends Controller
         $payDay = $this->parseDayNumber($cutoff['pay_date'] ?? $endDay);
 
         $periodStart = $currentDate->copy()->startOfMonth()->day($startDay);
-        
+
         if ($endDay == 31) {
             $periodEnd = $currentDate->copy()->endOfMonth();
         } else {
@@ -2929,20 +2951,20 @@ class PayrollController extends Controller
     private function calculateNextPayPeriod($scheduleSetting)
     {
         $today = Carbon::now();
-        
+
         switch ($scheduleSetting->code) {
             case 'weekly':
                 return $this->calculateWeeklyPayPeriod($scheduleSetting, $today);
-                
+
             case 'semi_monthly':
                 return $this->calculateSemiMonthlyPayPeriod($scheduleSetting, $today);
-                
+
             case 'monthly':
                 return $this->calculateMonthlyPayPeriod($scheduleSetting, $today);
-                
+
             case 'daily':
                 return $this->calculateDailyPayPeriod($scheduleSetting, $today);
-                
+
             default:
                 // Fallback to weekly if unknown
                 return $this->calculateWeeklyPayPeriod($scheduleSetting, $today);
@@ -2954,25 +2976,25 @@ class PayrollController extends Controller
      */
     private function calculateWeeklyPayPeriod($scheduleSetting, $currentDate)
     {
-         $cutoffPeriods = $scheduleSetting->cutoff_periods;
-    if (is_string($cutoffPeriods)) {
-        $cutoffPeriods = json_decode($cutoffPeriods, true);
-    }
-    if (empty($cutoffPeriods) || !isset($cutoffPeriods[0]) || !is_array($cutoffPeriods[0])) {
-        // Fallback to Monday-Friday if no settings
-        $cutoffPeriods = [['start_day' => 'monday', 'end_day' => 'friday', 'pay_day' => 'friday']];
-    }
+        $cutoffPeriods = $scheduleSetting->cutoff_periods;
+        if (is_string($cutoffPeriods)) {
+            $cutoffPeriods = json_decode($cutoffPeriods, true);
+        }
+        if (empty($cutoffPeriods) || !isset($cutoffPeriods[0]) || !is_array($cutoffPeriods[0])) {
+            // Fallback to Monday-Friday if no settings
+            $cutoffPeriods = [['start_day' => 'monday', 'end_day' => 'friday', 'pay_day' => 'friday']];
+        }
 
-    $cutoff = $cutoffPeriods[0];
-    $startDay = $cutoff['start_day'];
-    $endDay = $cutoff['end_day'];
-    $payDay = $cutoff['pay_day'];
+        $cutoff = $cutoffPeriods[0];
+        $startDay = $cutoff['start_day'];
+        $endDay = $cutoff['end_day'];
+        $payDay = $cutoff['pay_day'];
 
 
         // Get last payroll to determine next period
         $lastPayroll = \App\Models\Payroll::where('pay_schedule', 'weekly')
-                                         ->orderBy('period_end', 'desc')
-                                         ->first();
+            ->orderBy('period_end', 'desc')
+            ->first();
 
         if ($lastPayroll) {
             // Start from the day after the last payroll period ended
@@ -2980,7 +3002,7 @@ class PayrollController extends Controller
         } else {
             // No previous payroll - find the current or next period
             $periodStart = $this->getWeekStartForDay($currentDate, $startDay);
-            
+
             // If we're past the end day of current week, move to next week
             $periodEnd = $this->getWeekDayForDate($periodStart, $endDay);
             if ($currentDate->gt($periodEnd)) {
@@ -3009,31 +3031,31 @@ class PayrollController extends Controller
     private function calculateSemiMonthlyPayPeriod($scheduleSetting, $currentDate)
     {
         $cutoffPeriods = $scheduleSetting->cutoff_periods;
-    // Fix: Decode JSON if string
-    if (is_string($cutoffPeriods)) {
-        $cutoffPeriods = json_decode($cutoffPeriods, true);
-    }
-    if (empty($cutoffPeriods) || !isset($cutoffPeriods[0]) || !is_array($cutoffPeriods[0])) {
-        // Fallback to 1-7 and 8-31
-        $cutoffPeriods = [
-            ['start_day' => '1st', 'end_day' => '7th', 'pay_day' => '7th'],
-            ['start_day' => '8th', 'end_day' => '31st', 'pay_day' => '31st']
-        ];
-    }
+        // Fix: Decode JSON if string
+        if (is_string($cutoffPeriods)) {
+            $cutoffPeriods = json_decode($cutoffPeriods, true);
+        }
+        if (empty($cutoffPeriods) || !isset($cutoffPeriods[0]) || !is_array($cutoffPeriods[0])) {
+            // Fallback to 1-7 and 8-31
+            $cutoffPeriods = [
+                ['start_day' => '1st', 'end_day' => '7th', 'pay_day' => '7th'],
+                ['start_day' => '8th', 'end_day' => '31st', 'pay_day' => '31st']
+            ];
+        }
 
         // Get last payroll to determine next period
         $lastPayroll = \App\Models\Payroll::where('pay_schedule', 'semi_monthly')
-                                         ->orderBy('period_end', 'desc')
-                                         ->first();
+            ->orderBy('period_end', 'desc')
+            ->first();
 
         $currentDay = $currentDate->day;
-        
+
         // Parse cutoff periods to get numeric days
         $firstPeriodStart = $this->parseDayNumber($cutoffPeriods[0]['start_day']);
         $firstPeriodEnd = $this->parseDayNumber($cutoffPeriods[0]['end_day']);
         $secondPeriodStart = $this->parseDayNumber($cutoffPeriods[1]['start_day']);
         $secondPeriodEnd = $this->parseDayNumber($cutoffPeriods[1]['end_day']);
-        
+
         // Determine which period we're in based on current date
         // Note: periods can overlap (e.g., 1-7 and 7-31), so we use <= for first period check
         // Use both 'pay_day' and 'pay_date' keys for compatibility
@@ -3052,7 +3074,7 @@ class PayrollController extends Controller
             }
             $payDay = $this->parseDayNumber($cutoffPeriods[1]['pay_date'] ?? $cutoffPeriods[1]['pay_day'] ?? $secondPeriodEnd);
         }
-        
+
         // Set pay date
         if ($payDay == 31) {
             $payDate = $periodEnd->copy()->endOfMonth();
@@ -3088,8 +3110,8 @@ class PayrollController extends Controller
     {
         // Get last payroll to determine next period
         $lastPayroll = \App\Models\Payroll::where('pay_schedule', 'monthly')
-                                         ->orderBy('period_end', 'desc')
-                                         ->first();
+            ->orderBy('period_end', 'desc')
+            ->first();
 
         if ($lastPayroll) {
             $periodStart = Carbon::parse($lastPayroll->period_end)->addDay();
@@ -3114,8 +3136,8 @@ class PayrollController extends Controller
     {
         // Get last payroll to determine next period
         $lastPayroll = \App\Models\Payroll::where('pay_schedule', 'daily')
-                                         ->orderBy('period_end', 'desc')
-                                         ->first();
+            ->orderBy('period_end', 'desc')
+            ->first();
 
         if ($lastPayroll) {
             $periodStart = Carbon::parse($lastPayroll->period_end)->addDay();
@@ -3140,15 +3162,15 @@ class PayrollController extends Controller
     {
         $dayOfWeek = $this->getDayOfWeekNumber($dayName);
         $currentDayOfWeek = $date->dayOfWeek;
-        
+
         // Adjust Sunday from 0 to 7 for easier calculation
         if ($currentDayOfWeek === 0) $currentDayOfWeek = 7;
-        
+
         $daysToSubtract = $currentDayOfWeek - $dayOfWeek;
         if ($daysToSubtract < 0) {
             $daysToSubtract += 7;
         }
-        
+
         return $date->copy()->subDays($daysToSubtract);
     }
 
@@ -3159,15 +3181,15 @@ class PayrollController extends Controller
     {
         $dayOfWeek = $this->getDayOfWeekNumber($dayName);
         $startDayOfWeek = $weekStart->dayOfWeek;
-        
+
         // Adjust Sunday from 0 to 7 for easier calculation
         if ($startDayOfWeek === 0) $startDayOfWeek = 7;
-        
+
         $daysToAdd = $dayOfWeek - $startDayOfWeek;
         if ($daysToAdd < 0) {
             $daysToAdd += 7;
         }
-        
+
         return $weekStart->copy()->addDays($daysToAdd);
     }
 
@@ -3179,15 +3201,15 @@ class PayrollController extends Controller
         $today = Carbon::now();
         $year = $today->format('Y');
         $month = $today->format('m');
-        
+
         // Get the count of payrolls for this schedule in the current year
         $count = \App\Models\Payroll::where('pay_schedule', $paySchedule)
-                                  ->whereYear('created_at', $year)
-                                  ->count() + 1;
+            ->whereYear('created_at', $year)
+            ->count() + 1;
 
         // Format: SCHEDULE-YEAR-MONTH-COUNT
         $scheduleCode = strtoupper(str_replace('_', '', $paySchedule));
-        
+
         return sprintf('%s-%s%s-%03d', $scheduleCode, $year, $month, $count);
     }
 
@@ -3201,12 +3223,12 @@ class PayrollController extends Controller
 
         if (!$payroll->canBeEdited()) {
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('error', 'This payroll cannot be recalculated as it has been processed.');
+                ->with('error', 'This payroll cannot be recalculated as it has been processed.');
         }
 
         try {
             DB::beginTransaction();
-            
+
             Log::info('Starting payroll recalculation via delete/recreate', [
                 'payroll_id' => $payroll->id,
                 'payroll_number' => $payroll->payroll_number
@@ -3251,20 +3273,19 @@ class PayrollController extends Controller
             foreach ($employeeIds as $employeeId) {
                 try {
                     $employee = Employee::find($employeeId);
-                    
+
                     if (!$employee || $employee->employment_status !== 'active') {
                         Log::warning("Employee with ID {$employeeId} not found or not active, skipping");
                         continue;
                     }
-                    
+
                     // Calculate payroll details with current settings
                     $payrollDetail = $this->calculateEmployeePayroll($employee, $newPayroll);
-                    
+
                     $totalGross += $payrollDetail->gross_pay;
                     $totalDeductions += $payrollDetail->total_deductions;
                     $totalNet += $payrollDetail->net_pay;
                     $processedEmployees++;
-                    
                 } catch (\Exception $e) {
                     Log::error("Failed to process employee {$employeeId} during recalculation: " . $e->getMessage());
                     continue;
@@ -3285,18 +3306,17 @@ class PayrollController extends Controller
             ]);
 
             return redirect()->route('payrolls.show', $newPayroll)
-                           ->with('success', "Payroll has been recalculated! Created new payroll #{$newPayroll->payroll_number} with {$processedEmployees} employees processed.");
-
+                ->with('success', "Payroll has been recalculated! Created new payroll #{$newPayroll->payroll_number} with {$processedEmployees} employees processed.");
         } catch (\Exception $e) {
             DB::rollback();
-            
+
             Log::error('Payroll recalculation failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
             return redirect()->route('payrolls.index')
-                           ->with('error', 'Failed to recalculate payroll: ' . $e->getMessage());
+                ->with('error', 'Failed to recalculate payroll: ' . $e->getMessage());
         }
     }
     /**
@@ -3312,32 +3332,31 @@ class PayrollController extends Controller
         try {
             // Always perform full recalculation to reflect current data
             Log::info('Auto-recalculating payroll on view', ['payroll_id' => $payroll->id]);
-            
+
             $totalGross = 0;
             $totalDeductions = 0;
             $totalNet = 0;
-            
+
             // Recalculate each payroll detail completely with current settings
             foreach ($payroll->payrollDetails as $detail) {
                 $employee = Employee::find($detail->employee_id);
-                
+
                 if (!$employee) continue;
 
                 // Full recalculation using current dynamic settings
                 $updatedDetail = $this->calculateEmployeePayrollDynamic($employee, $payroll);
-                
+
                 $totalGross += $updatedDetail->gross_pay;
                 $totalDeductions += $updatedDetail->total_deductions;
                 $totalNet += $updatedDetail->net_pay;
             }
-            
+
             // Update payroll totals
             $payroll->update([
                 'total_gross' => $totalGross,
                 'total_deductions' => $totalDeductions,
                 'total_net' => $totalNet,
             ]);
-            
         } catch (\Exception $e) {
             Log::warning('Auto-recalculation failed', [
                 'payroll_id' => $payroll->id,
@@ -3372,8 +3391,7 @@ class PayrollController extends Controller
             DB::commit();
 
             return redirect()->route('payrolls.show', $payroll)
-                           ->with('success', 'Payroll moved back to draft. Snapshots have been cleared.');
-
+                ->with('success', 'Payroll moved back to draft. Snapshots have been cleared.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to move payroll back to draft', [
@@ -3457,34 +3475,34 @@ class PayrollController extends Controller
     private function getEmployeeAllowancesBreakdown(Employee $employee, Payroll $payroll)
     {
         $breakdown = [];
-        
+
         // Get active allowance settings that apply to this employee's benefit status
         $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
-                                                             ->where('type', 'allowance')
-                                                             ->forBenefitStatus($employee->benefits_status)
-                                                             ->orderBy('sort_order')
-                                                             ->get();
-        
+            ->where('type', 'allowance')
+            ->forBenefitStatus($employee->benefits_status)
+            ->orderBy('sort_order')
+            ->get();
+
         foreach ($allowanceSettings as $setting) {
             // Calculate hours data for this employee
             $timeLogs = TimeLog::where('employee_id', $employee->id)
-                              ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-                              ->where('status', 'approved')
-                              ->get();
-            
+                ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+                ->where('status', 'approved')
+                ->get();
+
             $regularHours = $timeLogs->sum('regular_hours') ?? 0;
             $overtimeHours = $timeLogs->sum('overtime_hours') ?? 0;
             $holidayHours = $timeLogs->sum('holiday_hours') ?? 0;
-            
+
             $amount = $this->calculateAllowanceBonusAmountForPayroll(
-                $setting, 
-                $employee, 
-                $payroll, 
-                $regularHours, 
-                $overtimeHours, 
+                $setting,
+                $employee,
+                $payroll,
+                $regularHours,
+                $overtimeHours,
                 $holidayHours
             );
-            
+
             if ($amount > 0) {
                 $breakdown[] = [
                     'name' => $setting->name,
@@ -3496,7 +3514,7 @@ class PayrollController extends Controller
                 ];
             }
         }
-        
+
         return $breakdown;
     }
 
@@ -3506,34 +3524,34 @@ class PayrollController extends Controller
     private function getEmployeeBonusesBreakdown(Employee $employee, Payroll $payroll)
     {
         $breakdown = [];
-        
+
         // Get active bonus settings that apply to this employee's benefit status
         $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
-                                                         ->where('type', 'bonus')
-                                                         ->forBenefitStatus($employee->benefits_status)
-                                                         ->orderBy('sort_order')
-                                                         ->get();
-        
+            ->where('type', 'bonus')
+            ->forBenefitStatus($employee->benefits_status)
+            ->orderBy('sort_order')
+            ->get();
+
         foreach ($bonusSettings as $setting) {
             // Calculate hours data for this employee
             $timeLogs = TimeLog::where('employee_id', $employee->id)
-                              ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-                              ->where('status', 'approved')
-                              ->get();
-            
+                ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+                ->where('status', 'approved')
+                ->get();
+
             $regularHours = $timeLogs->sum('regular_hours') ?? 0;
             $overtimeHours = $timeLogs->sum('overtime_hours') ?? 0;
             $holidayHours = $timeLogs->sum('holiday_hours') ?? 0;
-            
+
             $amount = $this->calculateAllowanceBonusAmountForPayroll(
-                $setting, 
-                $employee, 
-                $payroll, 
-                $regularHours, 
-                $overtimeHours, 
+                $setting,
+                $employee,
+                $payroll,
+                $regularHours,
+                $overtimeHours,
                 $holidayHours
             );
-            
+
             if ($amount > 0) {
                 $breakdown[] = [
                     'name' => $setting->name,
@@ -3545,7 +3563,7 @@ class PayrollController extends Controller
                 ];
             }
         }
-        
+
         return $breakdown;
     }
 
@@ -3555,7 +3573,7 @@ class PayrollController extends Controller
     private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail)
     {
         $breakdown = [];
-        
+
         // Standard government deductions
         if ($detail->sss_contribution > 0) {
             $breakdown[] = [
@@ -3565,7 +3583,7 @@ class PayrollController extends Controller
                 'type' => 'government'
             ];
         }
-        
+
         if ($detail->philhealth_contribution > 0) {
             $breakdown[] = [
                 'name' => 'PhilHealth Contribution',
@@ -3574,7 +3592,7 @@ class PayrollController extends Controller
                 'type' => 'government'
             ];
         }
-        
+
         if ($detail->pagibig_contribution > 0) {
             $breakdown[] = [
                 'name' => 'Pag-IBIG Contribution',
@@ -3583,7 +3601,7 @@ class PayrollController extends Controller
                 'type' => 'government'
             ];
         }
-        
+
         if ($detail->withholding_tax > 0) {
             $breakdown[] = [
                 'name' => 'Withholding Tax',
@@ -3592,7 +3610,7 @@ class PayrollController extends Controller
                 'type' => 'tax'
             ];
         }
-        
+
         // Time-based deductions
         if ($detail->late_deductions > 0) {
             $breakdown[] = [
@@ -3602,7 +3620,7 @@ class PayrollController extends Controller
                 'type' => 'time'
             ];
         }
-        
+
         if ($detail->undertime_deductions > 0) {
             $breakdown[] = [
                 'name' => 'Undertime Deductions',
@@ -3611,7 +3629,7 @@ class PayrollController extends Controller
                 'type' => 'time'
             ];
         }
-        
+
         if ($detail->cash_advance_deductions > 0) {
             $breakdown[] = [
                 'name' => 'Cash Advance',
@@ -3620,7 +3638,7 @@ class PayrollController extends Controller
                 'type' => 'loan'
             ];
         }
-        
+
         if ($detail->other_deductions > 0) {
             $breakdown[] = [
                 'name' => 'Other Deductions',
@@ -3629,7 +3647,7 @@ class PayrollController extends Controller
                 'type' => 'other'
             ];
         }
-        
+
         return $breakdown;
     }
 
@@ -3642,23 +3660,64 @@ class PayrollController extends Controller
             'benefit_status' => $employee->benefits_status,
             'pay_schedule' => $employee->pay_schedule,
             'allowance_settings' => \App\Models\AllowanceBonusSetting::where('is_active', true)
-                                                                    ->where('type', 'allowance')
-                                                                    ->forBenefitStatus($employee->benefits_status)
-                                                                    ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
-                                                                    ->get()
-                                                                    ->toArray(),
+                ->where('type', 'allowance')
+                ->forBenefitStatus($employee->benefits_status)
+                ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
+                ->get()
+                ->toArray(),
             'bonus_settings' => \App\Models\AllowanceBonusSetting::where('is_active', true)
-                                                                ->where('type', 'bonus')
-                                                                ->forBenefitStatus($employee->benefits_status)
-                                                                ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
-                                                                ->get()
-                                                                ->toArray(),
+                ->where('type', 'bonus')
+                ->forBenefitStatus($employee->benefits_status)
+                ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
+                ->get()
+                ->toArray(),
             'deduction_settings' => \App\Models\DeductionTaxSetting::active()
-                                                                  ->forBenefitStatus($employee->benefits_status)
-                                                                  ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
-                                                                  ->get()
-                                                                  ->toArray(),
+                ->forBenefitStatus($employee->benefits_status)
+                ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
+                ->get()
+                ->toArray(),
             'captured_at' => now()->toISOString(),
         ];
+    }
+
+    /**
+     * Link existing time logs to a payroll based on period and employee
+     */
+    public function linkTimeLogsToPayroll(Payroll $payroll)
+    {
+        // Get all employees in this payroll
+        $employeeIds = $payroll->payrollDetails->pluck('employee_id');
+
+        // Find time logs in the payroll period that don't have a payroll_id
+        $timeLogs = TimeLog::whereIn('employee_id', $employeeIds)
+            ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+            ->whereNull('payroll_id')
+            ->get();
+
+        // Link them to this payroll
+        foreach ($timeLogs as $timeLog) {
+            $timeLog->update(['payroll_id' => $payroll->id]);
+        }
+
+        return $timeLogs->count();
+    }
+
+    /**
+     * Auto-link time logs when payroll is shown (for backwards compatibility)
+     */
+    private function autoLinkTimeLogs(Payroll $payroll)
+    {
+        // Only auto-link if payroll is draft status and has no linked time logs yet
+        if ($payroll->status === 'draft') {
+            $existingTimeLogsCount = TimeLog::where('payroll_id', $payroll->id)->count();
+
+            if ($existingTimeLogsCount === 0) {
+                $linkedCount = $this->linkTimeLogsToPayroll($payroll);
+
+                if ($linkedCount > 0) {
+                    Log::info("Auto-linked {$linkedCount} time logs to payroll {$payroll->id}");
+                }
+            }
+        }
     }
 }

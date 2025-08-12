@@ -31,7 +31,7 @@ class Payroll extends Model
 
     protected $casts = [
         'period_start' => 'date',
-        'period_end' => 'date', 
+        'period_end' => 'date',
         'pay_date' => 'date',
         'total_gross' => 'decimal:2',
         'total_deductions' => 'decimal:2',
@@ -80,6 +80,14 @@ class Payroll extends Model
     public function payrollDetails()
     {
         return $this->hasMany(PayrollDetail::class);
+    }
+
+    /**
+     * Get the time logs for the payroll.
+     */
+    public function timeLogs()
+    {
+        return $this->hasMany(TimeLog::class);
     }
 
     /**
@@ -146,10 +154,10 @@ class Payroll extends Model
         $prefix = strtoupper(substr($type, 0, 3));
         $year = date('Y');
         $month = date('m');
-        
+
         $lastPayroll = static::where('payroll_number', 'like', "{$prefix}-{$year}{$month}%")
-                            ->orderBy('payroll_number', 'desc')
-                            ->first();
+            ->orderBy('payroll_number', 'desc')
+            ->first();
 
         if ($lastPayroll) {
             $lastNumber = (int) substr($lastPayroll->payroll_number, -4);

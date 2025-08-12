@@ -68,7 +68,7 @@ class CashAdvanceController extends Controller
         $this->authorize('create cash advances');
 
         $employee = null;
-        
+
         // If employee user, get their employee record
         if (Auth::user()->hasRole('employee')) {
             $employee = Auth::user()->employee;
@@ -106,10 +106,10 @@ class CashAdvanceController extends Controller
 
             // Check if employee has pending cash advance
             $pendingAdvance = CashAdvance::where('employee_id', $employee->id)
-                                       ->whereIn('status', ['pending', 'approved'])
-                                       ->where('outstanding_balance', '>', 0)
-                                       ->exists();
-            
+                ->whereIn('status', ['pending', 'approved'])
+                ->where('outstanding_balance', '>', 0)
+                ->exists();
+
             if ($pendingAdvance) {
                 return redirect()->back()->with('error', 'You already have a pending or active cash advance.');
             }
@@ -133,13 +133,12 @@ class CashAdvanceController extends Controller
             DB::commit();
 
             return redirect()->route('cash-advances.show', $cashAdvance)
-                           ->with('success', 'Cash advance request submitted successfully! Reference: ' . $cashAdvance->reference_number);
-
+                ->with('success', 'Cash advance request submitted successfully! Reference: ' . $cashAdvance->reference_number);
         } catch (\Exception $e) {
             DB::rollback();
             return redirect()->back()
-                           ->withInput()
-                           ->with('error', 'Failed to submit cash advance request: ' . $e->getMessage());
+                ->withInput()
+                ->with('error', 'Failed to submit cash advance request: ' . $e->getMessage());
         }
     }
 
@@ -193,12 +192,11 @@ class CashAdvanceController extends Controller
             DB::commit();
 
             return redirect()->route('cash-advances.show', $cashAdvance)
-                           ->with('success', 'Cash advance approved successfully!');
-
+                ->with('success', 'Cash advance approved successfully!');
         } catch (\Exception $e) {
             DB::rollback();
             return redirect()->back()
-                           ->with('error', 'Failed to approve cash advance: ' . $e->getMessage());
+                ->with('error', 'Failed to approve cash advance: ' . $e->getMessage());
         }
     }
 
@@ -220,7 +218,7 @@ class CashAdvanceController extends Controller
         $cashAdvance->reject($validated['remarks'], Auth::id());
 
         return redirect()->route('cash-advances.show', $cashAdvance)
-                       ->with('success', 'Cash advance rejected.');
+            ->with('success', 'Cash advance rejected.');
     }
 
     /**
@@ -229,7 +227,7 @@ class CashAdvanceController extends Controller
     public function checkEligibility(Request $request)
     {
         $employeeId = $request->get('employee_id');
-        
+
         if (!$employeeId) {
             return response()->json(['eligible' => false, 'reason' => 'Employee not specified']);
         }
@@ -241,13 +239,13 @@ class CashAdvanceController extends Controller
 
         // Check if employee has active cash advance
         $hasActive = CashAdvance::where('employee_id', $employeeId)
-                               ->whereIn('status', ['pending', 'approved'])
-                               ->where('outstanding_balance', '>', 0)
-                               ->exists();
+            ->whereIn('status', ['pending', 'approved'])
+            ->where('outstanding_balance', '>', 0)
+            ->exists();
 
         if ($hasActive) {
             return response()->json([
-                'eligible' => false, 
+                'eligible' => false,
                 'reason' => 'Employee has an active or pending cash advance'
             ]);
         }
