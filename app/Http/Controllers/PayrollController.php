@@ -284,9 +284,6 @@ class PayrollController extends Controller
                 'total_net' => $totalNet,
             ]);
 
-            // Auto-link existing time logs to this payroll
-            $this->autoLinkTimeLogs($payroll);
-
             DB::commit();
 
             return redirect()->route('payrolls.show', $payroll)
@@ -536,6 +533,11 @@ class PayrollController extends Controller
                         'net_pay' => $payrollCalculation['net_pay'] ?? 0,
                         'regular_hours' => $payrollCalculation['hours_worked'] ?? 0,
                         'days_worked' => $payrollCalculation['days_worked'] ?? 0,
+                        'earnings_breakdown' => json_encode([
+                            'allowances' => $payrollCalculation['allowances_details'] ?? [],
+                            'bonuses' => $payrollCalculation['bonuses_details'] ?? [],
+                        ]),
+                        'deduction_breakdown' => json_encode($payrollCalculation['deductions_details'] ?? []),
                     ]);
 
                     Log::info("Created payroll detail for employee {$employee->id}: Gross: {$payrollCalculation['gross_pay']}, Net: {$payrollCalculation['net_pay']}");
@@ -568,16 +570,10 @@ class PayrollController extends Controller
         // Basic salary calculation based on employee's salary and period
         $basicSalary = $employee->basic_salary ?? 0;
 
-        // Get time logs - prioritize payroll_id if available, otherwise use period
-        if ($payroll) {
-            $timeLogs = TimeLog::where('employee_id', $employee->id)
-                ->where('payroll_id', $payroll->id)
-                ->get();
-        } else {
-            $timeLogs = TimeLog::where('employee_id', $employee->id)
-                ->whereBetween('log_date', [$periodStart, $periodEnd])
-                ->get();
-        }
+        // Get time logs for the payroll period
+        $timeLogs = TimeLog::where('employee_id', $employee->id)
+            ->whereBetween('log_date', [$periodStart, $periodEnd])
+            ->get();
 
         $hoursWorked = 0;
         $daysWorked = 0;
@@ -1141,9 +1137,6 @@ class PayrollController extends Controller
     {
         $this->authorize('view payrolls');
 
-        // Auto-link existing time logs to payroll (for backwards compatibility)
-        $this->autoLinkTimeLogs($payroll);
-
         // Auto-recalculate if needed (for draft payrolls)
         $this->autoRecalculateIfNeeded($payroll);
 
@@ -1169,12 +1162,14 @@ class PayrollController extends Controller
             $periodDates[] = $date->format('Y-m-d');
         }
 
-        // Get all time logs for this specific payroll
+        // Get all time logs for this payroll period
         $timeLogs = TimeLog::whereIn('employee_id', $employeeIds)
-            ->where('payroll_id', $payroll->id)
+            ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
             ->orderBy('log_date')
             ->get()
-            ->groupBy(['employee_id', 'log_date']);
+            ->groupBy(['employee_id', function ($item) {
+                return \Carbon\Carbon::parse($item->log_date)->format('Y-m-d');
+            }]);
 
         // Organize DTR data by employee and date
         $dtrData = [];
@@ -1563,18 +1558,10 @@ class PayrollController extends Controller
      */
     private function calculateEmployeePayrollDynamic(Employee $employee, Payroll $payroll)
     {
-        // Get time logs for this specific payroll (include pending for draft payrolls)
-        $query = TimeLog::where('employee_id', $employee->id)
-            ->where('payroll_id', $payroll->id);
-
-        // For draft payrolls, include pending time logs; for others, only approved
-        if ($payroll->status === 'draft') {
-            $query->whereIn('status', ['pending', 'approved']);
-        } else {
-            $query->where('status', 'approved');
-        }
-
-        $timeLogs = $query->get();        // Initialize counters
+        // Get time logs for this payroll period
+        $timeLogs = TimeLog::where('employee_id', $employee->id)
+            ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+            ->get();        // Initialize counters
         $daysWorked = 0;
         $regularHours = 0;
         $overtimeHours = 0;
@@ -1643,8 +1630,8 @@ class PayrollController extends Controller
         $undertimeDeductions = $undertimeHours * $hourlyRate;
 
         // Calculate allowances and bonuses from settings
-        $allowancesTotal = $this->calculateEmployeeAllowances($employee, $payroll, $regularHours, $overtimeHours, $holidayHours);
-        $bonusesTotal = $this->calculateEmployeeBonuses($employee, $payroll, $regularHours, $overtimeHours, $holidayHours);
+        $allowancesData = $this->calculateEmployeeAllowances($employee, $payroll, $regularHours, $overtimeHours, $holidayHours);
+        $bonusesData = $this->calculateEmployeeBonuses($employee, $payroll, $regularHours, $overtimeHours, $holidayHours);
 
         // Calculate cash advance deductions
         $cashAdvanceDeductions = $this->calculateCashAdvanceDeductions($employee, $payroll);
@@ -1668,13 +1655,17 @@ class PayrollController extends Controller
                 'overtime_pay' => $overtimePay,
                 'holiday_pay' => $holidayPay,
                 'night_differential_pay' => $nightDifferentialPay,
-                'allowances' => $allowancesTotal,
-                'bonuses' => $bonusesTotal,
+                'allowances' => $allowancesData['total'],
+                'bonuses' => $bonusesData['total'],
                 'other_earnings' => 0,
                 'late_deductions' => $lateDeductions,
                 'undertime_deductions' => $undertimeDeductions,
                 'cash_advance_deductions' => $cashAdvanceDeductions,
                 'other_deductions' => 0,
+                'earnings_breakdown' => json_encode([
+                    'allowances' => $allowancesData['details'],
+                    'bonuses' => $bonusesData['details'],
+                ]),
             ]
         );
 
@@ -1711,6 +1702,7 @@ class PayrollController extends Controller
             ->get();
 
         $totalAllowances = 0;
+        $allowanceDetails = [];
 
         foreach ($allowanceSettings as $setting) {
             $allowanceAmount = $this->calculateAllowanceBonusAmountForPayroll(
@@ -1722,10 +1714,20 @@ class PayrollController extends Controller
                 $holidayHours
             );
 
-            $totalAllowances += $allowanceAmount;
+            if ($allowanceAmount > 0) {
+                $allowanceDetails[$setting->code] = [
+                    'name' => $setting->name,
+                    'amount' => $allowanceAmount,
+                    'is_taxable' => $setting->is_taxable
+                ];
+                $totalAllowances += $allowanceAmount;
+            }
         }
 
-        return $totalAllowances;
+        return [
+            'total' => $totalAllowances,
+            'details' => $allowanceDetails
+        ];
     }
 
     /**
@@ -1741,6 +1743,7 @@ class PayrollController extends Controller
             ->get();
 
         $totalBonuses = 0;
+        $bonusDetails = [];
 
         foreach ($bonusSettings as $setting) {
             $bonusAmount = $this->calculateAllowanceBonusAmountForPayroll(
@@ -1752,10 +1755,20 @@ class PayrollController extends Controller
                 $holidayHours
             );
 
-            $totalBonuses += $bonusAmount;
+            if ($bonusAmount > 0) {
+                $bonusDetails[$setting->code] = [
+                    'name' => $setting->name,
+                    'amount' => $bonusAmount,
+                    'is_taxable' => $setting->is_taxable
+                ];
+                $totalBonuses += $bonusAmount;
+            }
         }
 
-        return $totalBonuses;
+        return [
+            'total' => $totalBonuses,
+            'details' => $bonusDetails
+        ];
     }
 
     /**
@@ -1838,7 +1851,6 @@ class PayrollController extends Controller
     {
         $timeLogs = TimeLog::where('employee_id', $employee->id)
             ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-            ->where('status', 'approved')
             ->where('regular_hours', '>', 0)
             ->count();
 
@@ -1862,26 +1874,44 @@ class PayrollController extends Controller
     private function calculateCashAdvanceDeductions(Employee $employee, Payroll $payroll)
     {
         try {
-            // Get pending cash advances for this employee
+            // Get active cash advances for this employee that should start deduction
             $cashAdvances = \App\Models\CashAdvance::where('employee_id', $employee->id)
                 ->where('status', 'approved')
+                ->where('outstanding_balance', '>', 0)
+                ->where(function ($query) use ($payroll) {
+                    $query->whereNull('first_deduction_date')
+                        ->orWhere('first_deduction_date', '<=', $payroll->period_end);
+                })
                 ->get();
 
             $totalDeductions = 0;
 
             foreach ($cashAdvances as $cashAdvance) {
-                // Calculate deduction amount based on payment schedule
-                $remainingBalance = $cashAdvance->remaining_balance ?? $cashAdvance->amount ?? 0;
+                // Use installment amount which includes interest
+                $deductionAmount = min(
+                    $cashAdvance->installment_amount ?? 0,
+                    $cashAdvance->outstanding_balance
+                );
 
-                if ($remainingBalance > 0) {
-                    $deductionAmount = min(
-                        $cashAdvance->monthly_deduction_amount ?? 0,
-                        $remainingBalance
-                    );
+                if ($deductionAmount > 0) {
+                    $totalDeductions += $deductionAmount;
 
-                    if ($deductionAmount > 0) {
-                        $totalDeductions += $deductionAmount;
+                    // Update outstanding balance
+                    $cashAdvance->outstanding_balance -= $deductionAmount;
+                    if ($cashAdvance->outstanding_balance <= 0) {
+                        $cashAdvance->outstanding_balance = 0;
+                        $cashAdvance->status = 'fully_paid';
                     }
+                    $cashAdvance->save();
+
+                    // Record payment
+                    $cashAdvance->payments()->create([
+                        'amount' => $deductionAmount,
+                        'payment_date' => $payroll->period_end,
+                        'payment_method' => 'payroll_deduction',
+                        'reference_number' => $payroll->reference_number,
+                        'recorded_by' => auth()->id() ?? 1
+                    ]);
                 }
             }
 
@@ -1954,10 +1984,9 @@ class PayrollController extends Controller
             'description' => 'nullable|string|max:1000',
         ]);
 
-        // Get employees with approved DTR records in the period
+        // Get employees with DTR records in the period
         $employeesWithDTR = Employee::whereHas('timeLogs', function ($query) use ($validated) {
-            $query->whereBetween('log_date', [$validated['period_start'], $validated['period_end']])
-                ->where('status', 'approved');
+            $query->whereBetween('log_date', [$validated['period_start'], $validated['period_end']]);
         })
             ->with(['user', 'department', 'position'])
             ->where('employment_status', 'active')
@@ -3487,7 +3516,6 @@ class PayrollController extends Controller
             // Calculate hours data for this employee
             $timeLogs = TimeLog::where('employee_id', $employee->id)
                 ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-                ->where('status', 'approved')
                 ->get();
 
             $regularHours = $timeLogs->sum('regular_hours') ?? 0;
@@ -3536,7 +3564,6 @@ class PayrollController extends Controller
             // Calculate hours data for this employee
             $timeLogs = TimeLog::where('employee_id', $employee->id)
                 ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-                ->where('status', 'approved')
                 ->get();
 
             $regularHours = $timeLogs->sum('regular_hours') ?? 0;
@@ -3683,41 +3710,4 @@ class PayrollController extends Controller
     /**
      * Link existing time logs to a payroll based on period and employee
      */
-    public function linkTimeLogsToPayroll(Payroll $payroll)
-    {
-        // Get all employees in this payroll
-        $employeeIds = $payroll->payrollDetails->pluck('employee_id');
-
-        // Find time logs in the payroll period that don't have a payroll_id
-        $timeLogs = TimeLog::whereIn('employee_id', $employeeIds)
-            ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
-            ->whereNull('payroll_id')
-            ->get();
-
-        // Link them to this payroll
-        foreach ($timeLogs as $timeLog) {
-            $timeLog->update(['payroll_id' => $payroll->id]);
-        }
-
-        return $timeLogs->count();
-    }
-
-    /**
-     * Auto-link time logs when payroll is shown (for backwards compatibility)
-     */
-    private function autoLinkTimeLogs(Payroll $payroll)
-    {
-        // Only auto-link if payroll is draft status and has no linked time logs yet
-        if ($payroll->status === 'draft') {
-            $existingTimeLogsCount = TimeLog::where('payroll_id', $payroll->id)->count();
-
-            if ($existingTimeLogsCount === 0) {
-                $linkedCount = $this->linkTimeLogsToPayroll($payroll);
-
-                if ($linkedCount > 0) {
-                    Log::info("Auto-linked {$linkedCount} time logs to payroll {$payroll->id}");
-                }
-            }
-        }
-    }
 }

@@ -29,7 +29,7 @@
                         <div class="mt-2 text-sm text-blue-700">
                             <ul class="list-disc list-inside space-y-1">
                                 <li>Download the template file below to see the correct format</li>
-                                <li>Fill in the employee data using either Employee Number or Email</li>
+                                <li>Fill in the employee data using Employee Number (required)</li>
                                 <li>Use date format: YYYY-MM-DD (e.g., 2024-08-09)</li>
                                 <li>Use time format: HH:MM (24-hour format, e.g., 08:00, 17:30) or 12-hour format with AM/PM</li>
                                 <li>Time Out can be empty for ongoing shifts</li>
@@ -135,7 +135,6 @@
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee Number</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee Name</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time In</th>
@@ -147,8 +146,7 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <tr>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">EMP001</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">john.doe@company.com</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">EMP-2025-0001</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">John Doe</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2024-08-09</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">08:00</td>
@@ -158,8 +156,7 @@
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Regular day</td>
                                 </tr>
                                 <tr class="bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">EMP002</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">jane.smith@company.com</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">EMP-2025-0002</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Jane Smith</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2024-08-09</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">09:00</td>
@@ -174,10 +171,10 @@
                     <div class="mt-4 text-sm text-gray-600">
                         <p><strong>Notes:</strong></p>
                         <ul class="list-disc list-inside space-y-1 mt-2">
-                            <li>Either Employee Number or Email is required to identify the employee</li>
+                            <li>Employee Number is required to identify the employee</li>
                             <li>Employee Name column is for reference only and not used in import</li>
                             <li>Break times are optional - if omitted, 1 hour break will be automatically deducted</li>
-                            <li>All imported time logs will be automatically approved</li>
+                            <li>All imported time logs will be marked as 'imported' for tracking purposes</li>
                         </ul>
                     </div>
                 </div>

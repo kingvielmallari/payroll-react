@@ -137,16 +137,6 @@
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
 
-                        <div>
-                            <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
-                            <select name="status" id="status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <option value="">All Status</option>
-                                <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
-                                <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Approved</option>
-                                <option value="rejected" {{ request('status') == 'rejected' ? 'selected' : '' }}>Rejected</option>
-                            </select>
-                        </div>
-
                         <div class="flex items-end space-x-2">
                             <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition duration-200">
                                 Filter
@@ -179,7 +169,6 @@
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time In</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Out</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Hours</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
@@ -216,35 +205,13 @@
                                         @endif
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                        {{ $timeLog->status === 'approved' ? 'bg-green-100 text-green-800' : 
-                                           ($timeLog->status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800') }}">
-                                        {{ ucfirst($timeLog->status) }}
-                                    </span>
-                                </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                     <a href="{{ route('time-logs.show', $timeLog) }}" 
                                        class="text-blue-600 hover:text-blue-900">View</a>
                                     
                                     @can('edit time logs')
-                                    @if($timeLog->status !== 'approved')
                                     <a href="{{ route('time-logs.edit', $timeLog) }}" 
                                        class="text-indigo-600 hover:text-indigo-900">Edit</a>
-                                    @endif
-                                    @endcan
-
-                                    @can('approve time logs')
-                                    @if($timeLog->status === 'pending')
-                                    <form method="POST" action="{{ route('time-logs.approve', $timeLog) }}" class="inline">
-                                        @csrf
-                                        <button type="submit" 
-                                                class="text-green-600 hover:text-green-900"
-                                                onclick="return confirm('Are you sure you want to approve this time log?')">
-                                            Approve
-                                        </button>
-                                    </form>
-                                    @endif
                                     @endcan
 
                                     @can('delete time logs')

@@ -93,6 +93,7 @@ class CashAdvanceController extends Controller
             'employee_id' => 'required|exists:employees,id',
             'requested_amount' => 'required|numeric|min:100|max:50000',
             'installments' => 'required|integer|min:1|max:12',
+            'interest_rate' => 'nullable|numeric|min:0|max:100',
             'reason' => 'required|string|max:500',
             'first_deduction_date' => 'nullable|date|after_or_equal:today',
         ]);
@@ -123,12 +124,17 @@ class CashAdvanceController extends Controller
                 'reference_number' => CashAdvance::generateReferenceNumber(),
                 'requested_amount' => $validated['requested_amount'],
                 'installments' => $validated['installments'],
+                'interest_rate' => $validated['interest_rate'] ?? 0,
                 'reason' => $validated['reason'],
                 'requested_date' => now(),
                 'first_deduction_date' => $validated['first_deduction_date'] ?? now()->addMonth(),
                 'requested_by' => Auth::id(),
                 'status' => 'pending',
             ]);
+
+            // Calculate interest and total amounts
+            $cashAdvance->updateCalculations();
+            $cashAdvance->save();
 
             DB::commit();
 
@@ -176,6 +182,7 @@ class CashAdvanceController extends Controller
         $validated = $request->validate([
             'approved_amount' => 'required|numeric|min:100|max:' . $cashAdvance->requested_amount,
             'installments' => 'required|integer|min:1|max:12',
+            'interest_rate' => 'nullable|numeric|min:0|max:100',
             'remarks' => 'nullable|string|max:500',
         ]);
 
@@ -186,7 +193,8 @@ class CashAdvanceController extends Controller
                 $validated['approved_amount'],
                 $validated['installments'],
                 Auth::id(),
-                $validated['remarks']
+                $validated['remarks'],
+                $validated['interest_rate'] ?? $cashAdvance->interest_rate
             );
 
             DB::commit();

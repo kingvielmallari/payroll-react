@@ -20,6 +20,9 @@ class CashAdvance extends Model
         'status',
         'installments',
         'installment_amount',
+        'interest_rate',
+        'interest_amount',
+        'total_amount',
         'reason',
         'remarks',
         'requested_date',
@@ -34,6 +37,9 @@ class CashAdvance extends Model
         'approved_amount' => 'decimal:2',
         'outstanding_balance' => 'decimal:2',
         'installment_amount' => 'decimal:2',
+        'interest_rate' => 'decimal:2',
+        'interest_amount' => 'decimal:2',
+        'total_amount' => 'decimal:2',
         'requested_date' => 'date',
         'approved_date' => 'date',
         'first_deduction_date' => 'date',
@@ -74,7 +80,7 @@ class CashAdvance extends Model
     public function scopeActive($query)
     {
         return $query->whereIn('status', ['approved'])
-                    ->where('outstanding_balance', '>', 0);
+            ->where('outstanding_balance', '>', 0);
     }
 
     public function scopeForEmployee($query, $employeeId)
@@ -117,16 +123,16 @@ class CashAdvance extends Model
     {
         $prefix = 'CA-' . date('Y') . '-';
         $lastRecord = static::where('reference_number', 'like', $prefix . '%')
-                           ->orderByDesc('id')
-                           ->first();
-        
+            ->orderByDesc('id')
+            ->first();
+
         if ($lastRecord) {
             $lastNumber = intval(substr($lastRecord->reference_number, -4));
             $newNumber = $lastNumber + 1;
         } else {
             $newNumber = 1;
         }
-        
+
         return $prefix . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
     }
 
@@ -138,25 +144,34 @@ class CashAdvance extends Model
         return 0;
     }
 
-    public function approve($approvedAmount = null, $installments = null, $approvedBy = null, $remarks = null)
+    public function approve($approvedAmount = null, $installments = null, $approvedBy = null, $remarks = null, $interestRate = null)
     {
         $this->approved_amount = $approvedAmount ?? $this->requested_amount;
         $this->installments = $installments ?? $this->installments;
-        $this->installment_amount = $this->calculateInstallmentAmount();
-        $this->outstanding_balance = $this->approved_amount;
+
+        // Update interest rate if provided
+        if ($interestRate !== null) {
+            $this->interest_rate = $interestRate;
+        }
+
+        // Calculate interest and total amounts
+        $this->updateCalculations();
+
+        // Set outstanding balance to total amount (including interest)
+        $this->outstanding_balance = $this->total_amount;
         $this->status = 'approved';
         $this->approved_date = now();
         $this->approved_by = $approvedBy ?? auth()->id();
-        
+
         if ($remarks) {
             $this->remarks = $remarks;
         }
-        
+
         $this->save();
 
         // Create automatic deduction record
         $this->createAutomaticDeduction();
-        
+
         return $this;
     }
 
@@ -164,13 +179,13 @@ class CashAdvance extends Model
     {
         $this->status = 'rejected';
         $this->approved_by = $rejectedBy ?? auth()->id();
-        
+
         if ($remarks) {
             $this->remarks = $remarks;
         }
-        
+
         $this->save();
-        
+
         return $this;
     }
 
@@ -188,16 +203,59 @@ class CashAdvance extends Model
 
         // Update outstanding balance
         $this->outstanding_balance -= $paymentAmount;
-        
+
         // Check if fully paid
         if ($this->outstanding_balance <= 0) {
             $this->outstanding_balance = 0;
             $this->status = 'fully_paid';
         }
-        
+
         $this->save();
 
         return $payment;
+    }
+
+    /**
+     * Calculate interest amount based on principal and interest rate
+     */
+    public function calculateInterest($principal = null, $rate = null)
+    {
+        $principal = $principal ?? $this->approved_amount ?? $this->requested_amount;
+        $rate = $rate ?? $this->interest_rate ?? 0;
+
+        return ($principal * $rate) / 100;
+    }
+
+    /**
+     * Calculate total amount (principal + interest)
+     */
+    public function calculateTotalAmount($principal = null, $rate = null)
+    {
+        $principal = $principal ?? $this->approved_amount ?? $this->requested_amount;
+        $interestAmount = $this->calculateInterest($principal, $rate);
+
+        return $principal + $interestAmount;
+    }
+
+    /**
+     * Update interest and total calculations
+     */
+    public function updateCalculations()
+    {
+        if ($this->approved_amount && $this->interest_rate !== null) {
+            $this->interest_amount = $this->calculateInterest();
+            $this->total_amount = $this->calculateTotalAmount();
+
+            // Update installment amount based on total amount
+            if ($this->installments > 0) {
+                $this->installment_amount = $this->total_amount / $this->installments;
+            }
+
+            // Update outstanding balance to total amount when first approved
+            if ($this->status === 'approved' && $this->outstanding_balance == 0) {
+                $this->outstanding_balance = $this->total_amount;
+            }
+        }
     }
 
     protected function createAutomaticDeduction()

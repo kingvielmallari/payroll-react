@@ -83,14 +83,6 @@ class Payroll extends Model
     }
 
     /**
-     * Get the time logs for the payroll.
-     */
-    public function timeLogs()
-    {
-        return $this->hasMany(TimeLog::class);
-    }
-
-    /**
      * Get the payroll snapshots for the payroll.
      */
     public function snapshots()

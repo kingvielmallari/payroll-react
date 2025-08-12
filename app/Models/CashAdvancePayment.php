@@ -13,13 +13,18 @@ class CashAdvancePayment extends Model
         'cash_advance_id',
         'payroll_id',
         'payroll_detail_id',
+        'amount',
         'payment_amount',
         'remaining_balance',
         'payment_date',
+        'payment_method',
+        'reference_number',
+        'recorded_by',
         'notes',
     ];
 
     protected $casts = [
+        'amount' => 'decimal:2',
         'payment_amount' => 'decimal:2',
         'remaining_balance' => 'decimal:2',
         'payment_date' => 'date',
@@ -39,5 +44,10 @@ class CashAdvancePayment extends Model
     public function payrollDetail()
     {
         return $this->belongsTo(PayrollDetail::class);
+    }
+
+    public function recordedBy()
+    {
+        return $this->belongsTo(User::class, 'recorded_by');
     }
 }

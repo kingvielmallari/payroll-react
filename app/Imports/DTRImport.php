@@ -36,20 +36,16 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     public function model(array $row)
     {
         try {
-            // Find employee by employee number or email
+            // Find employee by employee number only
             $employee = null;
-            
+
             if (!empty($row['employee_number'])) {
                 $employee = Employee::where('employee_number', $row['employee_number'])->first();
-            } elseif (!empty($row['email'])) {
-                $employee = Employee::whereHas('user', function($query) use ($row) {
-                    $query->where('email', $row['email']);
-                })->first();
             }
 
             if (!$employee) {
                 $this->errorCount++;
-                $this->errors[] = "Employee not found for row: " . json_encode($row);
+                $this->errors[] = "Employee not found for employee number: " . ($row['employee_number'] ?? 'N/A') . " in row: " . json_encode($row);
                 return null;
             }
 
@@ -79,8 +75,8 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
 
             // Check if record already exists
             $existingLog = TimeLog::where('employee_id', $employee->id)
-                                 ->where('log_date', $logDate->format('Y-m-d'))
-                                 ->first();
+                ->where('log_date', $logDate->format('Y-m-d'))
+                ->first();
 
             if ($existingLog && !$this->overwriteExisting) {
                 $this->skippedCount++;
@@ -109,9 +105,7 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
                 'late_hours' => $calculatedHours['late_hours'],
                 'undertime_hours' => $calculatedHours['undertime_hours'],
                 'log_type' => 'regular',
-                'status' => 'approved',
-                'approved_by' => Auth::id() ?? 1,
-                'approved_at' => now(),
+                'creation_method' => 'imported',
                 'remarks' => $row['remarks'] ?? null,
             ];
 
@@ -123,7 +117,6 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
                 $this->importedCount++;
                 return new TimeLog($timeLogData);
             }
-
         } catch (\Exception $e) {
             $this->errorCount++;
             $this->errors[] = "Error processing row: " . $e->getMessage() . " - Row data: " . json_encode($row);
@@ -148,19 +141,19 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
 
         $timeInCarbon = Carbon::parse($timeIn);
         $timeOutCarbon = Carbon::parse($timeOut);
-        
+
         // Handle next day time out
         if ($timeOutCarbon->lt($timeInCarbon)) {
             $timeOutCarbon->addDay();
         }
 
         $totalMinutes = $timeOutCarbon->diffInMinutes($timeInCarbon);
-        
+
         // Deduct break time
         if ($breakIn && $breakOut) {
             $breakInCarbon = Carbon::parse($breakIn);
             $breakOutCarbon = Carbon::parse($breakOut);
-            
+
             if ($breakOutCarbon->gt($breakInCarbon)) {
                 $breakMinutes = $breakOutCarbon->diffInMinutes($breakInCarbon);
                 $totalMinutes -= $breakMinutes;
@@ -171,13 +164,13 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         }
 
         $totalHours = max(0, $totalMinutes / 60); // Ensure no negative hours
-        
+
         // Standard work hours (8 hours)
         $standardHours = 8;
-        
+
         $regularHours = min($totalHours, $standardHours);
         $overtimeHours = max(0, $totalHours - $standardHours);
-        
+
         // Calculate late hours (assuming standard start time is 8:00 AM)
         $standardStartTime = Carbon::parse('08:00:00');
         $lateMinutes = max(0, $timeInCarbon->diffInMinutes($standardStartTime));
@@ -226,8 +219,7 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     public function rules(): array
     {
         return [
-            'employee_number' => 'required_without:email',
-            'email' => 'required_without:employee_number',
+            'employee_number' => 'required',
             'date' => 'required',
             'time_in' => 'required',
         ];
@@ -239,8 +231,7 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     public function customValidationMessages()
     {
         return [
-            'employee_number.required_without' => 'Either employee number or email is required.',
-            'email.required_without' => 'Either employee number or email is required.',
+            'employee_number.required' => 'Employee number is required.',
             'date.required' => 'Date is required.',
             'time_in.required' => 'Time in is required.',
         ];

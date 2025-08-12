@@ -1,80 +1,85 @@
-@extends('layouts.app')
-
-@section('content')
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <div class="page-title-box d-flex align-items-center justify-content-between">
-                <h4 class="page-title mb-0">Cash Advance Details</h4>
-                <div class="page-title-right">
-                    <a href="{{ route('cash-advances.index') }}" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left me-1"></i> Back to List
-                    </a>
-                </div>
-            </div>
+<x-app-layout>
+    <x-slot name="header">
+        <div class="flex justify-between items-center">
+            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+                Cash Advance Details
+            </h2>
+            <a href="{{ route('cash-advances.index') }}" 
+               class="inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+                Back to List
+            </a>
         </div>
-    </div>
+    </x-slot>
 
-    <div class="row">
+    <div class="py-6">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
         <div class="col-lg-8 col-12">
             <!-- Main Details Card -->
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">
-                        {{ $cashAdvance->reference_number }}
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg mb-6">
+                <div class="flex justify-between items-center p-6 border-b border-gray-200">
+                    <div class="flex items-center space-x-3">
+                        <h5 class="text-lg font-semibold text-gray-900">
+                            {{ $cashAdvance->reference_number }}
+                        </h5>
                         @switch($cashAdvance->status)
                             @case('pending')
-                                <span class="badge bg-warning ms-2">Pending</span>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>
                                 @break
                             @case('approved')
-                                <span class="badge bg-success ms-2">Approved</span>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Approved</span>
                                 @break
                             @case('rejected')
-                                <span class="badge bg-danger ms-2">Rejected</span>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>
                                 @break
                             @case('fully_paid')
-                                <span class="badge bg-info ms-2">Fully Paid</span>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Fully Paid</span>
                                 @break
                             @case('cancelled')
-                                <span class="badge bg-secondary ms-2">Cancelled</span>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Cancelled</span>
                                 @break
                         @endswitch
-                    </h5>
+                    </div>
                     
                     @if($cashAdvance->status === 'pending')
-                        <div class="btn-group">
+                        <div class="flex space-x-2">
                             @can('approve cash advances')
-                            <button type="button" class="btn btn-success btn-sm" 
+                            <button type="button" class="inline-flex items-center px-3 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150" 
                                     onclick="showApproveModal()">
-                                <i class="fas fa-check me-1"></i> Approve
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                Approve
                             </button>
-                            <button type="button" class="btn btn-danger btn-sm"
+                            <button type="button" class="inline-flex items-center px-3 py-2 bg-red-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-700 focus:bg-red-700 active:bg-red-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition ease-in-out duration-150"
                                     onclick="showRejectModal()">
-                                <i class="fas fa-times me-1"></i> Reject
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                                Reject
                             </button>
                             @endcan
                         </div>
                     @endif
                 </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">Employee</label>
+                <div class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Employee</label>
                             <div>
-                                {{ $cashAdvance->employee->full_name }}
-                                <br>
-                                <small class="text-muted">{{ $cashAdvance->employee->employee_number }}</small>
-                                <br>
-                                <small class="text-muted">{{ $cashAdvance->employee->department->name ?? 'No Department' }}</small>
+                                <div class="text-sm font-medium text-gray-900">{{ $cashAdvance->employee->full_name }}</div>
+                                <div class="text-sm text-gray-500">{{ $cashAdvance->employee->employee_number }}</div>
+                                <div class="text-sm text-gray-500">{{ $cashAdvance->employee->department->name ?? 'No Department' }}</div>
                             </div>
                         </div>
                         
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">Requested By</label>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Requested By</label>
                             <div>
-                                {{ $cashAdvance->requestedBy->name }}
-                                <br>
-                                <small class="text-muted">{{ $cashAdvance->requested_date->format('M d, Y g:i A') }}</small>
+                                <div class="text-sm font-medium text-gray-900">{{ $cashAdvance->requestedBy->name }}</div>
+                                <div class="text-sm text-gray-500">{{ $cashAdvance->requested_date->format('M d, Y g:i A') }}</div>
                             </div>
                         </div>
 
@@ -90,6 +95,23 @@
                         </div>
                         @endif
 
+                        @if($cashAdvance->interest_rate > 0)
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Interest Rate</label>
+                            <div class="fs-6 text-orange-600">{{ number_format($cashAdvance->interest_rate, 2) }}%</div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Interest Amount</label>
+                            <div class="fs-6 text-orange-600">₱{{ number_format($cashAdvance->interest_amount, 2) }}</div>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Total Amount</label>
+                            <div class="fs-5 text-danger">₱{{ number_format($cashAdvance->total_amount, 2) }}</div>
+                        </div>
+                        @endif
+
                         <div class="col-md-4">
                             <label class="form-label fw-bold">Outstanding Balance</label>
                             <div class="fs-5 {{ $cashAdvance->outstanding_balance > 0 ? 'text-warning' : 'text-success' }}">
@@ -101,10 +123,13 @@
                             <label class="form-label fw-bold">Installments</label>
                             <div>
                                 {{ $cashAdvance->installments }} month{{ $cashAdvance->installments > 1 ? 's' : '' }}
-                                @if($cashAdvance->approved_amount && $cashAdvance->installments)
+                                @if($cashAdvance->installment_amount)
                                 <br>
                                 <small class="text-muted">
-                                    ₱{{ number_format($cashAdvance->approved_amount / $cashAdvance->installments, 2) }} per month
+                                    ₱{{ number_format($cashAdvance->installment_amount, 2) }} per month
+                                    @if($cashAdvance->interest_rate > 0)
+                                        <span class="text-orange-600">(includes interest)</span>
+                                    @endif
                                 </small>
                                 @endif
                             </div>
@@ -256,8 +281,11 @@
                         @endcan
                     @endif
 
-                    <button type="button" class="btn btn-outline-primary w-100" onclick="window.print()">
-                        <i class="fas fa-print me-1"></i> Print Details
+                    <button type="button" class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150 w-full justify-center" onclick="window.print()">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                        </svg>
+                        Print Details
                     </button>
                 </div>
             </div>
@@ -268,88 +296,177 @@
 <!-- Approve Modal -->
 @can('approve cash advances')
 @if($cashAdvance->status === 'pending')
-<div class="modal fade" id="approveModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form action="{{ route('cash-advances.approve', $cashAdvance) }}" method="POST">
-                @csrf
-                <div class="modal-header">
-                    <h5 class="modal-title">Approve Cash Advance</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to approve cash advance <strong>{{ $cashAdvance->reference_number }}</strong>?</p>
-                    
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label for="approved_amount" class="form-label">Approved Amount *</label>
-                            <input type="number" class="form-control" id="approved_amount" name="approved_amount" 
-                                   value="{{ $cashAdvance->requested_amount }}"
-                                   step="0.01" min="100" max="{{ $cashAdvance->requested_amount }}" required>
-                        </div>
-                        <div class="col-12">
-                            <label for="installments" class="form-label">Number of Installments *</label>
-                            <select class="form-select" id="installments" name="installments" required>
-                                @for($i = 1; $i <= 12; $i++)
-                                <option value="{{ $i }}" {{ $cashAdvance->installments == $i ? 'selected' : '' }}>
-                                    {{ $i }} month{{ $i > 1 ? 's' : '' }}
-                                </option>
-                                @endfor
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label for="remarks" class="form-label">Remarks</label>
-                            <textarea class="form-control" id="remarks" name="remarks" rows="3"></textarea>
+<div id="approveModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white">
+        <form action="{{ route('cash-advances.approve', $cashAdvance) }}" method="POST">
+            @csrf
+            <div class="flex items-center justify-between p-5 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Approve Cash Advance</h3>
+                <button type="button" onclick="closeModal('approveModal')" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6">
+                <p class="mb-4 text-gray-700">Are you sure you want to approve cash advance <strong>{{ $cashAdvance->reference_number }}</strong>?</p>
+                
+                <div class="grid gap-4">
+                    <div>
+                        <label for="approved_amount" class="block text-sm font-medium text-gray-700 mb-1">Approved Amount *</label>
+                        <input type="number" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-jade-500 focus:border-jade-500" 
+                               id="approved_amount" name="approved_amount" 
+                               value="{{ $cashAdvance->requested_amount }}"
+                               step="0.01" min="100" max="{{ $cashAdvance->requested_amount }}" required>
+                    </div>
+                    <div>
+                        <label for="installments" class="block text-sm font-medium text-gray-700 mb-1">Number of Installments *</label>
+                        <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-jade-500 focus:border-jade-500" 
+                                id="installments" name="installments" required onchange="calculateApprovalTotals()">
+                            @for($i = 1; $i <= 12; $i++)
+                            <option value="{{ $i }}" {{ $cashAdvance->installments == $i ? 'selected' : '' }}>
+                                {{ $i }} month{{ $i > 1 ? 's' : '' }}
+                            </option>
+                            @endfor
+                        </select>
+                    </div>
+                    <div>
+                        <label for="interest_rate" class="block text-sm font-medium text-gray-700 mb-1">Interest Rate (%)</label>
+                        <input type="number" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-jade-500 focus:border-jade-500" 
+                               id="interest_rate" name="interest_rate" 
+                               value="{{ $cashAdvance->interest_rate ?? 0 }}"
+                               step="0.01" min="0" max="100" onchange="calculateApprovalTotals()">
+                        <p class="text-sm text-gray-500 mt-1">Leave 0 for no interest</p>
+                    </div>
+                    <div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <div class="grid grid-cols-3 gap-4 text-center">
+                                <div>
+                                    <p class="text-sm text-gray-600">Interest Amount</p>
+                                    <div class="font-bold text-amber-600" id="modal_interest_amount">₱0.00</div>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-600">Total Amount</p>
+                                    <div class="font-bold text-red-600" id="modal_total_amount">₱0.00</div>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-600">Monthly Deduction</p>
+                                    <div class="font-bold text-jade-600" id="modal_monthly_deduction">₱0.00</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    <div>
+                        <label for="remarks" class="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
+                        <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-jade-500 focus:border-jade-500" 
+                                  id="remarks" name="remarks" rows="3"></textarea>
+                    </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success">Approve</button>
-                </div>
-            </form>
-        </div>
+            </div>
+            <div class="flex items-center justify-end p-6 border-t border-gray-200 space-x-2">
+                <button type="button" onclick="closeModal('approveModal')" 
+                        class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition duration-200">Cancel</button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200">Approve</button>
+            </div>
+        </form>
     </div>
 </div>
 
 <!-- Reject Modal -->
-<div class="modal fade" id="rejectModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form action="{{ route('cash-advances.reject', $cashAdvance) }}" method="POST">
-                @csrf
-                <div class="modal-header">
-                    <h5 class="modal-title">Reject Cash Advance</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<div id="rejectModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
+        <form action="{{ route('cash-advances.reject', $cashAdvance) }}" method="POST">
+            @csrf
+            <div class="flex items-center justify-between p-5 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Reject Cash Advance</h3>
+                <button type="button" onclick="closeModal('rejectModal')" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6">
+                <p class="mb-4 text-gray-700">Are you sure you want to reject cash advance <strong>{{ $cashAdvance->reference_number }}</strong>?</p>
+                
+                <div>
+                    <label for="reject_remarks" class="block text-sm font-medium text-gray-700 mb-1">Reason for rejection *</label>
+                    <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-jade-500 focus:border-jade-500" 
+                              id="reject_remarks" name="remarks" rows="3" required></textarea>
                 </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to reject cash advance <strong>{{ $cashAdvance->reference_number }}</strong>?</p>
-                    
-                    <div class="mb-3">
-                        <label for="reject_remarks" class="form-label">Reason for rejection *</label>
-                        <textarea class="form-control" id="reject_remarks" name="remarks" rows="3" required></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">Reject</button>
-                </div>
-            </form>
-        </div>
+            </div>
+            <div class="flex items-center justify-end p-6 border-t border-gray-200 space-x-2">
+                <button type="button" onclick="closeModal('rejectModal')" 
+                        class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition duration-200">Cancel</button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition duration-200">Reject</button>
+            </div>
+        </form>
     </div>
 </div>
 @endif
 @endcan
-@endsection
 
-@push('scripts')
 <script>
 function showApproveModal() {
-    new bootstrap.Modal(document.getElementById('approveModal')).show();
+    calculateApprovalTotals(); // Calculate on modal open
+    document.getElementById('approveModal').classList.remove('hidden');
 }
 
 function showRejectModal() {
-    new bootstrap.Modal(document.getElementById('rejectModal')).show();
+    document.getElementById('rejectModal').classList.remove('hidden');
 }
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.add('hidden');
+}
+
+function calculateApprovalTotals() {
+    const approvedAmount = parseFloat(document.getElementById('approved_amount').value) || 0;
+    const interestRate = parseFloat(document.getElementById('interest_rate').value) || 0;
+    const installments = parseInt(document.getElementById('installments').value) || 0;
+    
+    if (approvedAmount > 0) {
+        // Calculate interest amount
+        const interestAmount = (approvedAmount * interestRate) / 100;
+        document.getElementById('modal_interest_amount').textContent = `₱${interestAmount.toFixed(2)}`;
+        
+        // Calculate total amount (principal + interest)
+        const totalAmount = approvedAmount + interestAmount;
+        document.getElementById('modal_total_amount').textContent = `₱${totalAmount.toFixed(2)}`;
+        
+        // Calculate monthly deduction
+        if (installments > 0) {
+            const monthlyDeduction = totalAmount / installments;
+            document.getElementById('modal_monthly_deduction').textContent = `₱${monthlyDeduction.toFixed(2)}`;
+        } else {
+            document.getElementById('modal_monthly_deduction').textContent = '₱0.00';
+        }
+    } else {
+        document.getElementById('modal_interest_amount').textContent = '₱0.00';
+        document.getElementById('modal_total_amount').textContent = '₱0.00';
+        document.getElementById('modal_monthly_deduction').textContent = '₱0.00';
+    }
+}
+
+// Add event listener for approved amount changes
+document.addEventListener('DOMContentLoaded', function() {
+    const approvedAmountInput = document.getElementById('approved_amount');
+    if (approvedAmountInput) {
+        approvedAmountInput.addEventListener('input', calculateApprovalTotals);
+    }
+    
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        const approveModal = document.getElementById('approveModal');
+        const rejectModal = document.getElementById('rejectModal');
+        if (event.target == approveModal) {
+            approveModal.classList.add('hidden');
+        }
+        if (event.target == rejectModal) {
+            rejectModal.classList.add('hidden');
+        }
+    }
+});
 </script>
-@endpush
+</x-app-layout>

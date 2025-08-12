@@ -266,8 +266,25 @@
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
                                             @if($detail->allowances > 0)
-                                                <!-- Active Allowance Settings (if dynamic) -->
-                                                @if(isset($isDynamic) && $isDynamic && $allowanceSettings->isNotEmpty())
+                                                <!-- Show Calculated Allowance Breakdown -->
+                                                @if($detail->earnings_breakdown)
+                                                    @php
+                                                        $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
+                                                        $allowanceDetails = $earningsBreakdown['allowances'] ?? [];
+                                                    @endphp
+                                                    @if(!empty($allowanceDetails))
+                                                        <div class="mb-2 p-2 bg-green-50 rounded border border-green-200">
+                                                            <div class="text-xs font-medium text-green-800 mb-1">Allowance Details:</div>
+                                                            @foreach($allowanceDetails as $code => $allowanceData)
+                                                                <div class="text-xs text-green-700 flex justify-between">
+                                                                    <span>{{ $allowanceData['name'] ?? $code }}:</span>
+                                                                    <span>₱{{ number_format($allowanceData['amount'] ?? $allowanceData, 2) }}</span>
+                                                                </div>
+                                                            @endforeach
+                                                        </div>
+                                                    @endif
+                                                @elseif(isset($isDynamic) && $isDynamic && $allowanceSettings->isNotEmpty())
+                                                    <!-- Fallback: Show Active Settings if no breakdown available -->
                                                     <div class="mb-2 p-2 bg-green-50 rounded border border-green-200">
                                                         <div class="text-xs font-medium text-green-800 mb-1">Active Settings:</div>
                                                         @foreach($allowanceSettings as $setting)
@@ -276,6 +293,9 @@
                                                                 <span>
                                                                     @if($setting->calculation_type === 'fixed_amount')
                                                                         ₱{{ number_format($setting->fixed_amount, 2) }}
+                                                                        @if($setting->frequency === 'daily')
+                                                                            <span class="text-green-600">/day</span>
+                                                                        @endif
                                                                     @elseif($setting->calculation_type === 'percentage')
                                                                         {{ $setting->rate_percentage }}%
                                                                     @else
@@ -325,9 +345,75 @@
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
-                                            <div class="font-medium text-red-600">
-                                                ₱{{ number_format($detail->total_deductions, 2) }}
-                                            </div>
+                                            @if($detail->total_deductions > 0)
+                                                <!-- Show Government Contributions with EE/ER Share -->
+                                                <div class="mb-2 p-2 bg-red-50 rounded border border-red-200">
+                                                    <div class="text-xs font-medium text-red-800 mb-1">Deductions (EE Share):</div>
+                                                    
+                                                    @if($detail->sss_contribution > 0)
+                                                        <div class="text-xs text-red-700 flex justify-between">
+                                                            <span>SSS ({{ number_format($detail->sss_contribution, 2) }}):</span>
+                                                            <span>₱{{ number_format($detail->sss_contribution, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                    
+                                                    @if($detail->philhealth_contribution > 0)
+                                                        <div class="text-xs text-red-700 flex justify-between">
+                                                            <span>PHIC ({{ number_format($detail->philhealth_contribution, 2) }}):</span>
+                                                            <span>₱{{ number_format($detail->philhealth_contribution, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                    
+                                                    @if($detail->pagibig_contribution > 0)
+                                                        <div class="text-xs text-red-700 flex justify-between">
+                                                            <span>HDMF ({{ number_format($detail->pagibig_contribution, 2) }}):</span>
+                                                            <span>₱{{ number_format($detail->pagibig_contribution, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                    
+                                                    @if($detail->withholding_tax > 0)
+                                                        <div class="text-xs text-red-700 flex justify-between">
+                                                            <span>TAX ({{ number_format($detail->withholding_tax, 2) }}):</span>
+                                                            <span>₱{{ number_format($detail->withholding_tax, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                    
+                                                    @if($detail->late_deductions > 0)
+                                                        <div class="text-xs text-red-700 flex justify-between">
+                                                            <span>LATE ({{ number_format($detail->late_deductions, 2) }}):</span>
+                                                            <span>₱{{ number_format($detail->late_deductions, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                    
+                                                    @if($detail->undertime_deductions > 0)
+                                                        <div class="text-xs text-red-700 flex justify-between">
+                                                            <span>UT ({{ number_format($detail->undertime_deductions, 2) }}):</span>
+                                                            <span>₱{{ number_format($detail->undertime_deductions, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                    
+                                                    @if($detail->cash_advance_deductions > 0)
+                                                        <div class="text-xs text-red-700 flex justify-between">
+                                                            <span>CA ({{ number_format($detail->cash_advance_deductions, 2) }}):</span>
+                                                            <span>₱{{ number_format($detail->cash_advance_deductions, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                    
+                                                    @if($detail->other_deductions > 0)
+                                                        <div class="text-xs text-red-700 flex justify-between">
+                                                            <span>OTHER ({{ number_format($detail->other_deductions, 2) }}):</span>
+                                                            <span>₱{{ number_format($detail->other_deductions, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                                
+                                                <div class="font-medium text-red-600">
+                                                    ₱{{ number_format($detail->total_deductions, 2) }}
+                                                </div>
+                                            @else
+                                                <div class="text-gray-400">₱0.00</div>
+                                            @endif
+                                            
                                             @if(isset($isDynamic) && $isDynamic)
                                                 <div class="text-xs text-red-500">
                                                     <span class="inline-flex items-center">
@@ -348,6 +434,7 @@
                                                 </div>
                                             @endif
                                         </div>
+                                    </td>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="font-bold text-purple-600">₱{{ number_format($detail->net_pay, 2) }}</div>
@@ -500,9 +587,6 @@
                                                     Late: {{ number_format($timeLog->late_hours, 1) }}h
                                                 </div>
                                                 @endif
-                                                <div class="text-xs text-gray-500">
-                                                    {{ ucfirst($timeLog->status ?? 'pending') }}
-                                                </div>
                                             </div>
                                         @else
                                             <div class="text-gray-300">-</div>

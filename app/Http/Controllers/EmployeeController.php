@@ -32,13 +32,13 @@ class EmployeeController extends Controller
         // Apply filters
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('employee_number', 'like', "%{$search}%")
-                  ->orWhereHas('user', function($userQuery) use ($search) {
-                      $userQuery->where('email', 'like', "%{$search}%");
-                  });
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('employee_number', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('email', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -80,16 +80,15 @@ class EmployeeController extends Controller
 
         // Calculate performance metrics for active employees
         $performanceData = Employee::where('employment_status', 'active')
-            ->with(['timeLogs' => function($query) use ($startOfMonth, $endOfMonth) {
-                $query->whereBetween('log_date', [$startOfMonth, $endOfMonth])
-                      ->where('status', 'approved');
+            ->with(['timeLogs' => function ($query) use ($startOfMonth, $endOfMonth) {
+                $query->whereBetween('log_date', [$startOfMonth, $endOfMonth]);
             }])
             ->get()
-            ->map(function($employee) {
+            ->map(function ($employee) {
                 $totalHours = $employee->timeLogs->sum('regular_hours');
                 $hourlyRate = $employee->hourly_rate ?: ($employee->basic_salary / 22 / 8); // fallback calculation
                 $calculatedSalary = $totalHours * $hourlyRate;
-                
+
                 return [
                     'employee' => $employee,
                     'total_hours' => $totalHours,
@@ -97,13 +96,13 @@ class EmployeeController extends Controller
                     'avg_daily_hours' => $employee->timeLogs->count() > 0 ? $totalHours / $employee->timeLogs->count() : 0,
                 ];
             })
-            ->filter(function($data) {
+            ->filter(function ($data) {
                 return $data['total_hours'] > 0; // Only include employees with DTR records
             });
 
         // Top 5 performers (highest calculated salary)
         $topPerformers = $performanceData->sortByDesc('calculated_salary')->take(5);
-        
+
         // Least 5 performers (lowest calculated salary but still have some hours)
         $leastPerformers = $performanceData->sortBy('calculated_salary')->take(5);
 
@@ -123,7 +122,7 @@ class EmployeeController extends Controller
         $daySchedules = DaySchedule::active()->get();
         $roles = Role::whereIn('name', ['HR Head', 'HR Staff', 'Employee'])->get();
         $paySchedules = \App\Models\PayScheduleSetting::all();
-        
+
         // Get employee default settings
         $employeeSettings = [
             'employee_number_prefix' => Cache::get('employee_setting_employee_number_prefix', 'EMP'),
@@ -137,7 +136,7 @@ class EmployeeController extends Controller
             'default_pay_schedule' => Cache::get('employee_setting_default_pay_schedule'),
             'default_paid_leaves' => Cache::get('employee_setting_default_paid_leaves', 15),
         ];
-        
+
         // Get active deduction settings for salary calculation preview
         $deductionSettings = \App\Models\DeductionSetting::active()->get();
 
@@ -152,8 +151,8 @@ class EmployeeController extends Controller
         $this->authorize('create employees');
 
         // Create conditional validation rules for paid_leaves
-        $paidLeavesRule = $request->benefits_status === 'without_benefits' 
-            ? 'nullable|integer|min:0|max:365' 
+        $paidLeavesRule = $request->benefits_status === 'without_benefits'
+            ? 'nullable|integer|min:0|max:365'
             : 'required|integer|min:0|max:365';
 
         $validated = $request->validate([
@@ -200,13 +199,13 @@ class EmployeeController extends Controller
             // Map employment status to user status
             $userStatusMap = [
                 'active' => 'active',
-                'inactive' => 'inactive', 
+                'inactive' => 'inactive',
                 'terminated' => 'inactive',
                 'resigned' => 'inactive'
             ];
-            
+
             $userStatus = $userStatusMap[$validated['employment_status']] ?? 'active';
-            
+
             // Create user account
             $user = User::create([
                 'name' => trim("{$validated['first_name']} {$validated['last_name']}"),
@@ -223,17 +222,16 @@ class EmployeeController extends Controller
             // Create employee record
             $employeeData = collect($validated)->except(['email', 'role'])->toArray();
             $employeeData['user_id'] = $user->id;
-            
+
             // Set paid_leaves to null if benefits_status is without_benefits and paid_leaves is empty
             if ($employeeData['benefits_status'] === 'without_benefits' && empty($employeeData['paid_leaves'])) {
                 $employeeData['paid_leaves'] = null;
             }
-            
+
             $employee = Employee::create($employeeData);
 
             return redirect()->route('employees.show', $employee)
-                           ->with('success', "Employee created successfully! Default password is: {$validated['employee_number']}");
-
+                ->with('success', "Employee created successfully! Default password is: {$validated['employee_number']}");
         } catch (\Exception $e) {
             // Log the detailed error for debugging
             Log::error('Employee creation failed', [
@@ -242,14 +240,14 @@ class EmployeeController extends Controller
                 'input' => $request->except(['password']),
                 'user_id' => $user->id ?? null
             ]);
-            
+
             // If user was created but employee creation failed, clean up the user
             if (isset($user) && $user->exists) {
                 $user->delete();
             }
-            
+
             return back()->withInput()
-                        ->withErrors(['error' => 'Failed to create employee: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Failed to create employee: ' . $e->getMessage()]);
         }
     }
 
@@ -290,8 +288,8 @@ class EmployeeController extends Controller
         $this->authorize('edit employees');
 
         // Create conditional validation rules for paid_leaves
-        $paidLeavesRule = $request->benefits_status === 'without_benefits' 
-            ? 'nullable|integer|min:0|max:365' 
+        $paidLeavesRule = $request->benefits_status === 'without_benefits'
+            ? 'nullable|integer|min:0|max:365'
             : 'required|integer|min:0|max:365';
 
         $validated = $request->validate([
@@ -339,17 +337,17 @@ class EmployeeController extends Controller
                 'employee_id' => $employee->id,
                 'validated_data' => $validated
             ]);
-            
+
             // Map employment status to user status
             $userStatusMap = [
                 'active' => 'active',
-                'inactive' => 'inactive', 
+                'inactive' => 'inactive',
                 'terminated' => 'inactive',
                 'resigned' => 'inactive'
             ];
-            
+
             $userStatus = $userStatusMap[$validated['employment_status']] ?? 'active';
-            
+
             // Update user account
             $employee->user->update([
                 'name' => trim("{$validated['first_name']} {$validated['last_name']}"),
@@ -363,14 +361,14 @@ class EmployeeController extends Controller
 
             // Update employee record
             $employeeData = collect($validated)->except(['email', 'role'])->toArray();
-            
+
             // Set paid_leaves to null if benefits_status is without_benefits and paid_leaves is empty
             if ($employeeData['benefits_status'] === 'without_benefits' && empty($employeeData['paid_leaves'])) {
                 $employeeData['paid_leaves'] = null;
             }
-            
+
             $employee->update($employeeData);
-            
+
             Log::info('Employee updated successfully', [
                 'employee_id' => $employee->id,
                 'new_employment_status' => $employee->fresh()->employment_status,
@@ -378,11 +376,10 @@ class EmployeeController extends Controller
             ]);
 
             return redirect()->route('employees.show', $employee)
-                           ->with('success', 'Employee updated successfully!');
-
+                ->with('success', 'Employee updated successfully!');
         } catch (\Exception $e) {
             return back()->withInput()
-                        ->withErrors(['error' => 'Failed to update employee: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Failed to update employee: ' . $e->getMessage()]);
         }
     }
 
@@ -397,23 +394,22 @@ class EmployeeController extends Controller
             // Prevent deletion of System Administrator
             if ($employee->user && $employee->user->hasRole('System Admin')) {
                 return redirect()->route('employees.index')
-                               ->with('error', 'Cannot delete System Administrator account.');
+                    ->with('error', 'Cannot delete System Administrator account.');
             }
-            
+
             // Prevent users from deleting their own employee record
             if (Auth::user()->employee && Auth::user()->employee->id === $employee->id) {
                 return redirect()->route('employees.index')
-                               ->with('error', 'You cannot delete your own employee record.');
+                    ->with('error', 'You cannot delete your own employee record.');
             }
 
             $employeeName = $employee->full_name;
-            
+
             // Delete the user account (this will cascade delete the employee)
             $employee->user->delete();
 
             return redirect()->route('employees.index')
-                           ->with('success', "Employee {$employeeName} deleted successfully!");
-
+                ->with('success', "Employee {$employeeName} deleted successfully!");
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Failed to delete employee: ' . $e->getMessage()]);
         }
@@ -426,8 +422,8 @@ class EmployeeController extends Controller
     {
         $year = date('Y');
         $lastEmployee = Employee::where('employee_number', 'like', "EMP-{$year}-%")
-                               ->orderBy('employee_number', 'desc')
-                               ->first();
+            ->orderBy('employee_number', 'desc')
+            ->first();
 
         if ($lastEmployee) {
             $lastNumber = (int) substr($lastEmployee->employee_number, -4);
@@ -438,7 +434,7 @@ class EmployeeController extends Controller
 
         return "EMP-{$year}-{$newNumber}";
     }
-    
+
     /**
      * Calculate deductions for salary preview
      */
@@ -447,33 +443,33 @@ class EmployeeController extends Controller
         $salary = (float) $request->input('salary', 0);
         $benefitsStatus = $request->input('benefits_status');
         $paySchedule = $request->input('pay_schedule');
-        
+
         if ($salary <= 0) {
             return response()->json(['deductions' => [], 'total_deductions' => 0, 'net_pay' => 0]);
         }
-        
+
         $deductions = [];
         $totalDeductions = 0;
-        
+
         // Calculate basic pay components
         $basicPay = $salary; // Assuming salary input is basic pay
         $overtime = 0;
         $bonus = 0;
         $allowances = 0;
         $grossPay = $basicPay + $overtime + $bonus + $allowances;
-        
+
         // Only calculate deductions if employee has benefits
         if ($benefitsStatus === 'with_benefits') {
             // Get active government deductions (SSS, PhilHealth, Pag-IBIG)
             $governmentDeductions = \App\Models\DeductionTaxSetting::active()
                 ->where('type', 'government')
                 ->get();
-            
+
             $governmentDeductionTotal = 0;
-            
+
             foreach ($governmentDeductions as $setting) {
                 $amount = $setting->calculateDeduction($basicPay, $overtime, $bonus, $allowances, $grossPay);
-                
+
                 if ($amount > 0) {
                     $deductions[] = [
                         'name' => $setting->name,
@@ -485,19 +481,19 @@ class EmployeeController extends Controller
                     $governmentDeductionTotal += $amount;
                 }
             }
-            
+
             // Calculate taxable income (gross pay minus government deductions)
             $taxableIncome = $grossPay - $governmentDeductionTotal;
-            
+
             // Get withholding tax deductions
             $taxDeductions = \App\Models\DeductionTaxSetting::active()
                 ->where('type', 'government')
                 ->where('tax_table_type', 'withholding_tax')
                 ->get();
-            
+
             foreach ($taxDeductions as $setting) {
                 $amount = $setting->calculateDeduction($basicPay, $overtime, $bonus, $allowances, $grossPay, $taxableIncome);
-                
+
                 if ($amount > 0) {
                     $deductions[] = [
                         'name' => $setting->name,
@@ -509,9 +505,9 @@ class EmployeeController extends Controller
                 }
             }
         }
-        
+
         $netPay = $grossPay - $totalDeductions;
-        
+
         return response()->json([
             'deductions' => $deductions,
             'total_deductions' => $totalDeductions,

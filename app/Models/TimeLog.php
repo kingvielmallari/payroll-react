@@ -13,7 +13,6 @@ class TimeLog extends Model
 
     protected $fillable = [
         'employee_id',
-        'payroll_id',
         'log_date',
         'time_in',
         'time_out',
@@ -25,12 +24,10 @@ class TimeLog extends Model
         'late_hours',
         'undertime_hours',
         'log_type',
+        'creation_method',
         'remarks',
         'is_holiday',
         'is_rest_day',
-        'status',
-        'approved_by',
-        'approved_at',
     ];
 
     protected $casts = [
@@ -46,7 +43,6 @@ class TimeLog extends Model
         'undertime_hours' => 'decimal:2',
         'is_holiday' => 'boolean',
         'is_rest_day' => 'boolean',
-        'approved_at' => 'datetime',
     ];
 
     /**
@@ -55,7 +51,7 @@ class TimeLog extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['time_in', 'time_out', 'total_hours', 'status'])
+            ->logOnly(['time_in', 'time_out', 'total_hours', 'creation_method'])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
     }
@@ -66,22 +62,6 @@ class TimeLog extends Model
     public function employee()
     {
         return $this->belongsTo(Employee::class);
-    }
-
-    /**
-     * Get the payroll that this time log belongs to.
-     */
-    public function payroll()
-    {
-        return $this->belongsTo(Payroll::class);
-    }
-
-    /**
-     * Get the user who approved the time log.
-     */
-    public function approver()
-    {
-        return $this->belongsTo(User::class, 'approved_by');
     }
 
     /**
@@ -110,11 +90,19 @@ class TimeLog extends Model
     }
 
     /**
-     * Check if approved.
+     * Check if created manually.
      */
-    public function isApproved()
+    public function isManual()
     {
-        return $this->status === 'approved';
+        return $this->creation_method === 'manual';
+    }
+
+    /**
+     * Check if imported from file.
+     */
+    public function isImported()
+    {
+        return $this->creation_method === 'imported';
     }
 
     /**
@@ -126,14 +114,6 @@ class TimeLog extends Model
     }
 
     /**
-     * Scope to filter by payroll.
-     */
-    public function scopeByPayroll($query, $payrollId)
-    {
-        return $query->where('payroll_id', $payrollId);
-    }
-
-    /**
      * Scope to filter by date range.
      */
     public function scopeByDateRange($query, $start, $end)
@@ -142,10 +122,26 @@ class TimeLog extends Model
     }
 
     /**
-     * Scope to filter approved logs.
+     * Scope to filter by creation method.
      */
-    public function scopeApproved($query)
+    public function scopeByCreationMethod($query, $method)
     {
-        return $query->where('status', 'approved');
+        return $query->where('creation_method', $method);
+    }
+
+    /**
+     * Scope to filter manual entries.
+     */
+    public function scopeManual($query)
+    {
+        return $query->where('creation_method', 'manual');
+    }
+
+    /**
+     * Scope to filter imported entries.
+     */
+    public function scopeImported($query)
+    {
+        return $query->where('creation_method', 'imported');
     }
 }

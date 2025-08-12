@@ -98,6 +98,45 @@
                                 @enderror
                             </div>
 
+                            <!-- Interest Rate -->
+                            <div>
+                                <label for="interest_rate" class="block text-sm font-medium text-gray-700">Interest Rate (%)</label>
+                                <div class="mt-1 relative rounded-md shadow-sm">
+                                    <input type="number" 
+                                           class="block w-full pr-12 sm:text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 @error('interest_rate') border-red-300 @enderror" 
+                                           id="interest_rate" name="interest_rate" 
+                                           value="{{ old('interest_rate', 0) }}" 
+                                           step="0.01" min="0" max="100"
+                                           onchange="calculateInstallment()">
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <span class="text-gray-500 sm:text-sm">%</span>
+                                    </div>
+                                </div>
+                                @error('interest_rate')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                                <p class="mt-1 text-sm text-gray-500">Leave 0 for no interest</p>
+                            </div>
+                        </div>
+
+                        <!-- Calculation Preview -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-4 rounded-lg">
+                            <!-- Interest Amount Preview -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Interest Amount</label>
+                                <div class="mt-1 text-sm font-semibold text-orange-600" id="interestAmount">
+                                    ₱0.00
+                                </div>
+                            </div>
+                            
+                            <!-- Total Amount Preview -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Total Amount</label>
+                                <div class="mt-1 text-sm font-semibold text-red-600" id="totalAmount">
+                                    ₱0.00
+                                </div>
+                            </div>
+
                             <!-- Monthly Deduction Preview -->
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Monthly Deduction</label>
@@ -105,6 +144,9 @@
                                     ₱0.00
                                 </div>
                             </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <!-- First Deduction Date -->
                             <div>
                                 <label for="first_deduction_date" class="block text-sm font-medium text-gray-700">First Deduction Date</label>
@@ -214,11 +256,27 @@
     function calculateInstallment() {
         const amount = parseFloat(document.getElementById('requested_amount').value) || 0;
         const installments = parseInt(document.getElementById('installments').value) || 0;
+        const interestRate = parseFloat(document.getElementById('interest_rate').value) || 0;
         
-        if (amount > 0 && installments > 0) {
-            const monthlyDeduction = amount / installments;
-            document.getElementById('monthlyDeduction').textContent = `₱${monthlyDeduction.toFixed(2)}`;
+        if (amount > 0) {
+            // Calculate interest amount
+            const interestAmount = (amount * interestRate) / 100;
+            document.getElementById('interestAmount').textContent = `₱${interestAmount.toFixed(2)}`;
+            
+            // Calculate total amount (principal + interest)
+            const totalAmount = amount + interestAmount;
+            document.getElementById('totalAmount').textContent = `₱${totalAmount.toFixed(2)}`;
+            
+            // Calculate monthly deduction
+            if (installments > 0) {
+                const monthlyDeduction = totalAmount / installments;
+                document.getElementById('monthlyDeduction').textContent = `₱${monthlyDeduction.toFixed(2)}`;
+            } else {
+                document.getElementById('monthlyDeduction').textContent = '₱0.00';
+            }
         } else {
+            document.getElementById('interestAmount').textContent = '₱0.00';
+            document.getElementById('totalAmount').textContent = '₱0.00';
             document.getElementById('monthlyDeduction').textContent = '₱0.00';
         }
     }

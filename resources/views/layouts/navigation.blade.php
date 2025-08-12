@@ -119,9 +119,47 @@
                     @endcan
 
                     {{-- Cash Advances - Available to all authenticated users --}}
-                    <x-nav-link :href="route('cash-advances.index')" :active="request()->routeIs('cash-advances.*')" class="whitespace-nowrap">
-                        {{ __('Cash Advances') }}
-                    </x-nav-link>
+                    <div class="relative inline-flex" x-data="{ open: false }">
+                        <button @click="open = ! open" 
+                                class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium leading-5 transition duration-150 ease-in-out focus:outline-none h-16
+                                {{ request()->routeIs('cash-advances.*') ? 'border-indigo-400 text-gray-900 focus:border-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:text-gray-700 focus:border-gray-300' }}">
+                            <span>{{ __('Cash Advances') }}</span>
+                            <svg class="ml-1 h-4 w-4 transition-transform duration-200 flex-shrink-0" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        
+                        <div x-show="open" @click.away="open = false" x-transition:enter="transition ease-out duration-200"
+                             x-transition:enter-start="opacity-0 transform scale-95" x-transition:enter-end="opacity-100 transform scale-100"
+                             x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 transform scale-100"
+                             x-transition:leave-end="opacity-0 transform scale-95"
+                             class="absolute top-full left-1/2 transform -translate-x-1/2 z-[60] mt-4 w-80 rounded-md bg-white shadow-xl ring-1 ring-black ring-opacity-5 focus:outline-none border border-gray-200 overflow-hidden"
+                             style="display: none;">
+                            <div class="py-2">
+                                <a href="{{ route('cash-advances.index') }}" 
+                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150">
+                                    <svg class="mr-4 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                                    </svg>
+                                    <div class="flex-1">
+                                        <div class="font-medium text-gray-900">View Cash Advances</div>
+                                        <div class="text-xs text-gray-500 mt-1">View all cash advance requests</div>
+                                    </div>
+                                </a>
+                                
+                                <a href="{{ route('cash-advances.create') }}" 
+                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150">
+                                    <svg class="mr-4 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                                    </svg>
+                                    <div class="flex-1">
+                                        <div class="font-medium text-gray-900">Add Cash Advance</div>
+                                        <div class="text-xs text-gray-500 mt-1">Submit a new cash advance request</div>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
 
                     @can('view time logs')
                     <div class="relative inline-flex" x-data="{ open: false }">

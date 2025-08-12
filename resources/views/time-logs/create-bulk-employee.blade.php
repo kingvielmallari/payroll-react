@@ -66,7 +66,9 @@
                     <form action="{{ route('time-logs.store-bulk') }}" method="POST" id="dtr-form">
                         @csrf
                         <input type="hidden" name="employee_id" value="{{ $selectedEmployee->id }}">
-                        <input type="hidden" name="payroll_id" value="{{ $payrollId }}">
+                        @if($payrollId)
+                            <input type="hidden" name="payroll_id" value="{{ $payrollId }}">
+                        @endif
                         <input type="hidden" name="redirect_to_payroll" value="1">
 
                         <!-- Bulk Actions -->
@@ -203,7 +205,11 @@
                             </div>
                             <button type="submit" 
                                     class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 active:bg-blue-900 focus:outline-none focus:border-blue-900 focus:ring ring-blue-300 disabled:opacity-25 transition ease-in-out duration-150">
-                                Save DTR & Return to Payroll
+                                @if($payrollId)
+                                    Save DTR & Return to Payroll
+                                @else
+                                    Save DTR
+                                @endif
                             </button>
                         </div>
                     </form>

@@ -119,7 +119,6 @@ class TimeLogController extends Controller
 
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
-            'payroll_id' => 'nullable|exists:payrolls,id',
             'log_date' => 'required|date|before_or_equal:today',
             'time_in' => 'required|date_format:H:i',
             'time_out' => 'nullable|date_format:H:i|after:time_in',
@@ -130,21 +129,6 @@ class TimeLogController extends Controller
             'is_holiday' => 'boolean',
             'is_rest_day' => 'boolean',
         ]);
-
-        // If no payroll_id provided, try to find a matching payroll for the date and employee
-        if (!$validated['payroll_id']) {
-            $matchingPayroll = Payroll::whereHas('payrollDetails', function ($query) use ($validated) {
-                $query->where('employee_id', $validated['employee_id']);
-            })
-                ->where('period_start', '<=', $validated['log_date'])
-                ->where('period_end', '>=', $validated['log_date'])
-                ->where('status', 'draft') // Only link to draft payrolls
-                ->first();
-
-            if ($matchingPayroll) {
-                $validated['payroll_id'] = $matchingPayroll->id;
-            }
-        }
 
         // Check if time log already exists for this employee and date
         $existingLog = TimeLog::where('employee_id', $validated['employee_id'])
@@ -203,7 +187,6 @@ class TimeLogController extends Controller
 
         $timeLog = TimeLog::create([
             'employee_id' => $validated['employee_id'],
-            'payroll_id' => $validated['payroll_id'],
             'log_date' => $validated['log_date'],
             'time_in' => $validated['time_in'],
             'time_out' => $validated['time_out'],
@@ -215,12 +198,10 @@ class TimeLogController extends Controller
             'late_hours' => $lateHours,
             'undertime_hours' => $undertimeHours,
             'log_type' => $validated['log_type'],
+            'creation_method' => 'manual',
             'remarks' => $validated['remarks'],
             'is_holiday' => $validated['is_holiday'] ?? false,
             'is_rest_day' => $validated['is_rest_day'] ?? false,
-            'status' => 'approved', // Auto-approve time logs
-            'approved_by' => Auth::id(),
-            'approved_at' => now(),
         ]);
 
         return redirect()->route('time-logs.show', $timeLog)
@@ -319,10 +300,7 @@ class TimeLogController extends Controller
     {
         $this->authorize('edit time logs');
 
-        if ($timeLog->status === 'approved') {
-            return redirect()->route('time-logs.show', $timeLog)
-                ->with('error', 'Approved time logs cannot be edited.');
-        }
+        // Time logs can now always be edited since approval system is removed
 
         $employees = Employee::with('user')
             ->where('employment_status', 'active')
@@ -339,14 +317,8 @@ class TimeLogController extends Controller
     {
         $this->authorize('edit time logs');
 
-        if ($timeLog->status === 'approved') {
-            return redirect()->route('time-logs.show', $timeLog)
-                ->with('error', 'Approved time logs cannot be edited.');
-        }
-
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
-            'payroll_id' => 'nullable|exists:payrolls,id',
             'log_date' => 'required|date|before_or_equal:today',
             'time_in' => 'required|date_format:H:i',
             'time_out' => 'nullable|date_format:H:i|after:time_in',
@@ -357,21 +329,6 @@ class TimeLogController extends Controller
             'is_holiday' => 'boolean',
             'is_rest_day' => 'boolean',
         ]);
-
-        // If no payroll_id provided, try to find a matching payroll for the date and employee
-        if (!$validated['payroll_id']) {
-            $matchingPayroll = Payroll::whereHas('payrollDetails', function ($query) use ($validated) {
-                $query->where('employee_id', $validated['employee_id']);
-            })
-                ->where('period_start', '<=', $validated['log_date'])
-                ->where('period_end', '>=', $validated['log_date'])
-                ->where('status', 'draft') // Only link to draft payrolls
-                ->first();
-
-            if ($matchingPayroll) {
-                $validated['payroll_id'] = $matchingPayroll->id;
-            }
-        }
 
         // Recalculate hours (same logic as store method)
         $timeIn = Carbon::createFromFormat('H:i', $validated['time_in']);
@@ -416,7 +373,6 @@ class TimeLogController extends Controller
 
         $timeLog->update([
             'employee_id' => $validated['employee_id'],
-            'payroll_id' => $validated['payroll_id'],
             'log_date' => $validated['log_date'],
             'time_in' => $validated['time_in'],
             'time_out' => $validated['time_out'],
@@ -443,13 +399,6 @@ class TimeLogController extends Controller
     public function destroy(TimeLog $timeLog)
     {
         $this->authorize('delete time logs');
-
-        // Only System Admin and HR Head can delete approved time logs
-        $user = Auth::user();
-        if ($timeLog->status === 'approved' && !$user->hasRole(['System Admin', 'HR Head'])) {
-            return redirect()->route('time-logs.index')
-                ->with('error', 'Only System Admin or HR Head can delete approved time logs.');
-        }
 
         $timeLog->delete();
 
@@ -683,10 +632,8 @@ class TimeLogController extends Controller
             'late_hours' => $lateHours,
             'undertime_hours' => $undertimeHours,
             'log_type' => 'regular',
+            'creation_method' => 'manual',
             'remarks' => $validated['remarks'],
-            'status' => 'approved', // Auto-approve time logs
-            'approved_by' => Auth::id(),
-            'approved_at' => now(),
         ]);
 
         return redirect()->route('my-time-logs')
@@ -769,9 +716,6 @@ class TimeLogController extends Controller
                     'remarks' => $validated['remarks'],
                     'is_holiday' => $validated['is_holiday'] ?? false,
                     'is_rest_day' => $validated['is_rest_day'] ?? false,
-                    'status' => 'approved', // Auto-approve DTR entries
-                    'approved_by' => Auth::id(),
-                    'approved_at' => now(),
                 ]
             );
 
@@ -1104,9 +1048,9 @@ class TimeLogController extends Controller
             'selectedEmployee',
             'dtrData',
             'currentPeriod',
-            'payrollId',
             'periodStart',
-            'periodEnd'
+            'periodEnd',
+            'payrollId'
         ));
     }
 
@@ -1124,7 +1068,6 @@ class TimeLogController extends Controller
 
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
-            'payroll_id' => 'nullable|exists:payrolls,id',
             'time_logs' => 'required|array',
             'time_logs.*.log_date' => 'required|date',
             'time_logs.*.time_in' => 'nullable|date_format:H:i',
@@ -1203,7 +1146,6 @@ class TimeLogController extends Controller
 
                 $timeLogData = [
                     'employee_id' => $validated['employee_id'],
-                    'payroll_id' => $validated['payroll_id'],
                     'log_date' => $logData['log_date'],
                     'time_in' => $logData['time_in'],
                     'time_out' => $logData['time_out'],
@@ -1215,10 +1157,10 @@ class TimeLogController extends Controller
                     'late_hours' => $lateHours,
                     'undertime_hours' => $undertimeHours,
                     'log_type' => $logData['log_type'],
+                    'creation_method' => 'manual',
                     'remarks' => $logData['remarks'],
                     'is_holiday' => $logData['is_holiday'] ?? false,
                     'is_rest_day' => $logData['is_rest_day'] ?? false,
-                    'status' => 'pending',
                 ];
 
                 if ($existingLog) {
