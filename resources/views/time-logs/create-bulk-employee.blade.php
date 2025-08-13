@@ -103,7 +103,7 @@
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">BREAK IN</th>
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">BREAK OUT</th>
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">TYPE</th>
-                                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">REMARKS</th>
+                                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ACTION</th>
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
@@ -153,10 +153,36 @@
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <select name="time_logs[{{ $index }}][log_type]" 
                                                         class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500">
-                                                    <option value="regular" {{ (!$day['is_weekend'] && !$day['is_holiday']) ? 'selected' : '' }}>Regular</option>
-                                                    <option value="rest_day" {{ $day['is_weekend'] ? 'selected' : '' }}>Rest Day</option>
-                                                    <option value="holiday" {{ $day['is_holiday'] ? 'selected' : '' }}>Holiday</option>
-                                                    <option value="overtime">Overtime</option>
+                                                    @foreach($logTypes as $value => $label)
+                                                        @php
+                                                            $selected = '';
+                                                            $dateKey = $day['date']->format('Y-m-d');
+                                                            $isHoliday = isset($holidays[$dateKey]);
+                                                            $holidayType = $isHoliday ? $holidays[$dateKey]->type : null;
+                                                            
+                                                            // Smart default selection logic based on actual display names
+                                                            if (!$day['is_weekend'] && !$isHoliday && $label === 'Regular Day') {
+                                                                // 1. Regular Day (default for weekdays without holidays)
+                                                                $selected = 'selected';
+                                                            } elseif ($day['is_weekend'] && !$isHoliday && $label === 'Rest Day') {
+                                                                // 2. Rest Day (default for weekends without holidays) 
+                                                                $selected = 'selected';
+                                                            } elseif ($isHoliday && $holidayType === 'regular' && !$day['is_weekend'] && $label === 'RE Holiday') {
+                                                                // 3. RE Holiday (default for active regular holidays on weekdays)
+                                                                $selected = 'selected';
+                                                            } elseif ($isHoliday && $holidayType === 'special' && !$day['is_weekend'] && $label === 'SP Holiday') {
+                                                                // 4. SP Holiday (default for active special holidays on weekdays)
+                                                                $selected = 'selected';
+                                                            } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'regular' && $label === 'Rest + RE Holiday') {
+                                                                // Rest Day + RE Holiday (weekend + regular holiday)
+                                                                $selected = 'selected';
+                                                            } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'special' && $label === 'Rest + SP Holiday') {
+                                                                // Rest Day + SE Holiday (weekend + special holiday)
+                                                                $selected = 'selected';
+                                                            }
+                                                        @endphp
+                                                        <option value="{{ $value }}" {{ $selected }}>{{ $label }}</option>
+                                                    @endforeach
                                                 </select>
                                                 @if($day['is_weekend'])
                                                     <input type="hidden" name="time_logs[{{ $index }}][is_rest_day]" value="1">
@@ -166,11 +192,20 @@
                                                 @endif
                                             </td>
                                             <td class="px-3 py-2">
-                                                <input type="text" 
-                                                       name="time_logs[{{ $index }}][remarks]" 
-                                                       value="{{ $day['remarks'] ?? '' }}"
-                                                       placeholder="Remarks..."
-                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500">
+                                                <div class="flex space-x-1">
+                                                    <button type="button" 
+                                                            onclick="setRegularHours({{ $index }})"
+                                                            class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                                                            title="Set 8:00 AM - 5:00 PM">
+                                                        Set Regular
+                                                    </button>
+                                                    <button type="button" 
+                                                            onclick="clearRowTimes({{ $index }})"
+                                                            class="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
+                                                            title="Clear all times for this row">
+                                                        Clear
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -268,6 +303,68 @@
                     input.value = '';
                 }
             });
+        }
+
+        function setRegularHours(rowIndex) {
+            // Set regular working hours for a specific row
+            const timeInInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_in]"]`);
+            const timeOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_out]"]`);
+            const breakInInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_in]"]`);
+            const breakOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_out]"]`);
+            const logTypeSelect = document.querySelector(`select[name="time_logs[${rowIndex}][log_type]"]`);
+            
+            if (timeInInput) timeInInput.value = '08:00';       // 8:00 AM
+            if (timeOutInput) timeOutInput.value = '17:00';     // 5:00 PM  
+            if (breakInInput) breakInInput.value = '12:00';     // 12:00 PM
+            if (breakOutInput) breakOutInput.value = '13:00';   // 1:00 PM
+            
+            // Set to "Regular Day" specifically 
+            if (logTypeSelect) {
+                for (let option of logTypeSelect.options) {
+                    if (option.text === 'Regular Day') {
+                        option.selected = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Trigger calculation if function exists
+            if (typeof calculateHours === 'function') {
+                calculateHours(rowIndex);
+            }
+        }
+
+        function clearRowTimes(rowIndex) {
+            // Clear all time entries for a specific row
+            const timeInInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_in]"]`);
+            const timeOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_out]"]`);
+            const breakInInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_in]"]`);
+            const breakOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_out]"]`);
+            const logTypeSelect = document.querySelector(`select[name="time_logs[${rowIndex}][log_type]"]`);
+            
+            if (timeInInput) timeInInput.value = '';
+            if (timeOutInput) timeOutInput.value = '';
+            if (breakInInput) breakInInput.value = '';
+            if (breakOutInput) breakOutInput.value = '';
+            
+            // Reset to "Regular Day" specifically instead of first option
+            if (logTypeSelect) {
+                for (let option of logTypeSelect.options) {
+                    if (option.text === 'Regular Day') {
+                        option.selected = true;
+                        break;
+                    }
+                }
+                // If "Regular Day" not found, fallback to first option
+                if (!logTypeSelect.value && logTypeSelect.options.length > 0) {
+                    logTypeSelect.selectedIndex = 0;
+                }
+            }
+            
+            // Trigger calculation if function exists
+            if (typeof calculateHours === 'function') {
+                calculateHours(rowIndex);
+            }
         }
 
         function calculateHours(rowIndex) {

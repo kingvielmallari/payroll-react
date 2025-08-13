@@ -216,7 +216,10 @@
                                         Employee
                                     </th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Basic Pay
+                                        Basic
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Holiday
                                     </th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Overtime
@@ -250,14 +253,40 @@
                                                     {{ $detail->employee->first_name }} {{ $detail->employee->last_name }}
                                                 </div>
                                                 <div class="text-sm text-gray-500">
-                                                    {{ $detail->employee->employee_number }} - {{ $detail->employee->position->title ?? 'No Position' }}
+                                                    {{ $detail->employee->employee_number }}
+                                                </div>
+                                                <div class="text-sm text-gray-500">
+                                                    {{ $detail->employee->position->title ?? 'No Position' }}
                                                 </div>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
-                                        <div class="font-bold text-blue-600">₱{{ number_format($detail->regular_pay, 2) }}</div>
-                                        <div class="text-xs text-gray-500">{{ number_format($detail->regular_hours ?? 0, 1) }} hrs</div>
+                                        @php 
+                                            $payBreakdown = $payBreakdownByEmployee[$detail->employee_id] ?? ['basic_pay' => 0, 'holiday_pay' => 0];
+                                            $basicPay = $payBreakdown['basic_pay'];
+                                            $regularWorkdayBreakdown = ($timeBreakdowns[$detail->employee_id] ?? [])['regular_workday'] ?? ['regular_hours' => 0, 'overtime_hours' => 0];
+                                            $basicRegularHours = $regularWorkdayBreakdown['regular_hours'];
+                                            $basicOvertimeHours = $regularWorkdayBreakdown['overtime_hours'];
+                                        @endphp
+                                        <div class="font-bold text-blue-600">₱{{ number_format($basicPay, 2) }}</div>
+                                        <div class="text-xs text-gray-500">{{ number_format($basicRegularHours + $basicOvertimeHours, 1) }} hrs</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                        @php 
+                                            $holidayPay = $payBreakdown['holiday_pay'];
+                                            // Calculate total holiday hours from all holiday types
+                                            $holidayTypes = ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'];
+                                            $totalHolidayHours = 0;
+                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            foreach ($holidayTypes as $type) {
+                                                if (isset($employeeBreakdown[$type])) {
+                                                    $totalHolidayHours += $employeeBreakdown[$type]['regular_hours'] + $employeeBreakdown[$type]['overtime_hours'];
+                                                }
+                                            }
+                                        @endphp
+                                        <div class="font-bold text-purple-600">₱{{ number_format($holidayPay, 2) }}</div>
+                                        <div class="text-xs text-gray-500">{{ number_format($totalHolidayHours, 1) }} hrs</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="font-bold text-orange-600">₱{{ number_format($detail->overtime_pay, 2) }}</div>
@@ -612,6 +641,95 @@
                             </tbody>
                         </table>
                     </div>
+                    
+                    <!-- Detailed Time Breakdown by Type -->
+                    @if(isset($timeBreakdowns) && !empty($timeBreakdowns))
+                    <div class="mt-8">
+                        <h4 class="text-lg font-medium text-gray-900 mb-4">Detailed Time & Pay Breakdown by Type</h4>
+                        <div class="space-y-6">
+                            @foreach($payroll->payrollDetails as $detail)
+                            @php 
+                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                            @endphp
+                            @if(!empty($employeeBreakdown))
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h5 class="font-medium text-gray-900 mb-3">
+                                    {{ $detail->employee->user->name }} 
+                                    <span class="text-sm font-normal text-blue-600">(₱{{ number_format($hourlyRate, 2) }}/hr)</span>
+                                </h5>
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    @foreach($employeeBreakdown as $logType => $breakdown)
+                                    @php
+                                        $rateConfig = $breakdown['rate_config'];
+                                        $displayName = $breakdown['display_name'] ?: $logType;
+                                        
+                                        // Calculate pay amounts using rate multipliers
+                                        $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.0;
+                                        $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
+                                        
+                                        $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                        $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                        $totalPay = $regularPay + $overtimePay;
+                                    @endphp
+                                    <div class="bg-white border border-gray-200 rounded-lg p-3">
+                                        <div class="font-medium text-gray-900 mb-2">{{ $displayName }}</div>
+                                        <div class="space-y-1 text-sm">
+                                            <div class="flex justify-between">
+                                                <span class="text-gray-600">Days:</span>
+                                                <span class="font-medium">{{ $breakdown['days_count'] }}</span>
+                                            </div>
+                                            
+                                            @if($breakdown['regular_hours'] > 0)
+                                            <div class="border-t pt-1">
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Regular Hours:</span>
+                                                    <span class="font-medium">{{ number_format($breakdown['regular_hours'], 1) }}h</span>
+                                                </div>
+                                                <div class="flex justify-between text-xs text-gray-500">
+                                                    <span>Rate:</span>
+                                                    <span>₱{{ number_format($hourlyRate, 2) }} × {{ number_format($regularMultiplier * 100, 0) }}%</span>
+                                                </div>
+                                                <div class="flex justify-between font-medium text-blue-600">
+                                                    <span>Regular Pay:</span>
+                                                    <span>₱{{ number_format($regularPay, 2) }}</span>
+                                                </div>
+                                            </div>
+                                            @endif
+                                            
+                                            @if($breakdown['overtime_hours'] > 0)
+                                            <div class="border-t pt-1">
+                                                <div class="flex justify-between">
+                                                    <span class="text-gray-600">Overtime Hours:</span>
+                                                    <span class="font-medium">{{ number_format($breakdown['overtime_hours'], 1) }}h</span>
+                                                </div>
+                                                <div class="flex justify-between text-xs text-gray-500">
+                                                    <span>Rate:</span>
+                                                    <span>₱{{ number_format($hourlyRate, 2) }} × {{ number_format($overtimeMultiplier * 100, 0) }}%</span>
+                                                </div>
+                                                <div class="flex justify-between font-medium text-orange-600">
+                                                    <span>OT Pay:</span>
+                                                    <span>₱{{ number_format($overtimePay, 2) }}</span>
+                                                </div>
+                                            </div>
+                                            @endif
+                                            
+                                            <div class="border-t pt-1">
+                                                <div class="flex justify-between font-bold text-green-600">
+                                                    <span>Total {{ $displayName }}:</span>
+                                                    <span>₱{{ number_format($totalPay, 2) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                            @endif
+                            @endforeach
+                        </div>
+                    </div>
+                    @endif
                     
                     <div class="mt-4 text-sm text-gray-600">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

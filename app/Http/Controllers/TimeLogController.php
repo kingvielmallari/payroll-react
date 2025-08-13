@@ -6,6 +6,8 @@ use App\Models\TimeLog;
 use App\Models\Employee;
 use App\Models\User;
 use App\Models\Payroll;
+use App\Models\PayrollRateConfiguration;
+use App\Models\Holiday;
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
@@ -107,7 +109,10 @@ class TimeLogController extends Controller
             ->orderBy('first_name')
             ->get();
 
-        return view('time-logs.create', compact('employees'));
+        // Get available log types from rate configurations
+        $logTypes = TimeLog::getAvailableLogTypes();
+
+        return view('time-logs.create', compact('employees', 'logTypes'));
     }
 
     /**
@@ -117,6 +122,9 @@ class TimeLogController extends Controller
     {
         $this->authorize('create time logs');
 
+        // Get available log types for validation
+        $availableLogTypes = array_keys(TimeLog::getAvailableLogTypes());
+
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'log_date' => 'required|date|before_or_equal:today',
@@ -124,7 +132,7 @@ class TimeLogController extends Controller
             'time_out' => 'nullable|date_format:H:i|after:time_in',
             'break_in' => 'nullable|date_format:H:i',
             'break_out' => 'nullable|date_format:H:i|after:break_in',
-            'log_type' => 'required|in:regular,overtime,holiday,rest_day',
+            'log_type' => 'required|in:' . implode(',', $availableLogTypes),
             'remarks' => 'nullable|string|max:500',
             'is_holiday' => 'boolean',
             'is_rest_day' => 'boolean',
@@ -307,7 +315,10 @@ class TimeLogController extends Controller
             ->orderBy('first_name')
             ->get();
 
-        return view('time-logs.edit', compact('timeLog', 'employees'));
+        // Get available log types from rate configurations
+        $logTypes = TimeLog::getAvailableLogTypes();
+
+        return view('time-logs.edit', compact('timeLog', 'employees', 'logTypes'));
     }
 
     /**
@@ -317,6 +328,9 @@ class TimeLogController extends Controller
     {
         $this->authorize('edit time logs');
 
+        // Get available log types for validation
+        $availableLogTypes = array_keys(TimeLog::getAvailableLogTypes());
+
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'log_date' => 'required|date|before_or_equal:today',
@@ -324,7 +338,7 @@ class TimeLogController extends Controller
             'time_out' => 'nullable|date_format:H:i|after:time_in',
             'break_in' => 'nullable|date_format:H:i',
             'break_out' => 'nullable|date_format:H:i|after:break_in',
-            'log_type' => 'required|in:regular,overtime,holiday,rest_day',
+            'log_type' => 'required|in:' . implode(',', $availableLogTypes),
             'remarks' => 'nullable|string|max:500',
             'is_holiday' => 'boolean',
             'is_rest_day' => 'boolean',
@@ -1018,7 +1032,10 @@ class TimeLogController extends Controller
             ]);
         }
 
-        return view('time-logs.create-bulk', compact('employees', 'selectedEmployee', 'dtrData', 'currentPeriod'));
+        // Get available log types from rate configurations
+        $logTypes = TimeLog::getAvailableLogTypes();
+
+        return view('time-logs.create-bulk', compact('employees', 'selectedEmployee', 'dtrData', 'currentPeriod', 'logTypes'));
     }
 
     /**
@@ -1044,13 +1061,24 @@ class TimeLogController extends Controller
 
         $dtrData = $this->generateDTRDataForPeriod($selectedEmployee, $periodStart, $periodEnd);
 
+        // Get available log types from rate configurations
+        $logTypes = TimeLog::getAvailableLogTypes();
+
+        // Get active holidays for the period to help with smart defaults
+        $holidays = \App\Models\Holiday::where('is_active', true)
+            ->whereBetween('date', [$periodStart, $periodEnd])
+            ->get()
+            ->keyBy('date');
+
         return view('time-logs.create-bulk-employee', compact(
             'selectedEmployee',
             'dtrData',
             'currentPeriod',
             'periodStart',
             'periodEnd',
-            'payrollId'
+            'payrollId',
+            'logTypes',
+            'holidays'
         ));
     }
 
@@ -1066,6 +1094,11 @@ class TimeLogController extends Controller
 
         $this->authorize('create time logs');
 
+        // Get available log types for validation
+        $availableLogTypes = PayrollRateConfiguration::where('is_active', true)
+            ->pluck('type_name')
+            ->toArray();
+
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'time_logs' => 'required|array',
@@ -1074,8 +1107,7 @@ class TimeLogController extends Controller
             'time_logs.*.time_out' => 'nullable|date_format:H:i',
             'time_logs.*.break_in' => 'nullable|date_format:H:i',
             'time_logs.*.break_out' => 'nullable|date_format:H:i',
-            'time_logs.*.log_type' => 'required|in:regular,overtime,holiday,rest_day',
-            'time_logs.*.remarks' => 'nullable|string|max:500',
+            'time_logs.*.log_type' => 'required|in:' . implode(',', $availableLogTypes),
             'time_logs.*.is_holiday' => 'boolean',
             'time_logs.*.is_rest_day' => 'boolean',
         ]);
@@ -1158,7 +1190,7 @@ class TimeLogController extends Controller
                     'undertime_hours' => $undertimeHours,
                     'log_type' => $logData['log_type'],
                     'creation_method' => 'manual',
-                    'remarks' => $logData['remarks'],
+                    'remarks' => $logData['remarks'] ?? null,
                     'is_holiday' => $logData['is_holiday'] ?? false,
                     'is_rest_day' => $logData['is_rest_day'] ?? false,
                 ];

@@ -128,10 +128,19 @@
                                             <select name="time_logs[{{ $index }}][log_type]" 
                                                     class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'bg-gray-100' : '' }}"
                                                     {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'readonly' : '' }}>
-                                                <option value="regular" {{ (!$day['is_holiday'] && !$day['is_weekend']) ? 'selected' : '' }}>Regular</option>
-                                                <option value="overtime">Overtime</option>
-                                                <option value="holiday" {{ $day['is_holiday'] ? 'selected' : '' }}>Holiday</option>
-                                                <option value="rest_day" {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'selected' : '' }}>Rest Day</option>
+                                                @foreach($logTypes as $value => $label)
+                                                    @php
+                                                        $selected = '';
+                                                        if (!$day['is_weekend'] && !$day['is_holiday'] && $label === 'Regular Workday') {
+                                                            $selected = 'selected';
+                                                        } elseif ($day['is_weekend'] && str_contains($label, 'Rest Day') && !str_contains($label, 'Holiday')) {
+                                                            $selected = 'selected';
+                                                        } elseif ($day['is_holiday'] && str_contains($label, 'Holiday') && !str_contains($label, 'Rest Day')) {
+                                                            $selected = 'selected';
+                                                        }
+                                                    @endphp
+                                                    <option value="{{ $value }}" {{ $selected }}>{{ $label }}</option>
+                                                @endforeach
                                             </select>
                                             <input type="hidden" name="time_logs[{{ $index }}][is_holiday]" value="{{ $day['is_holiday'] ? '1' : '0' }}">
                                             <input type="hidden" name="time_logs[{{ $index }}][is_rest_day]" value="{{ ($day['is_weekend'] && !$day['is_holiday']) ? '1' : '0' }}">

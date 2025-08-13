@@ -4,8 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class TimeLog extends Model
 {
@@ -23,7 +23,7 @@ class TimeLog extends Model
         'overtime_hours',
         'late_hours',
         'undertime_hours',
-        'log_type',
+        'log_type', // Now dynamic based on PayrollRateConfiguration
         'creation_method',
         'remarks',
         'is_holiday',
@@ -143,5 +143,56 @@ class TimeLog extends Model
     public function scopeImported($query)
     {
         return $query->where('creation_method', 'imported');
+    }
+
+    /**
+     * Get available log types from PayrollRateConfiguration
+     */
+    public static function getAvailableLogTypes()
+    {
+        $configurations = \App\Models\PayrollRateConfiguration::active()
+            ->orderBy('display_name')
+            ->get();
+
+        $logTypes = [];
+        foreach ($configurations as $config) {
+            // Use type_name as both key and value since that's what the database expects
+            $logTypes[$config->type_name] = $config->display_name;
+        }
+
+        return $logTypes;
+    }
+
+    /**
+     * Get rate configuration for this log type
+     */
+    public function getRateConfiguration()
+    {
+        return \App\Models\PayrollRateConfiguration::where('type_name', $this->log_type)
+            ->where('is_active', true)
+            ->first();
+    }
+
+    /**
+     * Calculate pay amount based on rate configuration
+     */
+    public function calculatePayAmount($hourlyRate)
+    {
+        $rateConfig = $this->getRateConfiguration();
+
+        if (!$rateConfig) {
+            // Fallback to regular workday rates
+            $regularAmount = $hourlyRate * $this->regular_hours;
+            $overtimeAmount = $hourlyRate * 1.25 * $this->overtime_hours;
+        } else {
+            $regularAmount = $hourlyRate * $rateConfig->regular_rate_multiplier * $this->regular_hours;
+            $overtimeAmount = $hourlyRate * $rateConfig->overtime_rate_multiplier * $this->overtime_hours;
+        }
+
+        return [
+            'regular_amount' => $regularAmount,
+            'overtime_amount' => $overtimeAmount,
+            'total_amount' => $regularAmount + $overtimeAmount,
+        ];
     }
 }

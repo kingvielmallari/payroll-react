@@ -14,7 +14,7 @@ use App\Models\PaidLeaveSetting;
 use App\Models\Holiday;
 use App\Models\PayrollSetting;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
+use App\Models\PayrollRateConfiguration;
 
 class FreshInstallationSeeder extends Seeder
 {
@@ -24,84 +24,135 @@ class FreshInstallationSeeder extends Seeder
     public function run(): void
     {
         $this->command->info('🚀 Starting fresh installation seeding...');
-        
+
         // 1. Create Permissions and Roles
         $this->createPermissionsAndRoles();
-        
+
         // 2. Create System Administrator User
         $this->createSystemAdministrator();
-        
+
         // 3. Create HR Head and HR Staff accounts
         $this->createHRAccounts();
-        
+
         // 4. Seed Pay Schedule Settings
         $this->seedPayScheduleSettings();
-        
+
         // 5. Seed Tax and Deduction Settings (with tax tables)
         $this->seedTaxAndDeductionSettings();
-        
+
         // 6. Seed Allowance and Bonus Settings
         $this->seedAllowanceBonusSettings();
-        
+
         // 7. Seed Paid Leave Settings
         $this->seedPaidLeaveSettings();
-        
+
         // 8. Seed Holiday Settings
         $this->seedHolidaySettings();
-        
+
         // 9. Seed Default Payroll Configuration Settings
         $this->seedPayrollConfigurationSettings();
-        
+
         $this->command->info('✅ Fresh installation seeding completed!');
     }
 
     private function createPermissionsAndRoles(): void
     {
         $this->command->info('📋 Creating permissions and roles...');
-        
+
         // Create all permissions
         $permissions = [
             // Dashboard
             'view dashboard',
-            
+
             // Employees
-            'view employees', 'create employees', 'edit employees', 'delete employees', 'manage employee documents',
-            
+            'view employees',
+            'create employees',
+            'edit employees',
+            'delete employees',
+            'manage employee documents',
+
             // Payrolls
-            'view payrolls', 'create payrolls', 'edit payrolls', 'delete payrolls', 'approve payrolls', 'process payrolls',
-            'generate payslips', 'send payslips',
-            
+            'view payrolls',
+            'create payrolls',
+            'edit payrolls',
+            'delete payrolls',
+            'approve payrolls',
+            'process payrolls',
+            'generate payslips',
+            'send payslips',
+
             // Time & Attendance
-            'view time logs', 'create time logs', 'edit time logs', 'delete time logs', 'approve time logs', 'import time logs',
-            
+            'view time logs',
+            'create time logs',
+            'edit time logs',
+            'delete time logs',
+            'approve time logs',
+            'import time logs',
+
             // Leave Management
-            'view leave requests', 'create leave requests', 'edit leave requests', 'delete leave requests', 'approve leave requests',
-            
+            'view leave requests',
+            'create leave requests',
+            'edit leave requests',
+            'delete leave requests',
+            'approve leave requests',
+
             // Deductions & Advances
-            'view deductions', 'create deductions', 'edit deductions', 'delete deductions',
-            'view cash advances', 'create cash advances', 'edit cash advances', 'delete cash advances', 'approve cash advances',
-            
+            'view deductions',
+            'create deductions',
+            'edit deductions',
+            'delete deductions',
+            'view cash advances',
+            'create cash advances',
+            'edit cash advances',
+            'delete cash advances',
+            'approve cash advances',
+
             // Schedules & Holidays
-            'view schedules', 'create schedules', 'edit schedules', 'delete schedules',
-            'view holidays', 'create holidays', 'edit holidays', 'delete holidays',
-            
+            'view schedules',
+            'create schedules',
+            'edit schedules',
+            'delete schedules',
+            'view holidays',
+            'create holidays',
+            'edit holidays',
+            'delete holidays',
+
             // Organization
-            'view departments', 'create departments', 'edit departments', 'delete departments',
-            'view positions', 'create positions', 'edit positions', 'delete positions',
-            
+            'view departments',
+            'create departments',
+            'edit departments',
+            'delete departments',
+            'view positions',
+            'create positions',
+            'edit positions',
+            'delete positions',
+
             // Reports
-            'view reports', 'export reports', 'generate reports',
-            'view payroll reports', 'view employee reports', 'view financial reports',
-            
+            'view reports',
+            'export reports',
+            'generate reports',
+            'view payroll reports',
+            'view employee reports',
+            'view financial reports',
+
             // Government Forms
-            'view government forms', 'generate government forms', 'export government forms',
-            'generate bir forms', 'generate sss forms', 'generate philhealth forms', 'generate pagibig forms',
-            
+            'view government forms',
+            'generate government forms',
+            'export government forms',
+            'generate bir forms',
+            'generate sss forms',
+            'generate philhealth forms',
+            'generate pagibig forms',
+
             // Settings & Administration
-            'view settings', 'edit settings', 'view activity logs',
-            
+            'view settings',
+            'edit settings',
+            'view activity logs',
+
             // Profile
-            'view own profile', 'edit own profile', 'view own payslips',
+            'view own profile',
+            'edit own profile',
+            'view own payslips',
         ];
 
         foreach ($permissions as $permission) {
@@ -122,18 +173,22 @@ class FreshInstallationSeeder extends Seeder
 
         // HR Staff - All except employee creation/editing and settings
         $hrStaffPermissions = Permission::whereNotIn('name', [
-            'create employees', 
-            'edit employees', 
+            'create employees',
+            'edit employees',
             'delete employees',
-            'view settings', 
+            'view settings',
             'edit settings'
         ])->get();
         $hrStaff->syncPermissions($hrStaffPermissions);
 
         // Employee - Basic permissions
         $employeePermissions = [
-            'view dashboard', 'view own profile', 'edit own profile', 'view own payslips',
-            'view leave requests', 'create leave requests'
+            'view dashboard',
+            'view own profile',
+            'edit own profile',
+            'view own payslips',
+            'view leave requests',
+            'create leave requests'
         ];
         $employee->syncPermissions($employeePermissions);
     }
@@ -141,7 +196,7 @@ class FreshInstallationSeeder extends Seeder
     private function createSystemAdministrator(): void
     {
         $this->command->info('👤 Creating System Administrator account...');
-        
+
         $systemAdmin = User::firstOrCreate(
             ['email' => 'admin@payroll.com'],
             [
@@ -159,7 +214,7 @@ class FreshInstallationSeeder extends Seeder
     private function createHRAccounts(): void
     {
         $this->command->info('👥 Creating HR accounts...');
-        
+
         // HR Head
         $hrHead = User::firstOrCreate(
             ['email' => 'hr.head@payroll.com'],
@@ -190,7 +245,7 @@ class FreshInstallationSeeder extends Seeder
     private function seedPayScheduleSettings(): void
     {
         $this->command->info('📅 Seeding pay schedule settings...');
-        
+
         $schedules = [
             [
                 'name' => 'Daily',
@@ -238,7 +293,7 @@ class FreshInstallationSeeder extends Seeder
                         'pay_day' => '15th Day'
                     ],
                     [
-                        'period' => '2nd period', 
+                        'period' => '2nd period',
                         'start_day' => '16th Day',
                         'end_day' => '31st Day',
                         'pay_day' => '31st Day'
@@ -286,7 +341,7 @@ class FreshInstallationSeeder extends Seeder
     private function seedTaxAndDeductionSettings(): void
     {
         $this->command->info('💰 Seeding tax and deduction settings with tax tables...');
-        
+
         // SSS Contribution Table (keep the table for reference)
         $sssRates = [
             // Monthly Salary Range => [Employee Rate, Employer Rate, Total]
@@ -470,7 +525,17 @@ class FreshInstallationSeeder extends Seeder
     private function seedPayrollConfigurationSettings(): void
     {
         $this->command->info('⚙️ Seeding default payroll configuration settings...');
-        
+
+        // Seed default rate configurations
+        $configurations = PayrollRateConfiguration::getDefaults();
+        foreach ($configurations as $config) {
+            PayrollRateConfiguration::updateOrCreate(
+                ['type_name' => $config['type_name']],
+                $config
+            );
+        }
+        $this->command->info('   ✓ Rate multiplier configurations seeded');
+
         // Create a basic payroll setting with default values
         PayrollSetting::firstOrCreate(
             ['payroll_frequency' => 'monthly'],
@@ -491,7 +556,7 @@ class FreshInstallationSeeder extends Seeder
                 'updated_by' => 1,
             ]
         );
-        
+
         $this->command->info('   ✓ Basic payroll configuration created');
         $this->command->info('   ℹ️ Configure additional settings in the admin panel');
     }
@@ -499,7 +564,7 @@ class FreshInstallationSeeder extends Seeder
     private function seedAllowanceBonusSettings(): void
     {
         $this->command->info('💰 Seeding allowance and bonus settings...');
-        
+
         // Common Allowances - ACTIVE
         \App\Models\AllowanceBonusSetting::firstOrCreate(
             ['code' => 'rice_allowance'],
@@ -681,7 +746,7 @@ class FreshInstallationSeeder extends Seeder
     private function seedPaidLeaveSettings(): void
     {
         $this->command->info('🏖️ Seeding paid leave settings...');
-        
+
         // Vacation Leave - ACTIVE
         \App\Models\PaidLeaveSetting::firstOrCreate(
             ['code' => 'VL'],
@@ -872,7 +937,7 @@ class FreshInstallationSeeder extends Seeder
     private function seedHolidaySettings(): void
     {
         $this->command->info('🎉 Seeding holiday settings...');
-        
+
         // Regular Holidays (All ACTIVE)
         \App\Models\Holiday::firstOrCreate(
             ['date' => '2025-01-01'],

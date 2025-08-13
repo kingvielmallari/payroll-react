@@ -115,15 +115,15 @@
                             </label>
                             <select name="log_type" id="log_type" required
                                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <option value="">Select Log Type</option>
-                                <option value="regular" {{ old('log_type', $timeLog->log_type) == 'regular' ? 'selected' : '' }}>Regular</option>
-                                <option value="overtime" {{ old('log_type', $timeLog->log_type) == 'overtime' ? 'selected' : '' }}>Overtime</option>
-                                <option value="holiday" {{ old('log_type', $timeLog->log_type) == 'holiday' ? 'selected' : '' }}>Holiday</option>
-                                <option value="rest_day" {{ old('log_type', $timeLog->log_type) == 'rest_day' ? 'selected' : '' }}>Rest Day</option>
+                                <option value="">Select log type</option>
+                                @foreach($logTypes as $value => $label)
+                                <option value="{{ $value }}" {{ old('log_type', $timeLog->log_type) == $value ? 'selected' : '' }}>{{ $label }}</option>
+                                @endforeach
                             </select>
                             @error('log_type')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                             @enderror
+                            <p class="mt-1 text-xs text-gray-500">Select the type of work day to apply appropriate rate multipliers</p>
                         </div>
 
                         <!-- Checkboxes -->

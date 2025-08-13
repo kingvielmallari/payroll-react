@@ -319,6 +319,17 @@
                                         <div class="text-xs text-blue-600 mt-1">Weekly, Semi-monthly, Monthly</div>
                                     </div>
                                 </a>
+
+                                <a href="{{ route('payroll-rate-configurations.index') }}" 
+                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-800 transition-colors duration-150">
+                                    <svg class="mr-4 h-5 w-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                    </svg>
+                                    <div class="flex-1">
+                                        <div class="font-medium text-indigo-700">Rate Multiplier</div>
+                                        <div class="text-xs text-indigo-600 mt-1">Configure hourly rate multipliers</div>
+                                    </div>
+                                </a>
                                 
                                 <a href="{{ route('settings.deductions.index') }}" 
                                    class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-red-50 hover:text-red-800 transition-colors duration-150">

@@ -586,8 +586,8 @@ class PayrollController extends Controller
             }
         }
 
-        // Calculate gross pay based on schedule type
-        $grossPay = $this->calculateGrossPay($employee, $basicSalary, $hoursWorked, $daysWorked, $periodStart, $periodEnd);
+        // Calculate gross pay using rate multipliers from time logs
+        $grossPay = $this->calculateGrossPayWithRateMultipliers($employee, $basicSalary, $timeLogs, $hoursWorked, $daysWorked, $periodStart, $periodEnd);
 
         // Calculate allowances using dynamic settings
         $allowancesData = $this->calculateAllowances($employee, $basicSalary, $daysWorked, $hoursWorked);
@@ -666,6 +666,94 @@ class PayrollController extends Controller
                 // Default to hourly calculation
                 $hourlyRate = $employee->hourly_rate ?? ($basicSalary / 173.33);
                 return $hourlyRate * $hoursWorked;
+        }
+    }
+
+    /**
+     * Calculate gross pay using rate multipliers from time logs
+     */
+    private function calculateGrossPayWithRateMultipliers($employee, $basicSalary, $timeLogs, $hoursWorked, $daysWorked, $periodStart, $periodEnd)
+    {
+        // If no time worked and no time logs, fallback to basic calculation
+        if ($timeLogs->isEmpty()) {
+            return $this->calculateGrossPay($employee, $basicSalary, $hoursWorked, $daysWorked, $periodStart, $periodEnd);
+        }
+
+        // Calculate hourly rate based on pay schedule
+        $hourlyRate = $this->calculateHourlyRate($employee, $basicSalary);
+
+        $totalGrossPay = 0;
+        $payBreakdown = [];
+
+        // Process each time log with its rate multiplier
+        foreach ($timeLogs as $timeLog) {
+            if ($timeLog->total_hours <= 0) {
+                continue;
+            }
+
+            // Calculate pay for this time log using rate configuration
+            $payAmounts = $timeLog->calculatePayAmount($hourlyRate);
+
+            $totalGrossPay += $payAmounts['total_amount'];
+
+            // Store breakdown for reporting
+            $logTypeName = $timeLog->getRateConfiguration()->display_name ?? $timeLog->log_type;
+            if (!isset($payBreakdown[$logTypeName])) {
+                $payBreakdown[$logTypeName] = [
+                    'regular_hours' => 0,
+                    'regular_amount' => 0,
+                    'overtime_hours' => 0,
+                    'overtime_amount' => 0,
+                    'total_amount' => 0,
+                ];
+            }
+
+            $payBreakdown[$logTypeName]['regular_hours'] += $timeLog->regular_hours;
+            $payBreakdown[$logTypeName]['regular_amount'] += $payAmounts['regular_amount'];
+            $payBreakdown[$logTypeName]['overtime_hours'] += $timeLog->overtime_hours;
+            $payBreakdown[$logTypeName]['overtime_amount'] += $payAmounts['overtime_amount'];
+            $payBreakdown[$logTypeName]['total_amount'] += $payAmounts['total_amount'];
+        }
+
+        // Store pay breakdown for later use (can be saved to payroll details)
+        if (property_exists($this, 'currentPayBreakdown')) {
+            $this->currentPayBreakdown = $payBreakdown;
+        }
+
+        return $totalGrossPay;
+    }
+
+    /**
+     * Calculate hourly rate based on employee's pay schedule and basic salary
+     */
+    private function calculateHourlyRate($employee, $basicSalary)
+    {
+        // If employee has an explicit hourly rate, use it
+        if ($employee->hourly_rate && $employee->hourly_rate > 0) {
+            return $employee->hourly_rate;
+        }
+
+        // Calculate hourly rate based on pay schedule
+        switch ($employee->pay_schedule) {
+            case 'daily':
+                // For daily, basic salary is already daily rate, convert to hourly
+                return $basicSalary / 8; // Assuming 8 hours per day
+
+            case 'weekly':
+                // Convert weekly salary to hourly
+                return $basicSalary / 40; // Assuming 40 hours per week
+
+            case 'semi_monthly':
+                // Convert semi-monthly salary to hourly
+                return $basicSalary / 86.67; // Assuming ~86.67 hours per semi-month
+
+            case 'monthly':
+                // Convert monthly salary to hourly
+                return $basicSalary / 173.33; // Assuming ~173.33 hours per month
+
+            default:
+                // Default calculation
+                return $basicSalary / 173.33;
         }
     }
 
@@ -1173,16 +1261,83 @@ class PayrollController extends Controller
 
         // Organize DTR data by employee and date
         $dtrData = [];
+        $timeBreakdowns = []; // New: detailed time breakdown by type
+
         foreach ($payroll->payrollDetails as $detail) {
             $employeeTimeLogs = $timeLogs->get($detail->employee_id, collect());
             $employeeDtr = [];
 
+            // Initialize breakdown tracking
+            $employeeBreakdown = [];
+
             foreach ($periodDates as $date) {
                 $timeLog = $employeeTimeLogs->get($date, collect())->first();
                 $employeeDtr[$date] = $timeLog;
+
+                // Track time breakdown by type
+                if ($timeLog) {
+                    $logType = $timeLog->log_type;
+                    if (!isset($employeeBreakdown[$logType])) {
+                        $employeeBreakdown[$logType] = [
+                            'regular_hours' => 0,
+                            'overtime_hours' => 0,
+                            'total_hours' => 0,
+                            'days_count' => 0,
+                            'display_name' => '',
+                            'rate_config' => null
+                        ];
+                    }
+
+                    $employeeBreakdown[$logType]['regular_hours'] += $timeLog->regular_hours ?? 0;
+                    $employeeBreakdown[$logType]['overtime_hours'] += $timeLog->overtime_hours ?? 0;
+                    $employeeBreakdown[$logType]['total_hours'] += $timeLog->total_hours ?? 0;
+                    $employeeBreakdown[$logType]['days_count']++;
+
+                    // Get rate configuration for this type
+                    $rateConfig = $timeLog->getRateConfiguration();
+                    if ($rateConfig) {
+                        $employeeBreakdown[$logType]['display_name'] = $rateConfig->display_name;
+                        $employeeBreakdown[$logType]['rate_config'] = $rateConfig;
+                    }
+                }
             }
 
             $dtrData[$detail->employee_id] = $employeeDtr;
+            $timeBreakdowns[$detail->employee_id] = $employeeBreakdown;
+        }
+
+        // Calculate separate basic pay and holiday pay for each employee
+        $payBreakdownByEmployee = [];
+        foreach ($payroll->payrollDetails as $detail) {
+            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+            
+            $basicPay = 0; // Regular workday pay only
+            $holidayPay = 0; // All holiday-related pay
+            
+            foreach ($employeeBreakdown as $logType => $breakdown) {
+                $rateConfig = $breakdown['rate_config'];
+                if (!$rateConfig) continue;
+                
+                // Calculate pay amounts using rate multipliers
+                $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+                
+                $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                $totalPay = $regularPay + $overtimePay;
+                
+                if ($logType === 'regular_workday') {
+                    $basicPay += $totalPay;
+                } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                    $holidayPay += $totalPay;
+                }
+            }
+            
+            $payBreakdownByEmployee[$detail->employee_id] = [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+            ];
         }
 
         // Load current dynamic settings for display (if draft status)
@@ -1220,7 +1375,9 @@ class PayrollController extends Controller
             'periodDates',
             'allowanceSettings',
             'deductionSettings',
-            'isDynamic'
+            'isDynamic',
+            'timeBreakdowns',
+            'payBreakdownByEmployee'
         ));
     }
 

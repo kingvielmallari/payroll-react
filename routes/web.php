@@ -265,6 +265,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('payroll-schedule-settings/{payrollScheduleSetting}/edit', [PayrollScheduleSettingsController::class, 'edit'])->name('payroll-schedule-settings.edit');
         Route::put('payroll-schedule-settings/{payrollScheduleSetting}', [PayrollScheduleSettingsController::class, 'update'])->name('payroll-schedule-settings.update');
 
+        // Payroll Rate Configurations  
+        Route::resource('settings/rate-multiplier', \App\Http\Controllers\PayrollRateConfigurationController::class)->parameters([
+            'rate-multiplier' => 'payrollRateConfiguration'
+        ])->names([
+            'index' => 'payroll-rate-configurations.index',
+            'create' => 'payroll-rate-configurations.create',
+            'store' => 'payroll-rate-configurations.store',
+            'show' => 'payroll-rate-configurations.show',
+            'edit' => 'payroll-rate-configurations.edit',
+            'update' => 'payroll-rate-configurations.update',
+            'destroy' => 'payroll-rate-configurations.destroy'
+        ]);
+        Route::post('settings/rate-multiplier/initialize-defaults', [\App\Http\Controllers\PayrollRateConfigurationController::class, 'initializeDefaults'])->name('payroll-rate-configurations.initialize-defaults');
+        Route::post('settings/rate-multiplier/{payrollRateConfiguration}/toggle', [\App\Http\Controllers\PayrollRateConfigurationController::class, 'toggle'])->name('payroll-rate-configurations.toggle');
+
         // General Settings
         Route::get('settings/payroll', [SettingsController::class, 'payroll'])->name('settings.payroll');
         Route::post('settings/payroll', [SettingsController::class, 'updatePayroll'])->name('settings.payroll.update');
