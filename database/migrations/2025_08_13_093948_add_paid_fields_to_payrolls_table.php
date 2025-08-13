@@ -12,8 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('payrolls', function (Blueprint $table) {
-            $table->timestamp('paid_at')->nullable()->after('approved_at');
-            $table->foreignId('paid_by')->nullable()->after('approved_by')->constrained('users');
+            //
         });
     }
 
@@ -23,8 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('payrolls', function (Blueprint $table) {
-            $table->dropForeign(['paid_by']);
-            $table->dropColumn(['paid_at', 'paid_by']);
+            //
         });
     }
 };

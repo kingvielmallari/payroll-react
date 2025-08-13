@@ -159,27 +159,6 @@
                             </div>
                         </div>
 
-                        <!-- Semi-Monthly Distribution Option -->
-                        <div id="semiMonthlyDistribution" style="display: none;">
-                            <label for="semi_monthly_distribution" class="block text-sm font-medium text-gray-700">Semi-Monthly Distribution *</label>
-                            <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('semi_monthly_distribution') border-red-300 @enderror" 
-                                    id="semi_monthly_distribution" name="semi_monthly_distribution">
-                                <option value="second_cutoff" {{ old('semi_monthly_distribution', 'second_cutoff') == 'second_cutoff' ? 'selected' : '' }}>
-                                    Second Cutoff Only (Full Amount)
-                                </option>
-                                <option value="first_cutoff" {{ old('semi_monthly_distribution') == 'first_cutoff' ? 'selected' : '' }}>
-                                    First Cutoff Only (Full Amount)
-                                </option>
-                                <option value="split_50_50" {{ old('semi_monthly_distribution') == 'split_50_50' ? 'selected' : '' }}>
-                                    Split 50/50 (Both Cutoffs)
-                                </option>
-                            </select>
-                            @error('semi_monthly_distribution')
-                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                            @enderror
-                            <p class="mt-1 text-sm text-gray-500">Choose how to distribute monthly deductions for semi-monthly payroll</p>
-                        </div>
-
                         <!-- Reason -->
                         <div>
                             <label for="reason" class="block text-sm font-medium text-gray-700">Reason for Cash Advance *</label>
@@ -275,16 +254,6 @@
                     deductionPeriodSelect.appendChild(option);
                 });
                 deductionPeriodSelect.disabled = false;
-                
-                // Show/hide semi-monthly distribution option based on pay schedule
-                const semiMonthlyDiv = document.getElementById('semiMonthlyDistribution');
-                if (data.pay_schedule === 'semi-monthly') {
-                    semiMonthlyDiv.style.display = 'block';
-                    document.getElementById('semi_monthly_distribution').required = true;
-                } else {
-                    semiMonthlyDiv.style.display = 'none';
-                    document.getElementById('semi_monthly_distribution').required = false;
-                }
             } else {
                 deductionPeriodSelect.innerHTML = '<option value="">No active payroll periods available</option>';
             }

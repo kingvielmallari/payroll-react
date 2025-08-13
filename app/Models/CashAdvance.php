@@ -31,7 +31,6 @@ class CashAdvance extends Model
         'approved_date',
         'first_deduction_date',
         'deduction_period',
-        'semi_monthly_distribution',
         'requested_by',
         'approved_by',
     ];

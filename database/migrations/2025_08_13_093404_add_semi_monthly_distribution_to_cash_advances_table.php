@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('cash_advances', function (Blueprint $table) {
-            $table->enum('semi_monthly_distribution', ['first_cutoff', 'second_cutoff', 'split_50_50'])->default('second_cutoff')->after('deduction_period');
+            //
         });
     }
 
@@ -22,7 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('cash_advances', function (Blueprint $table) {
-            $table->dropColumn('semi_monthly_distribution');
+            //
         });
     }
 };

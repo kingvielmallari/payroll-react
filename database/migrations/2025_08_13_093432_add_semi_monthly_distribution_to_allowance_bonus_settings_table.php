@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('allowance_bonus_settings', function (Blueprint $table) {
-            $table->enum('semi_monthly_distribution', ['first_cutoff', 'second_cutoff', 'split_50_50'])->default('split_50_50')->after('frequency');
+            //
         });
     }
 
@@ -22,7 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('allowance_bonus_settings', function (Blueprint $table) {
-            $table->dropColumn('semi_monthly_distribution');
+            //
         });
     }
 };

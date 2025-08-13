@@ -25,7 +25,6 @@ class AllowanceBonusSetting extends Model
         'apply_to_holidays',
         'apply_to_rest_days',
         'frequency',
-        'semi_monthly_distribution',
         'conditions',
         'minimum_amount',
         'maximum_amount',
@@ -98,16 +97,16 @@ class AllowanceBonusSetting extends Model
     public function calculateAmount($basicSalary, $dailyRate = null, $workingDays = null, $employee = null)
     {
         $amount = 0;
-
+        
         switch ($this->calculation_type) {
             case 'percentage':
                 $amount = $basicSalary * ($this->rate_percentage / 100);
                 break;
-
+                
             case 'fixed_amount':
                 $amount = $this->fixed_amount;
                 break;
-
+                
             case 'daily_rate_multiplier':
                 if ($dailyRate && $workingDays) {
                     $applicableDays = min($workingDays, $this->max_days_per_period ?: $workingDays);
@@ -115,21 +114,21 @@ class AllowanceBonusSetting extends Model
                 }
                 break;
         }
-
+        
         // Apply conditions if any
         if ($this->conditions && $employee) {
             $amount = $this->applyConditions($amount, $employee);
         }
-
+        
         // Apply minimum and maximum limits
         if ($this->minimum_amount && $amount < $this->minimum_amount) {
             $amount = $this->minimum_amount;
         }
-
+        
         if ($this->maximum_amount && $amount > $this->maximum_amount) {
             $amount = $this->maximum_amount;
         }
-
+        
         return round($amount, 2);
     }
 
@@ -141,18 +140,18 @@ class AllowanceBonusSetting extends Model
         if (!$this->conditions || empty($this->conditions)) {
             return $amount;
         }
-
+        
         foreach ($this->conditions as $condition) {
             $field = $condition['field'] ?? '';
             $operator = $condition['operator'] ?? '';
             $value = $condition['value'] ?? '';
             $action = $condition['action'] ?? '';
             $actionValue = $condition['action_value'] ?? 0;
-
+            
             $employeeValue = data_get($employee, $field);
-
+            
             $conditionMet = $this->evaluateCondition($employeeValue, $operator, $value);
-
+            
             if ($conditionMet) {
                 switch ($action) {
                     case 'multiply':
@@ -173,7 +172,7 @@ class AllowanceBonusSetting extends Model
                 }
             }
         }
-
+        
         return $amount;
     }
 
@@ -206,7 +205,7 @@ class AllowanceBonusSetting extends Model
         if ($this->benefit_eligibility === 'both') {
             return true;
         }
-
+        
         return $this->benefit_eligibility === $employee->benefits_status;
     }
 
@@ -217,7 +216,7 @@ class AllowanceBonusSetting extends Model
     {
         return $query->where(function ($q) use ($benefitStatus) {
             $q->where('benefit_eligibility', 'both')
-                ->orWhere('benefit_eligibility', $benefitStatus);
+              ->orWhere('benefit_eligibility', $benefitStatus);
         });
     }
 }

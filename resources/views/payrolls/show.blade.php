@@ -104,12 +104,6 @@
                             <p class="mt-1 text-sm text-gray-600">{{ $payroll->approver->name }} on {{ $payroll->approved_at->format('M d, Y g:i A') }}</p>
                         </div>
                         @endif
-                        @if($payroll->paidBy)
-                        <div>
-                            <h4 class="text-sm font-medium text-gray-900">Marked as Paid By</h4>
-                            <p class="mt-1 text-sm text-gray-600">{{ $payroll->paidBy->name }} on {{ $payroll->paid_at->format('M d, Y g:i A') }}</p>
-                        </div>
-                        @endif
                     </div>
 
                     <!-- Action Buttons -->
@@ -152,20 +146,6 @@
                         @endcan
 
                         @can('edit payrolls')
-                        @if($payroll->status == 'approved')
-                        <form method="POST" action="{{ route('payrolls.mark-as-paid', $payroll) }}" class="inline">
-                            @csrf
-                            <button type="submit"
-                                    class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150"
-                                    onclick="return confirm('Mark this payroll as paid? This action cannot be undone.')">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-                                </svg>
-                                Mark as Paid
-                            </button>
-                        </form>
-                        @endif
-
                         @if($payroll->status == 'processing')
                         <form method="POST" action="{{ route('payrolls.back-to-draft', $payroll) }}" class="inline">
                             @csrf

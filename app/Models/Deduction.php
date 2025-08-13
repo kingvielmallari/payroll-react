@@ -17,7 +17,6 @@ class Deduction extends Model
         'type',
         'amount',
         'frequency',
-        'semi_monthly_distribution',
         'start_date',
         'end_date',
         'installments',

@@ -93,12 +93,6 @@ class CashAdvanceController extends Controller
             return response()->json(['error' => 'Employee ID is required'], 400);
         }
 
-        // Get employee information
-        $employee = \App\Models\Employee::find($employeeId);
-        if (!$employee) {
-            return response()->json(['error' => 'Employee not found'], 404);
-        }
-
         // Get current and next payroll periods for this employee
         $currentPayroll = \App\Models\Payroll::where('employee_id', $employeeId)
             ->whereIn('status', ['draft', 'in_progress'])
@@ -132,10 +126,7 @@ class CashAdvanceController extends Controller
             ];
         }
 
-        return response()->json([
-            'periods' => $periods,
-            'pay_schedule' => $employee->pay_schedule
-        ]);
+        return response()->json(['periods' => $periods]);
     }
 
     /**
@@ -154,7 +145,6 @@ class CashAdvanceController extends Controller
             'first_deduction_date' => 'nullable|date',
             'deduction_period' => 'required|in:current,next',
             'payroll_id' => 'required|exists:payrolls,id',
-            'semi_monthly_distribution' => 'nullable|in:first_cutoff,second_cutoff,split_50_50',
         ]);
 
         // Additional validation for employee users
@@ -194,7 +184,6 @@ class CashAdvanceController extends Controller
                 'requested_date' => now(),
                 'first_deduction_date' => $validated['first_deduction_date'],
                 'deduction_period' => $validated['deduction_period'],
-                'semi_monthly_distribution' => $validated['semi_monthly_distribution'] ?? 'second_cutoff',
                 'payroll_id' => $validated['payroll_id'], // Store the associated payroll ID
                 'requested_by' => Auth::id(),
                 'status' => 'pending',

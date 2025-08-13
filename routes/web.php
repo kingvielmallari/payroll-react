@@ -122,9 +122,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('payrolls/{payroll}/approve', [PayrollController::class, 'approve'])
             ->name('payrolls.approve')
             ->middleware('can:approve payrolls');
-        Route::post('payrolls/{payroll}/mark-as-paid', [PayrollController::class, 'markAsPaid'])
-            ->name('payrolls.mark-as-paid')
-            ->middleware('can:edit payrolls');
         Route::post('payrolls/{payroll}/process', [PayrollController::class, 'process'])
             ->name('payrolls.process')
             ->middleware('can:process payrolls');
