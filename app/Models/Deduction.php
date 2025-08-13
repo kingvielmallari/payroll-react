@@ -12,10 +12,12 @@ class Deduction extends Model
     protected $fillable = [
         'employee_id',
         'deduction_setting_id',
+        'cash_advance_id',
         'name',
         'type',
         'amount',
         'frequency',
+        'semi_monthly_distribution',
         'start_date',
         'end_date',
         'installments',
@@ -50,15 +52,23 @@ class Deduction extends Model
     }
 
     /**
+     * Get the cash advance (if applicable)
+     */
+    public function cashAdvance()
+    {
+        return $this->belongsTo(CashAdvance::class);
+    }
+
+    /**
      * Get active deductions
      */
     public function scopeActive($query)
     {
         return $query->where('is_active', true)
-                    ->where(function ($q) {
-                        $q->whereNull('end_date')
-                          ->orWhere('end_date', '>=', now());
-                    });
+            ->where(function ($q) {
+                $q->whereNull('end_date')
+                    ->orWhere('end_date', '>=', now());
+            });
     }
 
     /**
@@ -108,7 +118,7 @@ class Deduction extends Model
     {
         if ($this->isLoan() && $this->balance > 0) {
             $this->balance -= $amount;
-            
+
             if ($this->remaining_installments > 0) {
                 $this->remaining_installments--;
             }

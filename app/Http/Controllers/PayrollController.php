@@ -1254,6 +1254,45 @@ class PayrollController extends Controller
     }
 
     /**
+     * Mark payroll as paid
+     */
+    public function markAsPaid(Payroll $payroll)
+    {
+        $this->authorize('edit payrolls');
+
+        if ($payroll->status !== 'approved') {
+            return redirect()->back()->with('error', 'Only approved payrolls can be marked as paid.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $payroll->update([
+                'status' => 'paid',
+                'paid_at' => now(),
+                'paid_by' => Auth::id()
+            ]);
+
+            // Log the activity
+            activity()
+                ->performedOn($payroll)
+                ->causedBy(Auth::user())
+                ->withProperties([
+                    'payroll_id' => $payroll->id,
+                    'payroll_number' => $payroll->payroll_number
+                ])
+                ->log('Payroll marked as paid');
+
+            DB::commit();
+
+            return redirect()->back()->with('success', 'Payroll has been marked as paid successfully.');
+        } catch (\Exception $e) {
+            DB::rollback();
+            return redirect()->back()->with('error', 'Failed to mark payroll as paid: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Show the form for editing the specified payroll.
      */
     public function edit(Payroll $payroll)
@@ -1832,6 +1871,37 @@ class PayrollController extends Controller
                 break;
         }
 
+        // Apply semi-monthly distribution logic for semi-monthly employees
+        if ($employee->pay_schedule === 'semi_monthly') {
+            // Get system-wide semi-monthly distribution settings
+            $distributionSettings = $this->getSemiMonthlyDistributionSettings();
+
+            // Determine distribution type based on setting type
+            $distributionType = $setting->type === 'allowance'
+                ? $distributionSettings['allowances_distribution']
+                : $distributionSettings['allowances_distribution']; // Use same for bonuses for now
+
+            // Determine if this is first or second cutoff
+            $isFirstCutoff = $payroll->pay_period_end->day <= 15;
+            $isSecondCutoff = $payroll->pay_period_end->day > 15;
+
+            switch ($distributionType) {
+                case 'first_cutoff':
+                    if (!$isFirstCutoff) {
+                        $amount = 0; // Don't give allowance/bonus on second cutoff
+                    }
+                    break;
+                case 'second_cutoff':
+                    if (!$isSecondCutoff) {
+                        $amount = 0; // Don't give allowance/bonus on first cutoff
+                    }
+                    break;
+                case 'split_50_50':
+                    $amount = $amount / 2; // Give 50% on each cutoff
+                    break;
+            }
+        }
+
         // Apply minimum and maximum limits
         if ($setting->minimum_amount && $amount < $setting->minimum_amount) {
             $amount = $setting->minimum_amount;
@@ -1874,44 +1944,75 @@ class PayrollController extends Controller
     private function calculateCashAdvanceDeductions(Employee $employee, Payroll $payroll)
     {
         try {
+            // Don't calculate deductions for paid payrolls
+            if ($payroll->status === 'paid') {
+                return 0;
+            }
+
             // Get active cash advances for this employee that should start deduction
             $cashAdvances = \App\Models\CashAdvance::where('employee_id', $employee->id)
                 ->where('status', 'approved')
                 ->where('outstanding_balance', '>', 0)
                 ->where(function ($query) use ($payroll) {
-                    $query->whereNull('first_deduction_date')
-                        ->orWhere('first_deduction_date', '<=', $payroll->period_end);
+                    // Check if this payroll period matches the selected payroll_id for cash advance
+                    $query->where('payroll_id', $payroll->id)
+                        ->orWhere(function ($q) use ($payroll) {
+                            // Fallback for older cash advances without payroll_id
+                            $q->whereNull('payroll_id')
+                                ->where('first_deduction_date', '<=', $payroll->pay_period_end);
+                        });
                 })
                 ->get();
 
             $totalDeductions = 0;
 
             foreach ($cashAdvances as $cashAdvance) {
-                // Use installment amount which includes interest
-                $deductionAmount = min(
-                    $cashAdvance->installment_amount ?? 0,
-                    $cashAdvance->outstanding_balance
-                );
+                $deductionAmount = 0;
+                $installmentAmount = $cashAdvance->installment_amount ?? 0;
+
+                // Handle semi-monthly distribution logic
+                if ($employee->pay_schedule === 'semi_monthly') {
+                    // Get system-wide semi-monthly distribution settings
+                    $distributionSettings = $this->getSemiMonthlyDistributionSettings();
+                    $semiMonthlyDistribution = $distributionSettings['cash_advances_distribution'];
+
+                    // Determine if this is first or second cutoff
+                    $isFirstCutoff = $payroll->pay_period_end->day <= 15;
+                    $isSecondCutoff = $payroll->pay_period_end->day > 15;
+
+                    switch ($semiMonthlyDistribution) {
+                        case 'first_cutoff':
+                            if ($isFirstCutoff) {
+                                $deductionAmount = $installmentAmount;
+                            }
+                            break;
+                        case 'second_cutoff':
+                            if ($isSecondCutoff) {
+                                $deductionAmount = $installmentAmount;
+                            }
+                            break;
+                        case 'split_50_50':
+                            $deductionAmount = $installmentAmount / 2;
+                            break;
+                    }
+                } else {
+                    // For non-semi-monthly employees, deduct full amount
+                    $deductionAmount = $installmentAmount;
+                }
+
+                // Ensure we don't deduct more than outstanding balance
+                $deductionAmount = min($deductionAmount, $cashAdvance->outstanding_balance);
 
                 if ($deductionAmount > 0) {
                     $totalDeductions += $deductionAmount;
 
-                    // Update outstanding balance
-                    $cashAdvance->outstanding_balance -= $deductionAmount;
-                    if ($cashAdvance->outstanding_balance <= 0) {
-                        $cashAdvance->outstanding_balance = 0;
-                        $cashAdvance->status = 'fully_paid';
-                    }
-                    $cashAdvance->save();
-
-                    // Record payment
-                    $cashAdvance->payments()->create([
-                        'amount' => $deductionAmount,
-                        'payment_date' => $payroll->period_end,
-                        'payment_method' => 'payroll_deduction',
-                        'reference_number' => $payroll->reference_number,
-                        'recorded_by' => auth()->id() ?? 1
-                    ]);
+                    // Use the recordPayment method from the CashAdvance model
+                    $cashAdvance->recordPayment(
+                        $payroll->id,
+                        null, // payroll_detail_id will be set later
+                        $deductionAmount,
+                        "Payroll deduction for period {$payroll->pay_period_start->format('M d')} - {$payroll->pay_period_end->format('M d, Y')}"
+                    );
                 }
             }
 
@@ -3704,6 +3805,32 @@ class PayrollController extends Controller
                 ->get()
                 ->toArray(),
             'captured_at' => now()->toISOString(),
+        ];
+    }
+
+    /**
+     * Get centralized semi-monthly distribution settings
+     */
+    private function getSemiMonthlyDistributionSettings()
+    {
+        // Get the semi-monthly schedule setting
+        $semiMonthlySchedule = PayrollScheduleSetting::where('pay_type', 'semi_monthly')
+            ->where('is_active', true)
+            ->first();
+
+        if (!$semiMonthlySchedule || !$semiMonthlySchedule->semi_monthly_config) {
+            // Return default settings if no configuration exists
+            return [
+                'deductions_distribution' => 'second_cutoff',
+                'allowances_distribution' => 'split_50_50',
+                'cash_advances_distribution' => 'second_cutoff',
+            ];
+        }
+
+        return [
+            'deductions_distribution' => $semiMonthlySchedule->semi_monthly_config['deductions_distribution'] ?? 'second_cutoff',
+            'allowances_distribution' => $semiMonthlySchedule->semi_monthly_config['allowances_distribution'] ?? 'split_50_50',
+            'cash_advances_distribution' => $semiMonthlySchedule->semi_monthly_config['cash_advances_distribution'] ?? 'second_cutoff',
         ];
     }
 

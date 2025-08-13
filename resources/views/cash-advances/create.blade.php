@@ -24,7 +24,7 @@
                             <div>
                                 <label for="employee_id" class="block text-sm font-medium text-gray-700">Employee *</label>
                                 <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('employee_id') border-red-300 @enderror" 
-                                        id="employee_id" name="employee_id" required onchange="checkEligibility()">
+                                        id="employee_id" name="employee_id" required onchange="loadEmployeePayrollPeriods()">
                                     <option value="">Select Employee</option>
                                     @foreach($employees as $emp)
                                     <option value="{{ $emp->id }}" {{ old('employee_id') == $emp->id ? 'selected' : '' }}>
@@ -60,7 +60,7 @@
                         @endif
 
                         <!-- Form Fields -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <!-- Requested Amount -->
                             <div>
                                 <label for="requested_amount" class="block text-sm font-medium text-gray-700">Requested Amount *</label>
@@ -86,7 +86,7 @@
                                 <label for="installments" class="block text-sm font-medium text-gray-700">Number of Installments *</label>
                                 <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('installments') border-red-300 @enderror" 
                                         id="installments" name="installments" required onchange="calculateInstallment()">
-                                    <option value="">Select installments</option>
+                                    <option value="">Select Installments</option>
                                     @for($i = 1; $i <= 12; $i++)
                                     <option value="{{ $i }}" {{ old('installments') == $i ? 'selected' : '' }}>
                                         {{ $i }} month{{ $i > 1 ? 's' : '' }}
@@ -101,17 +101,13 @@
                             <!-- Interest Rate -->
                             <div>
                                 <label for="interest_rate" class="block text-sm font-medium text-gray-700">Interest Rate (%)</label>
-                                <div class="mt-1 relative rounded-md shadow-sm">
-                                    <input type="number" 
-                                           class="block w-full pr-12 sm:text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 @error('interest_rate') border-red-300 @enderror" 
-                                           id="interest_rate" name="interest_rate" 
-                                           value="{{ old('interest_rate', 0) }}" 
-                                           step="0.01" min="0" max="100"
-                                           onchange="calculateInstallment()">
-                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                        <span class="text-gray-500 sm:text-sm">%</span>
-                                    </div>
-                                </div>
+                                <input type="number" 
+                                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('interest_rate') border-red-300 @enderror" 
+                                       id="interest_rate" name="interest_rate" 
+                                       value="{{ old('interest_rate') }}" 
+                                       step="0.1" min="0" max="100"
+                                       onchange="calculateInstallment()"
+                                       placeholder="0">
                                 @error('interest_rate')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
@@ -119,134 +115,98 @@
                             </div>
                         </div>
 
-                        <!-- Calculation Preview -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-4 rounded-lg">
-                            <!-- Interest Amount Preview -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Interest Amount</label>
-                                <div class="mt-1 text-sm font-semibold text-orange-600" id="interestAmount">
-                                    ₱0.00
+                        <!-- Calculation Results -->
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <h3 class="text-sm font-medium text-gray-900 mb-3">Calculation Summary</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div class="text-center">
+                                    <div class="text-lg font-bold text-blue-600" id="interest-amount">₱0.00</div>
+                                    <div class="text-xs text-gray-600">Interest Amount</div>
                                 </div>
-                            </div>
-                            
-                            <!-- Total Amount Preview -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Total Amount</label>
-                                <div class="mt-1 text-sm font-semibold text-red-600" id="totalAmount">
-                                    ₱0.00
+                                <div class="text-center">
+                                    <div class="text-lg font-bold text-green-600" id="total-amount">₱0.00</div>
+                                    <div class="text-xs text-gray-600">Total Amount</div>
                                 </div>
-                            </div>
-
-                            <!-- Monthly Deduction Preview -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Monthly Deduction</label>
-                                <div class="mt-1 text-sm font-semibold text-indigo-600" id="monthlyDeduction">
-                                    ₱0.00
+                                <div class="text-center">
+                                    <div class="text-lg font-bold text-purple-600" id="monthly-deduction">₱0.00</div>
+                                    <div class="text-xs text-gray-600">Monthly Deduction</div>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <!-- First Deduction Date -->
+
+                        <div class="grid grid-cols-1 gap-6">
+                            <!-- Deduction Period -->
                             <div>
-                                <label for="first_deduction_date" class="block text-sm font-medium text-gray-700">First Deduction Date</label>
-                                <input type="date" 
-                                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('first_deduction_date') border-red-300 @enderror" 
-                                       id="first_deduction_date" name="first_deduction_date" 
-                                       value="{{ old('first_deduction_date', now()->addMonth()->format('Y-m-d')) }}" 
-                                       min="{{ now()->format('Y-m-d') }}">
-                                @error('first_deduction_date')
+                                <label for="deduction_period" class="block text-sm font-medium text-gray-700">Deduction Period *</label>
+                                <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('deduction_period') border-red-300 @enderror" 
+                                        id="deduction_period" name="deduction_period" required onchange="updateDeductionDate()" disabled>
+                                    <option value="">{{ !$employee ? 'Select an employee first' : 'Loading payroll periods...' }}</option>
+                                </select>
+                                @error('deduction_period')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-sm text-gray-500">Deductions will start from this date</p>
+                                <p class="mt-1 text-sm text-gray-500">Choose when deductions should start</p>
+                                
+                                <!-- Hidden field for actual date -->
+                                <input type="hidden" 
+                                       id="first_deduction_date" name="first_deduction_date" 
+                                       value="{{ old('first_deduction_date') }}">
+                                       
+                                <!-- Hidden field for payroll ID -->
+                                <input type="hidden" 
+                                       id="payroll_id" name="payroll_id" 
+                                       value="{{ old('payroll_id') }}">
                             </div>
+                        </div>
+
+                        <!-- Semi-Monthly Distribution Option -->
+                        <div id="semiMonthlyDistribution" style="display: none;">
+                            <label for="semi_monthly_distribution" class="block text-sm font-medium text-gray-700">Semi-Monthly Distribution *</label>
+                            <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('semi_monthly_distribution') border-red-300 @enderror" 
+                                    id="semi_monthly_distribution" name="semi_monthly_distribution">
+                                <option value="second_cutoff" {{ old('semi_monthly_distribution', 'second_cutoff') == 'second_cutoff' ? 'selected' : '' }}>
+                                    Second Cutoff Only (Full Amount)
+                                </option>
+                                <option value="first_cutoff" {{ old('semi_monthly_distribution') == 'first_cutoff' ? 'selected' : '' }}>
+                                    First Cutoff Only (Full Amount)
+                                </option>
+                                <option value="split_50_50" {{ old('semi_monthly_distribution') == 'split_50_50' ? 'selected' : '' }}>
+                                    Split 50/50 (Both Cutoffs)
+                                </option>
+                            </select>
+                            @error('semi_monthly_distribution')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                            <p class="mt-1 text-sm text-gray-500">Choose how to distribute monthly deductions for semi-monthly payroll</p>
                         </div>
 
                         <!-- Reason -->
                         <div>
                             <label for="reason" class="block text-sm font-medium text-gray-700">Reason for Cash Advance *</label>
-                            <textarea class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('reason') border-red-300 @enderror" 
-                                      id="reason" name="reason" rows="4" 
-                                      placeholder="Please provide the reason for requesting this cash advance..." 
-                                      required>{{ old('reason') }}</textarea>
+                            <input type="text" 
+                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('reason') border-red-300 @enderror" 
+                                   id="reason" name="reason" required 
+                                   placeholder="Please provide the reason for requesting this cash advance..."
+                                   value="{{ old('reason') }}"
+                                   maxlength="500">
                             @error('reason')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                             @enderror
                             <p class="mt-1 text-sm text-gray-500">Maximum 500 characters</p>
                         </div>
 
-                        <!-- Form Actions -->
+                        <!-- Submit Button -->
                         <div class="flex justify-end space-x-3">
                             <a href="{{ route('cash-advances.index') }}" 
-                               class="inline-flex items-center px-4 py-2 bg-gray-300 border border-transparent rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest hover:bg-gray-400 focus:bg-gray-400 active:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                               class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150">
                                 Cancel
                             </a>
                             <button type="submit" 
-                                    class="inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150" 
-                                    id="submitBtn">
+                                    class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150">
                                 Submit Request
                             </button>
                         </div>
                     </form>
-                </div>
-            <!-- Guidelines Section -->
-            <div class="mt-8 bg-gray-50 overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">Cash Advance Guidelines</h3>
-                    <ul class="space-y-3 text-sm text-gray-600">
-                        <li class="flex items-center">
-                            <svg class="flex-shrink-0 h-4 w-4 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                            </svg>
-                            Minimum amount: ₱100
-                        </li>
-                        <li class="flex items-center">
-                            <svg class="flex-shrink-0 h-4 w-4 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                            </svg>
-                            Maximum amount: ₱50,000
-                        </li>
-                        <li class="flex items-center">
-                            <svg class="flex-shrink-0 h-4 w-4 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                            </svg>
-                            Repayment period: 1-12 months
-                        </li>
-                        <li class="flex items-center">
-                            <svg class="flex-shrink-0 h-4 w-4 text-green-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                            </svg>
-                            No interest charged
-                        </li>
-                        <li class="flex items-center">
-                            <svg class="flex-shrink-0 h-4 w-4 text-blue-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                            </svg>
-                            Only one active cash advance per employee
-                        </li>
-                        <li class="flex items-center">
-                            <svg class="flex-shrink-0 h-4 w-4 text-blue-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                            </svg>
-                            Automatic payroll deduction
-                        </li>
-                        <li class="flex items-center">
-                            <svg class="flex-shrink-0 h-4 w-4 text-yellow-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                            </svg>
-                            Subject to management approval
-                        </li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Eligibility Card (Hidden by default) -->
-            <div id="eligibilityCard" class="mt-8 bg-white overflow-hidden shadow-sm sm:rounded-lg" style="display: none;">
-                <div class="p-6">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">Eligibility Status</h3>
-                    <div id="eligibilityContent">
-                        <!-- Content will be populated by JavaScript -->
-                    </div>
                 </div>
             </div>
         </div>
@@ -255,127 +215,161 @@
     <script>
     function calculateInstallment() {
         const amount = parseFloat(document.getElementById('requested_amount').value) || 0;
-        const installments = parseInt(document.getElementById('installments').value) || 0;
+        const installments = parseInt(document.getElementById('installments').value) || 1;
         const interestRate = parseFloat(document.getElementById('interest_rate').value) || 0;
         
-        if (amount > 0) {
-            // Calculate interest amount
-            const interestAmount = (amount * interestRate) / 100;
-            document.getElementById('interestAmount').textContent = `₱${interestAmount.toFixed(2)}`;
-            
-            // Calculate total amount (principal + interest)
-            const totalAmount = amount + interestAmount;
-            document.getElementById('totalAmount').textContent = `₱${totalAmount.toFixed(2)}`;
-            
-            // Calculate monthly deduction
-            if (installments > 0) {
-                const monthlyDeduction = totalAmount / installments;
-                document.getElementById('monthlyDeduction').textContent = `₱${monthlyDeduction.toFixed(2)}`;
-            } else {
-                document.getElementById('monthlyDeduction').textContent = '₱0.00';
-            }
-        } else {
-            document.getElementById('interestAmount').textContent = '₱0.00';
-            document.getElementById('totalAmount').textContent = '₱0.00';
-            document.getElementById('monthlyDeduction').textContent = '₱0.00';
-        }
+        const interestAmount = (amount * interestRate / 100);
+        const totalAmount = amount; // Just the requested amount, no interest added
+        const monthlyDeduction = amount / installments; // Monthly deduction based on requested amount only
+        
+        document.getElementById('interest-amount').textContent = '₱' + interestAmount.toFixed(2);
+        document.getElementById('total-amount').textContent = '₱' + totalAmount.toFixed(2);
+        document.getElementById('monthly-deduction').textContent = '₱' + monthlyDeduction.toFixed(2);
     }
 
-    function checkEligibility() {
-        const employeeId = document.getElementById('employee_id').value || {{ $employee->id ?? 'null' }};
-        const eligibilityCard = document.getElementById('eligibilityCard');
-        const eligibilityContent = document.getElementById('eligibilityContent');
+    // Load payroll periods for selected employee
+    async function loadEmployeePayrollPeriods() {
+        const employeeId = document.getElementById('employee_id').value;
+        const deductionPeriodSelect = document.getElementById('deduction_period');
+        const deductionDateInput = document.getElementById('first_deduction_date');
+        const payrollIdInput = document.getElementById('payroll_id');
+        
+        // Reset fields
+        deductionPeriodSelect.innerHTML = '<option value="">Loading...</option>';
+        deductionPeriodSelect.disabled = true;
+        deductionDateInput.value = '';
+        payrollIdInput.value = '';
         
         if (!employeeId) {
-            eligibilityCard.style.display = 'none';
+            deductionPeriodSelect.innerHTML = '<option value="">Select an employee first</option>';
             return;
         }
-        
-        // Show loading
-        eligibilityContent.innerHTML = '<div class="text-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div><p class="mt-2 text-sm text-gray-600">Checking eligibility...</p></div>';
-        eligibilityCard.style.display = 'block';
-        
-        fetch(`{{ route('cash-advances.check-eligibility') }}?employee_id=${employeeId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.eligible) {
-                    eligibilityContent.innerHTML = `
-                        <div class="bg-green-50 border border-green-200 rounded-md p-4">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                                <div class="ml-3">
-                                    <p class="text-sm font-medium text-green-800">Employee is eligible</p>
-                                    <div class="mt-2 text-sm text-green-700">
-                                        <strong>Monthly Salary:</strong> ₱${data.monthly_salary.toFixed(2)}<br>
-                                        <strong>Max Eligible:</strong> ₱${data.max_amount.toFixed(2)}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    
-                    // Update max amount in input
-                    document.getElementById('requested_amount').max = data.max_amount;
-                } else {
-                    eligibilityContent.innerHTML = `
-                        <div class="bg-red-50 border border-red-200 rounded-md p-4">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                                <div class="ml-3">
-                                    <p class="text-sm font-medium text-red-800">${data.reason}</p>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    
-                    // Disable form submission
-                    document.getElementById('submitBtn').disabled = true;
-                }
-            })
-            .catch(error => {
-                eligibilityContent.innerHTML = `
-                    <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                    </svg>
-                            </div>
-                            <div class="ml-3">
-                                <p class="text-sm font-medium text-yellow-800">Unable to check eligibility</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                console.error('Error:', error);
+
+        try {
+            const response = await fetch('{{ route('cash-advances.employee-periods') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    employee_id: employeeId
+                })
             });
+            const data = await response.json();
+            
+            if (data.error) {
+                deductionPeriodSelect.innerHTML = '<option value="">Error loading periods</option>';
+                return;
+            }
+            
+            deductionPeriodSelect.innerHTML = '<option value="">Select deduction period</option>';
+            
+            if (data.periods && data.periods.length > 0) {
+                data.periods.forEach(period => {
+                    const option = document.createElement('option');
+                    option.value = period.value;
+                    option.textContent = period.label;
+                    option.dataset.startDate = period.start_date;
+                    option.dataset.payrollId = period.payroll_id;
+                    deductionPeriodSelect.appendChild(option);
+                });
+                deductionPeriodSelect.disabled = false;
+                
+                // Show/hide semi-monthly distribution option based on pay schedule
+                const semiMonthlyDiv = document.getElementById('semiMonthlyDistribution');
+                if (data.pay_schedule === 'semi-monthly') {
+                    semiMonthlyDiv.style.display = 'block';
+                    document.getElementById('semi_monthly_distribution').required = true;
+                } else {
+                    semiMonthlyDiv.style.display = 'none';
+                    document.getElementById('semi_monthly_distribution').required = false;
+                }
+            } else {
+                deductionPeriodSelect.innerHTML = '<option value="">No active payroll periods available</option>';
+            }
+        } catch (error) {
+            console.error('Error loading payroll periods:', error);
+            deductionPeriodSelect.innerHTML = '<option value="">Error loading periods</option>';
+        }
     }
 
-    // Initialize for employee users
-    @if($employee)
-    document.addEventListener('DOMContentLoaded', function() {
-        checkEligibility();
-    });
+    @if(!$employee)
+    function checkEligibility() {
+        const employeeId = document.getElementById('employee_id').value;
+        const amountInput = document.getElementById('requested_amount');
+        
+        if (employeeId) {
+            // Simulate eligibility check - in real app, this would be an AJAX call
+            amountInput.max = 50000;
+            calculateInstallment();
+        } else {
+            amountInput.max = 0;
+        }
+    }
     @endif
+
+    // Update deduction date and payroll ID based on selected period
+    function updateDeductionDate() {
+        const deductionPeriodSelect = document.getElementById('deduction_period');
+        const selectedOption = deductionPeriodSelect.options[deductionPeriodSelect.selectedIndex];
+        const deductionDateInput = document.getElementById('first_deduction_date');
+        const payrollIdInput = document.getElementById('payroll_id');
+        
+        if (selectedOption && selectedOption.dataset.startDate) {
+            deductionDateInput.value = selectedOption.dataset.startDate;
+            payrollIdInput.value = selectedOption.dataset.payrollId;
+        } else {
+            deductionDateInput.value = '';
+            payrollIdInput.value = '';
+        }
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        @if($employee)
+        // For employee users, load their payroll periods immediately
+        document.getElementById('employee_id').value = '{{ $employee->id }}';
+        loadEmployeePayrollPeriods();
+        calculateInstallment();
+        @else
+        checkEligibility();
+        @endif
+    });
 
     // Form submission validation
     document.getElementById('cashAdvanceForm').addEventListener('submit', function(e) {
         const amount = parseFloat(document.getElementById('requested_amount').value);
-        const maxAmount = parseFloat(document.getElementById('requested_amount').max);
+        const reason = document.getElementById('reason').value.trim();
+        const installments = document.getElementById('installments').value;
+        const deductionPeriod = document.getElementById('deduction_period').value;
         
-        if (amount > maxAmount) {
+        if (!amount || amount < 100) {
             e.preventDefault();
-            alert(`Requested amount exceeds maximum eligible amount of ₱${maxAmount.toFixed(2)}`);
+            alert('Please enter a valid requested amount (minimum ₱100).');
             return false;
         }
+        
+        if (!installments) {
+            e.preventDefault();
+            alert('Please select number of installments.');
+            return false;
+        }
+        
+        if (!deductionPeriod) {
+            e.preventDefault();
+            alert('Please select a deduction period.');
+            return false;
+        }
+        
+        if (!reason) {
+            e.preventDefault();
+            alert('Please provide a reason for the cash advance.');
+            return false;
+        }
+        
+        // If all validations pass, allow form submission
+        return true;
     });
     </script>
 </x-app-layout>

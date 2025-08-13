@@ -83,6 +83,62 @@ class CashAdvanceController extends Controller
     }
 
     /**
+     * Get payroll periods for an employee (AJAX endpoint)
+     */
+    public function getEmployeePayrollPeriods(Request $request)
+    {
+        $employeeId = $request->input('employee_id');
+
+        if (!$employeeId) {
+            return response()->json(['error' => 'Employee ID is required'], 400);
+        }
+
+        // Get employee information
+        $employee = \App\Models\Employee::find($employeeId);
+        if (!$employee) {
+            return response()->json(['error' => 'Employee not found'], 404);
+        }
+
+        // Get current and next payroll periods for this employee
+        $currentPayroll = \App\Models\Payroll::where('employee_id', $employeeId)
+            ->whereIn('status', ['draft', 'in_progress'])
+            ->orderBy('pay_period_end', 'desc')
+            ->first();
+
+        // Get next payroll period (if any)
+        $nextPayroll = \App\Models\Payroll::where('employee_id', $employeeId)
+            ->where('status', 'draft')
+            ->where('pay_period_start', '>', $currentPayroll?->pay_period_end ?? now())
+            ->orderBy('pay_period_start', 'asc')
+            ->first();
+
+        $periods = [];
+
+        if ($currentPayroll) {
+            $periods[] = [
+                'value' => 'current',
+                'label' => 'Current Payroll Period (' . $currentPayroll->pay_period_start->format('M d') . ' - ' . $currentPayroll->pay_period_end->format('M d, Y') . ')',
+                'start_date' => $currentPayroll->pay_period_start->format('Y-m-d'),
+                'payroll_id' => $currentPayroll->id
+            ];
+        }
+
+        if ($nextPayroll) {
+            $periods[] = [
+                'value' => 'next',
+                'label' => 'Next Payroll Period (' . $nextPayroll->pay_period_start->format('M d') . ' - ' . $nextPayroll->pay_period_end->format('M d, Y') . ')',
+                'start_date' => $nextPayroll->pay_period_start->format('Y-m-d'),
+                'payroll_id' => $nextPayroll->id
+            ];
+        }
+
+        return response()->json([
+            'periods' => $periods,
+            'pay_schedule' => $employee->pay_schedule
+        ]);
+    }
+
+    /**
      * Store a newly created cash advance.
      */
     public function store(Request $request)
@@ -95,7 +151,10 @@ class CashAdvanceController extends Controller
             'installments' => 'required|integer|min:1|max:12',
             'interest_rate' => 'nullable|numeric|min:0|max:100',
             'reason' => 'required|string|max:500',
-            'first_deduction_date' => 'nullable|date|after_or_equal:today',
+            'first_deduction_date' => 'nullable|date',
+            'deduction_period' => 'required|in:current,next',
+            'payroll_id' => 'required|exists:payrolls,id',
+            'semi_monthly_distribution' => 'nullable|in:first_cutoff,second_cutoff,split_50_50',
         ]);
 
         // Additional validation for employee users
@@ -119,6 +178,12 @@ class CashAdvanceController extends Controller
         try {
             DB::beginTransaction();
 
+            // Calculate first deduction date based on deduction period
+            $firstDeductionDate = $validated['first_deduction_date'] ?? now();
+            if ($validated['deduction_period'] === 'next') {
+                $firstDeductionDate = now()->addMonth();
+            }
+
             $cashAdvance = CashAdvance::create([
                 'employee_id' => $validated['employee_id'],
                 'reference_number' => CashAdvance::generateReferenceNumber(),
@@ -127,7 +192,10 @@ class CashAdvanceController extends Controller
                 'interest_rate' => $validated['interest_rate'] ?? 0,
                 'reason' => $validated['reason'],
                 'requested_date' => now(),
-                'first_deduction_date' => $validated['first_deduction_date'] ?? now()->addMonth(),
+                'first_deduction_date' => $validated['first_deduction_date'],
+                'deduction_period' => $validated['deduction_period'],
+                'semi_monthly_distribution' => $validated['semi_monthly_distribution'] ?? 'second_cutoff',
+                'payroll_id' => $validated['payroll_id'], // Store the associated payroll ID
                 'requested_by' => Auth::id(),
                 'status' => 'pending',
             ]);
@@ -267,5 +335,35 @@ class CashAdvanceController extends Controller
             'max_amount' => $maxEligible,
             'monthly_salary' => $monthlySalary,
         ]);
+    }
+
+    /**
+     * Remove the specified cash advance from storage.
+     */
+    public function destroy(CashAdvance $cashAdvance)
+    {
+        $this->authorize('delete cash advances');
+
+        // Check if cash advance can be deleted
+        if ($cashAdvance->status === 'approved' && $cashAdvance->outstanding_balance < $cashAdvance->total_amount) {
+            return redirect()->route('cash-advances.index')
+                ->with('error', 'Cannot delete cash advance that has been partially paid.');
+        }
+
+        // If approved, remove associated deductions
+        if ($cashAdvance->status === 'approved') {
+            // Remove automatic deductions associated with this cash advance
+            DB::table('deductions')
+                ->where('employee_id', $cashAdvance->employee_id)
+                ->where('type', 'cash_advance')
+                ->where('description', 'like', "%{$cashAdvance->reference_number}%")
+                ->delete();
+        }
+
+        $reference = $cashAdvance->reference_number;
+        $cashAdvance->delete();
+
+        return redirect()->route('cash-advances.index')
+            ->with('success', "Cash advance {$reference} has been deleted successfully.");
     }
 }

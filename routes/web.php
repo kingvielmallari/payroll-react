@@ -62,48 +62,48 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('day-schedules', DayScheduleController::class);
     });
-    
+
     // Government Forms
     Route::middleware('can:view reports')->group(function () {
         Route::prefix('government-forms')->name('government-forms.')->group(function () {
             Route::get('/', [GovernmentFormsController::class, 'index'])->name('index');
-            
+
             // BIR Forms
             Route::get('/bir-1601c', [GovernmentFormsController::class, 'bir1601C'])->name('bir-1601c');
             Route::get('/bir-2316', [GovernmentFormsController::class, 'bir2316'])->name('bir-2316');
             Route::get('/bir-1604c', [GovernmentFormsController::class, 'bir1604C'])->name('bir-1604c');
-            
+
             // Government Agency Forms
             Route::get('/sss-r3', [GovernmentFormsController::class, 'sssR3'])->name('sss-r3');
             Route::get('/philhealth-rf1', [GovernmentFormsController::class, 'philHealthRF1'])->name('philhealth-rf1');
             Route::get('/pagibig-mcrf', [GovernmentFormsController::class, 'pagibigMCRF'])->name('pagibig-mcrf');
         });
-        
+
         // Reports
         Route::prefix('reports')->name('reports.')->group(function () {
             Route::get('/employer-shares', [ReportsController::class, 'employerShares'])->name('employer-shares');
         });
     });
-    
+
     // Payroll Management
     Route::middleware('can:view payrolls')->group(function () {
         // View All Payrolls - shows all payrolls from different periods
         Route::get('payrolls', [PayrollController::class, 'indexAll'])->name('payrolls.index');
-        
+
         // Automated Payroll - schedule selection and auto-creation for active employees
         Route::get('payrolls/automation', [PayrollController::class, 'automationIndex'])->name('payrolls.automation.index');
         Route::get('payrolls/automation/create', [PayrollController::class, 'automationCreate'])->name('payrolls.automation.create');
         Route::post('payrolls/automation/store', [PayrollController::class, 'automationStore'])->name('payrolls.automation.store');
         Route::get('payrolls/automation/{schedule}', [PayrollController::class, 'automationList'])->name('payrolls.automation.list');
-        
+
         // Test Dynamic Payroll Settings
         Route::get('payrolls/test-dynamic', [PayrollController::class, 'testDynamic'])->name('payrolls.test-dynamic');
-        
+
         // Manual Payroll - manual employee selection
         Route::get('payrolls/manual', [PayrollController::class, 'manualIndex'])->name('payrolls.manual.index');
         Route::get('payrolls/manual/create', [PayrollController::class, 'manualCreate'])->name('payrolls.manual.create');
         Route::post('payrolls/manual/store', [PayrollController::class, 'manualStore'])->name('payrolls.manual.store');
-        
+
         // Existing payroll routes
         Route::get('payrolls/{payroll}', [PayrollController::class, 'show'])->name('payrolls.show');
         Route::get('payrolls/{payroll}/payslip', [PayrollController::class, 'payslip'])->name('payrolls.payslip');
@@ -115,13 +115,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('payrolls/{payroll}/recalculate', [PayrollController::class, 'recalculate'])
             ->name('payrolls.recalculate')
             ->middleware('can:edit payrolls');
-        
+
         Route::post('payrolls/generate-from-dtr', [PayrollController::class, 'generateFromDTR'])
             ->name('payrolls.generate-from-dtr')
             ->middleware('can:create payrolls');
         Route::post('payrolls/{payroll}/approve', [PayrollController::class, 'approve'])
             ->name('payrolls.approve')
             ->middleware('can:approve payrolls');
+        Route::post('payrolls/{payroll}/mark-as-paid', [PayrollController::class, 'markAsPaid'])
+            ->name('payrolls.mark-as-paid')
+            ->middleware('can:edit payrolls');
         Route::post('payrolls/{payroll}/process', [PayrollController::class, 'process'])
             ->name('payrolls.process')
             ->middleware('can:process payrolls');
@@ -153,15 +156,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('my-payslips', [App\Http\Controllers\PayslipController::class, 'myPayslips'])
             ->name('my-payslips');
     });
-    
+
     // Cash Advance Management
     Route::middleware(['auth', 'verified'])->group(function () {
         // AJAX route for checking employee eligibility - must come before resource routes
         Route::get('cash-advances/check-eligibility', [CashAdvanceController::class, 'checkEligibility'])
             ->name('cash-advances.check-eligibility');
-            
-        Route::resource('cash-advances', CashAdvanceController::class)->except(['destroy']);
-        
+
+        // AJAX route for getting employee payroll periods
+        Route::post('cash-advances/employee-periods', [CashAdvanceController::class, 'getEmployeePayrollPeriods'])
+            ->name('cash-advances.employee-periods');
+
+        Route::resource('cash-advances', CashAdvanceController::class);
+
         // Additional cash advance routes
         Route::post('cash-advances/{cashAdvance}/approve', [CashAdvanceController::class, 'approve'])
             ->name('cash-advances.approve')
@@ -170,19 +177,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('cash-advances.reject')
             ->middleware('can:approve cash advances');
     });
-    
+
     // DTR (Daily Time Record) Management
     Route::middleware('can:view time logs')->group(function () {
         // DTR Management Routes
         Route::prefix('dtr')->name('dtr.')->middleware('can:view time logs')->group(function () {
             Route::get('/', [DTRController::class, 'index'])->name('index');
             Route::get('/test-create', [DTRController::class, 'testCreate'])->name('test-create'); // Debug route
-            Route::get('/debug/{id}', function($id) {
+            Route::get('/debug/{id}', function ($id) {
                 try {
                     $dtrRaw = DB::table('d_t_r_s')->where('id', $id)->first();
                     $employee = DB::table('employees')->where('id', $dtrRaw->employee_id)->first();
                     $user = DB::table('users')->where('id', $employee->user_id)->first();
-                    
+
                     return response()->json([
                         'dtr_raw' => $dtrRaw,
                         'employee' => $employee,
@@ -200,7 +207,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('/create', [DTRController::class, 'create'])->name('create');
             Route::post('/create-instant', [DTRController::class, 'createInstant'])->name('create-instant');
             Route::post('/store', [DTRController::class, 'store'])->name('store');
-            
+
             // DTR Import routes
             Route::get('/import/form', [DTRController::class, 'importForm'])
                 ->name('import-form')
@@ -211,7 +218,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/export/template', [DTRController::class, 'exportTemplate'])
                 ->name('export-template')
                 ->middleware('can:import time logs');
-            
+
             Route::get('/{dtr}', [DTRController::class, 'show'])->name('show');
             Route::get('/{dtr}/edit', [DTRController::class, 'edit'])->name('edit');
             Route::put('/{dtr}', [DTRController::class, 'update'])->name('update');
@@ -236,7 +243,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('time-logs/{employee}/dtr', [TimeLogController::class, 'showDTR'])->name('time-logs.show-dtr');
         Route::get('time-logs/{employee}/simple-dtr', [TimeLogController::class, 'simpleDTR'])->name('time-logs.simple-dtr');
         Route::post('time-logs/update-time-entry', [TimeLogController::class, 'updateTimeEntry'])->name('time-logs.update-time-entry');
-        
+
         // DTR Import routes
         Route::get('time-logs/import/form', [TimeLogController::class, 'importForm'])
             ->name('time-logs.import-form')
@@ -248,24 +255,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('time-logs.export-template')
             ->middleware('can:import time logs');
     });
-    
+
     // Settings routes
     Route::middleware('can:edit settings')->group(function () {
         // System Settings (System Admin only)
         Route::get('system-settings', [SystemSettingsController::class, 'index'])->name('system-settings.index');
         Route::put('system-settings', [SystemSettingsController::class, 'update'])->name('system-settings.update');
         Route::post('system-settings/toggle-theme', [SystemSettingsController::class, 'toggleTheme'])->name('system-settings.toggle-theme');
-        
+
         // Payroll Schedule Settings
         Route::get('payroll-schedule-settings', [PayrollScheduleSettingsController::class, 'index'])->name('payroll-schedule-settings.index');
         Route::get('payroll-schedule-settings/{payrollScheduleSetting}/edit', [PayrollScheduleSettingsController::class, 'edit'])->name('payroll-schedule-settings.edit');
         Route::put('payroll-schedule-settings/{payrollScheduleSetting}', [PayrollScheduleSettingsController::class, 'update'])->name('payroll-schedule-settings.update');
-        
+
         // General Settings
         Route::get('settings/payroll', [SettingsController::class, 'payroll'])->name('settings.payroll');
         Route::post('settings/payroll', [SettingsController::class, 'updatePayroll'])->name('settings.payroll.update');
         Route::post('settings/payroll/test', [SettingsController::class, 'testAutoPayroll'])->name('settings.payroll.test');
-        
+
         // Employee Settings
         Route::get('settings/employee', [SettingsController::class, 'employeeSettings'])->name('settings.employee');
         Route::post('settings/employee', [SettingsController::class, 'updateEmployeeSettings'])->name('settings.employee.update');
@@ -275,7 +282,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('settings/time-schedules', [SettingsController::class, 'storeTimeSchedule'])->name('settings.time-schedules.store');
         Route::post('settings/day-schedules', [SettingsController::class, 'storeDaySchedule'])->name('settings.day-schedules.store');
     });
-    
+
     // Employee's own time logs
     Route::middleware('can:view own time logs')->group(function () {
         Route::get('my-time-logs', [TimeLogController::class, 'myTimeLogs'])->name('my-time-logs');
@@ -283,5 +290,5 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 });
 
-require __DIR__.'/auth.php';
-require __DIR__.'/settings.php';
+require __DIR__ . '/auth.php';
+require __DIR__ . '/settings.php';

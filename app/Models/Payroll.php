@@ -27,6 +27,8 @@ class Payroll extends Model
         'created_by',
         'approved_by',
         'approved_at',
+        'paid_by',
+        'paid_at',
     ];
 
     protected $casts = [
@@ -37,6 +39,7 @@ class Payroll extends Model
         'total_deductions' => 'decimal:2',
         'total_net' => 'decimal:2',
         'approved_at' => 'datetime',
+        'paid_at' => 'datetime',
     ];
 
     /**
@@ -72,6 +75,14 @@ class Payroll extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    /**
+     * Get the user who marked the payroll as paid.
+     */
+    public function paidBy()
+    {
+        return $this->belongsTo(User::class, 'paid_by');
     }
 
     /**

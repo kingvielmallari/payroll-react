@@ -16,29 +16,63 @@
 
     <div class="py-6">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-        <div class="col-lg-8 col-12">
             <!-- Main Details Card -->
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg mb-6">
-                <div class="flex justify-between items-center p-6 border-b border-gray-200">
+            <div class="bg-white overflow-hidden shadow-lg sm:rounded-lg mb-6">
+                <div class="flex justify-between items-center p-6 border-b border-gray-200 bg-gradient-to-r from-jade-50 to-emerald-50">
                     <div class="flex items-center space-x-3">
-                        <h5 class="text-lg font-semibold text-gray-900">
-                            {{ $cashAdvance->reference_number }}
-                        </h5>
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-jade-600 rounded-full flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div>
+                            <h5 class="text-xl font-bold text-gray-900">
+                                {{ $cashAdvance->reference_number }}
+                            </h5>
+                            <p class="text-sm text-gray-600">Cash Advance Request</p>
+                        </div>
                         @switch($cashAdvance->status)
                             @case('pending')
-                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>
+                                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Pending
+                                </span>
                                 @break
                             @case('approved')
-                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Approved</span>
+                                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-green-100 text-green-800 border border-green-200">
+                                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Approved
+                                </span>
                                 @break
                             @case('rejected')
-                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>
+                                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-red-100 text-red-800 border border-red-200">
+                                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Rejected
+                                </span>
                                 @break
                             @case('fully_paid')
-                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Fully Paid</span>
+                                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Fully Paid
+                                </span>
                                 @break
                             @case('cancelled')
-                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Cancelled</span>
+                                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-gray-100 text-gray-800 border border-gray-200">
+                                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    Cancelled
+                                </span>
                                 @break
                         @endswitch
                     </div>
@@ -46,16 +80,16 @@
                     @if($cashAdvance->status === 'pending')
                         <div class="flex space-x-2">
                             @can('approve cash advances')
-                            <button type="button" class="inline-flex items-center px-3 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150" 
+                            <button type="button" class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-lg font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg" 
                                     onclick="showApproveModal()">
-                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                                 </svg>
                                 Approve
                             </button>
-                            <button type="button" class="inline-flex items-center px-3 py-2 bg-red-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-700 focus:bg-red-700 active:bg-red-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                            <button type="button" class="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-lg font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-700 focus:bg-red-700 active:bg-red-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg"
                                     onclick="showRejectModal()">
-                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                 </svg>
                                 Reject
@@ -64,141 +98,242 @@
                         </div>
                     @endif
                 </div>
+                
                 <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Employee</label>
-                            <div>
-                                <div class="text-sm font-medium text-gray-900">{{ $cashAdvance->employee->full_name }}</div>
-                                <div class="text-sm text-gray-500">{{ $cashAdvance->employee->employee_number }}</div>
-                                <div class="text-sm text-gray-500">{{ $cashAdvance->employee->department->name ?? 'No Department' }}</div>
+                    <!-- Employee Information -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div class="space-y-6">
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h6 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                    <svg class="w-5 h-5 text-jade-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    Employee Information
+                                </h6>
+                                <div class="space-y-2">
+                                    <div class="flex justify-between">
+                                        <span class="text-sm font-medium text-gray-600">Name:</span>
+                                        <span class="text-sm text-gray-900">{{ $cashAdvance->employee->full_name }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-sm font-medium text-gray-600">Employee #:</span>
+                                        <span class="text-sm text-gray-900">{{ $cashAdvance->employee->employee_number }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-sm font-medium text-gray-600">Department:</span>
+                                        <span class="text-sm text-gray-900">{{ $cashAdvance->employee->department->name ?? 'No Department' }}</span>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Requested By</label>
-                            <div>
-                                <div class="text-sm font-medium text-gray-900">{{ $cashAdvance->requestedBy->name }}</div>
-                                <div class="text-sm text-gray-500">{{ $cashAdvance->requested_date->format('M d, Y g:i A') }}</div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <label class="form-label fw-bold">Requested Amount</label>
-                            <div class="fs-5 text-primary">₱{{ number_format($cashAdvance->requested_amount, 2) }}</div>
-                        </div>
-
-                        @if($cashAdvance->approved_amount)
-                        <div class="col-md-4">
-                            <label class="form-label fw-bold">Approved Amount</label>
-                            <div class="fs-5 text-success">₱{{ number_format($cashAdvance->approved_amount, 2) }}</div>
-                        </div>
-                        @endif
-
-                        @if($cashAdvance->interest_rate > 0)
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Interest Rate</label>
-                            <div class="fs-6 text-orange-600">{{ number_format($cashAdvance->interest_rate, 2) }}%</div>
-                        </div>
-                        
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Interest Amount</label>
-                            <div class="fs-6 text-orange-600">₱{{ number_format($cashAdvance->interest_amount, 2) }}</div>
-                        </div>
-                        
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Total Amount</label>
-                            <div class="fs-5 text-danger">₱{{ number_format($cashAdvance->total_amount, 2) }}</div>
-                        </div>
-                        @endif
-
-                        <div class="col-md-4">
-                            <label class="form-label fw-bold">Outstanding Balance</label>
-                            <div class="fs-5 {{ $cashAdvance->outstanding_balance > 0 ? 'text-warning' : 'text-success' }}">
-                                ₱{{ number_format($cashAdvance->outstanding_balance, 2) }}
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">Installments</label>
-                            <div>
-                                {{ $cashAdvance->installments }} month{{ $cashAdvance->installments > 1 ? 's' : '' }}
-                                @if($cashAdvance->installment_amount)
-                                <br>
-                                <small class="text-muted">
-                                    ₱{{ number_format($cashAdvance->installment_amount, 2) }} per month
-                                    @if($cashAdvance->interest_rate > 0)
-                                        <span class="text-orange-600">(includes interest)</span>
+                            
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h6 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                    <svg class="w-5 h-5 text-jade-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                    Request Details
+                                </h6>
+                                <div class="space-y-2">
+                                    <div class="flex justify-between">
+                                        <span class="text-sm font-medium text-gray-600">Requested By:</span>
+                                        <span class="text-sm text-gray-900">{{ $cashAdvance->requestedBy->name }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-sm font-medium text-gray-600">Request Date:</span>
+                                        <span class="text-sm text-gray-900">{{ $cashAdvance->requested_date->format('M d, Y g:i A') }}</span>
+                                    </div>
+                                    @if($cashAdvance->approved_by)
+                                    <div class="flex justify-between">
+                                        <span class="text-sm font-medium text-gray-600">Approved By:</span>
+                                        <span class="text-sm text-gray-900">{{ $cashAdvance->approvedBy->name }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-sm font-medium text-gray-600">Approval Date:</span>
+                                        <span class="text-sm text-gray-900">{{ $cashAdvance->approved_date->format('M d, Y g:i A') }}</span>
+                                    </div>
                                     @endif
-                                </small>
-                                @endif
+                                </div>
+                            </div>
+                            
+                            <!-- Reason for Cash Advance -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h6 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                    <svg class="w-5 h-5 text-jade-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Reason for Cash Advance
+                                </h6>
+                                <div class="bg-white border border-gray-200 rounded-lg p-3">
+                                    <p class="text-sm text-gray-800">{{ $cashAdvance->reason }}</p>
+                                </div>
                             </div>
                         </div>
 
-                        @if($cashAdvance->first_deduction_date)
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">First Deduction Date</label>
-                            <div>{{ $cashAdvance->first_deduction_date->format('M d, Y') }}</div>
-                        </div>
-                        @endif
-
-                        <div class="col-12">
-                            <label class="form-label fw-bold">Reason</label>
-                            <div class="bg-light p-3 rounded">{{ $cashAdvance->reason }}</div>
-                        </div>
-
-                        @if($cashAdvance->approved_by)
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">Approved By</label>
-                            <div>
-                                {{ $cashAdvance->approvedBy->name }}
-                                <br>
-                                <small class="text-muted">{{ $cashAdvance->approved_date->format('M d, Y g:i A') }}</small>
+                        <!-- Financial Information -->
+                        <div class="space-y-6">
+                            <div class="bg-gradient-to-br from-jade-50 to-emerald-50 rounded-lg p-4 border border-jade-200">
+                                <h6 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                    <svg class="w-5 h-5 text-jade-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                                    </svg>
+                                    Amount Details
+                                </h6>
+                                <div class="grid grid-cols-1 gap-4">
+                                    @if($cashAdvance->approved_amount)
+                                    <div class="bg-white rounded-lg p-3 shadow-sm">
+                                        <div class="text-center">
+                                            <div class="text-sm font-medium text-gray-600">Approved Amount</div>
+                                            <div class="text-2xl font-bold text-green-600">₱{{ number_format($cashAdvance->approved_amount, 2) }}</div>
+                                        </div>
+                                    </div>
+                                    @endif
+                                    
+                                    <div class="bg-white rounded-lg p-3 shadow-sm">
+                                        <div class="text-center">
+                                            <div class="text-sm font-medium text-gray-600">Total Amount Paid</div>
+                                            <div class="text-2xl font-bold text-blue-600">₱{{ number_format($cashAdvance->total_paid, 2) }}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    @if($cashAdvance->interest_rate > 0)
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div class="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                                            <div class="text-center">
+                                                <div class="text-xs font-medium text-orange-600">Interest</div>
+                                                <div class="text-sm font-bold text-orange-700">{{ number_format($cashAdvance->interest_rate, 2) }}%</div>
+                                                <div class="text-lg font-bold text-orange-700">₱{{ number_format($cashAdvance->interest_amount, 2) }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="bg-red-50 rounded-lg p-3 border border-red-200">
+                                            <div class="text-center">
+                                                <div class="text-xs font-medium text-red-600">Total Amount (with Interest)</div>
+                                                <div class="text-lg font-bold text-red-700">₱{{ number_format($cashAdvance->total_amount, 2) }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    @endif
+                                    
+                                    <div class="bg-white rounded-lg p-3 shadow-sm border-2 {{ $cashAdvance->outstanding_balance > 0 ? 'border-yellow-300' : 'border-green-300' }}">
+                                        <div class="text-center">
+                                            <div class="text-sm font-medium text-gray-600">Outstanding Balance</div>
+                                            <div class="text-2xl font-bold {{ $cashAdvance->outstanding_balance > 0 ? 'text-yellow-600' : 'text-green-600' }}">
+                                                ₱{{ number_format($cashAdvance->outstanding_balance, 2) }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+                            
+                            @if($cashAdvance->installments)
+                            <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                                <h6 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                    <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    Payment Plan
+                                </h6>
+                                <div class="space-y-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm font-medium text-gray-600">Installments:</span>
+                                        <span class="text-lg font-bold text-blue-700">{{ $cashAdvance->installments }} month{{ $cashAdvance->installments > 1 ? 's' : '' }}</span>
+                                    </div>
+                                    @if($cashAdvance->installment_amount)
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm font-medium text-gray-600">Monthly Deduction:</span>
+                                        <span class="text-lg font-bold text-blue-700">₱{{ number_format($cashAdvance->installment_amount, 2) }}</span>
+                                    </div>
+                                    @if($cashAdvance->interest_rate > 0)
+                                        <div class="text-xs text-orange-600 text-center">
+                                            * Includes interest charges
+                                        </div>
+                                    @endif
+                                    @endif
+                                    @if($cashAdvance->first_deduction_date)
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm font-medium text-gray-600">Deduction Period:</span>
+                                        <span class="text-sm font-semibold text-blue-700">
+                                            @if($cashAdvance->deduction_period === 'current')
+                                                Current Payroll Period
+                                            @else
+                                                Next Payroll Period
+                                            @endif
+                                        </span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm font-medium text-gray-600">First Deduction:</span>
+                                        <span class="text-sm font-semibold text-blue-700">{{ $cashAdvance->first_deduction_date->format('M d, Y') }}</span>
+                                    </div>
+                                    @endif
+                                </div>
+                            </div>
+                            @endif
                         </div>
-                        @endif
-
-                        @if($cashAdvance->remarks)
-                        <div class="col-12">
-                            <label class="form-label fw-bold">Remarks</label>
-                            <div class="bg-light p-3 rounded">{{ $cashAdvance->remarks }}</div>
-                        </div>
-                        @endif
                     </div>
+
+                    <!-- Reason and Remarks -->
+                    <!-- Remarks Section -->
+                    @if($cashAdvance->remarks)
+                    <div class="mt-8">
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <h6 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+                                </svg>
+                                Approval/Rejection Remarks
+                            </h6>
+                            <p class="text-sm text-gray-800">{{ $cashAdvance->remarks }}</p>
+                        </div>
+                    </div>
+                    @endif
                 </div>
             </div>
 
             <!-- Payment History -->
             @if($cashAdvance->payments->count() > 0)
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Payment History</h5>
+            <div class="bg-white overflow-hidden shadow-lg sm:rounded-lg">
+                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-200">
+                    <h5 class="text-lg font-bold text-gray-900 flex items-center">
+                        <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                        </svg>
+                        Payment History
+                    </h5>
                 </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
+                <div class="p-6">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
                                 <tr>
-                                    <th>Payment Date</th>
-                                    <th>Amount</th>
-                                    <th>Payroll Period</th>
-                                    <th>Remaining Balance</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payroll Period</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining Balance</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody class="bg-white divide-y divide-gray-200">
                                 @foreach($cashAdvance->payments->sortByDesc('payment_date') as $payment)
-                                <tr>
-                                    <td>{{ $payment->payment_date->format('M d, Y') }}</td>
-                                    <td>₱{{ number_format($payment->amount, 2) }}</td>
-                                    <td>
-                                        @if($payment->payroll)
-                                            {{ $payment->payroll->period_start->format('M d') }} - 
-                                            {{ $payment->payroll->period_end->format('M d, Y') }}
-                                        @else
-                                            Manual Payment
-                                        @endif
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-medium text-gray-900">{{ $payment->payment_date->format('M d, Y') }}</div>
                                     </td>
-                                    <td>₱{{ number_format($payment->remaining_balance, 2) }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-semibold text-green-600">₱{{ number_format($payment->payment_amount, 2) }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900">
+                                            @if($payment->payroll)
+                                                {{ $payment->payroll->period_start->format('M d') }} - 
+                                                {{ $payment->payroll->period_end->format('M d, Y') }}
+                                            @else
+                                                <span class="text-gray-500">Manual Payment</span>
+                                            @endif
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-medium {{ $payment->remaining_balance > 0 ? 'text-yellow-600' : 'text-green-600' }}">
+                                            ₱{{ number_format($payment->remaining_balance, 2) }}
+                                        </div>
+                                    </td>
                                 </tr>
                                 @endforeach
                             </tbody>
@@ -208,90 +343,7 @@
             </div>
             @endif
         </div>
-
-        <div class="col-lg-4 col-12">
-            <!-- Summary Card -->
-            <div class="card">
-                <div class="card-header">
-                    <h6 class="card-title mb-0">Summary</h6>
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-6">
-                            <div class="text-center">
-                                <div class="text-muted small">Total Approved</div>
-                                <div class="fw-bold">
-                                    ₱{{ number_format($cashAdvance->approved_amount ?? $cashAdvance->requested_amount, 2) }}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-center">
-                                <div class="text-muted small">Total Paid</div>
-                                <div class="fw-bold text-success">
-                                    ₱{{ number_format($cashAdvance->payments->sum('amount'), 2) }}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-center">
-                                <div class="text-muted small">Outstanding</div>
-                                <div class="fw-bold text-warning">
-                                    ₱{{ number_format($cashAdvance->outstanding_balance, 2) }}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-center">
-                                <div class="text-muted small">Progress</div>
-                                <div class="fw-bold">
-                                    {{ $cashAdvance->approved_amount > 0 ? number_format(($cashAdvance->payments->sum('amount') / $cashAdvance->approved_amount) * 100, 1) : 0 }}%
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Progress Bar -->
-                    @if($cashAdvance->approved_amount > 0)
-                    <div class="mt-3">
-                        <div class="progress" style="height: 8px;">
-                            <div class="progress-bar bg-success" 
-                                 style="width: {{ ($cashAdvance->payments->sum('amount') / $cashAdvance->approved_amount) * 100 }}%">
-                            </div>
-                        </div>
-                    </div>
-                    @endif
-                </div>
-            </div>
-
-            <!-- Actions Card -->
-            <div class="card">
-                <div class="card-header">
-                    <h6 class="card-title mb-0">Actions</h6>
-                </div>
-                <div class="card-body">
-                    @if($cashAdvance->status === 'pending')
-                        @can('approve cash advances')
-                        <button type="button" class="btn btn-success w-100 mb-2" onclick="showApproveModal()">
-                            <i class="fas fa-check me-1"></i> Approve Request
-                        </button>
-                        <button type="button" class="btn btn-danger w-100 mb-2" onclick="showRejectModal()">
-                            <i class="fas fa-times me-1"></i> Reject Request
-                        </button>
-                        @endcan
-                    @endif
-
-                    <button type="button" class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150 w-full justify-center" onclick="window.print()">
-                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-                        </svg>
-                        Print Details
-                    </button>
-                </div>
-            </div>
-        </div>
     </div>
-</div>
 
 <!-- Approve Modal -->
 @can('approve cash advances')

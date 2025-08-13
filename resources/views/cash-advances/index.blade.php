@@ -130,7 +130,7 @@
                                         Employee
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Requested Amount
+                                        Deduction Date
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Approved Amount
@@ -143,9 +143,6 @@
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Status
-                                    </th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Date
                                     </th>
                                 </tr>
                             </thead>
@@ -169,25 +166,48 @@
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">
-                                            ₱{{ number_format($cashAdvance->requested_amount, 2) }}
-                                        </div>
+                                        @if($cashAdvance->status === 'approved' && $cashAdvance->first_deduction_date)
+                                            <div class="text-sm text-gray-900">
+                                                {{ $cashAdvance->first_deduction_date->format('M d, Y') }}
+                                            </div>
+                                            <div class="text-xs text-gray-500">
+                                                Next payroll period
+                                            </div>
+                                        @elseif($cashAdvance->status === 'pending')
+                                            <div class="text-sm text-gray-500">
+                                                Pending approval
+                                            </div>
+                                        @else
+                                            <div class="text-sm text-gray-500">
+                                                —
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         @if($cashAdvance->approved_amount)
                                             <div class="text-sm text-gray-900">
                                                 ₱{{ number_format($cashAdvance->approved_amount, 2) }}
                                             </div>
+                                            {{-- @if($cashAdvance->approved_date)
+                                                <div class="text-xs text-green-600">
+                                                    Approved {{ $cashAdvance->approved_date->format('M d, Y') }}
+                                                </div>
+                                            @endif --}}
                                             @if($cashAdvance->interest_rate > 0)
                                                 <div class="text-xs text-orange-600">
                                                     +{{ $cashAdvance->interest_rate }}% interest
                                                 </div>
-                                                <div class="text-xs text-red-600">
+                                                {{-- <div class="text-xs text-red-600">
                                                     Total: ₱{{ number_format($cashAdvance->total_amount, 2) }}
-                                                </div>
+                                                </div> --}}
                                             @endif
                                         @else
-                                            <span class="text-sm text-gray-500">—</span>
+                                            <div class="text-sm text-gray-900">
+                                                ₱{{ number_format($cashAdvance->requested_amount, 2) }}
+                                            </div>
+                                            <div class="text-xs text-gray-500">
+                                                Requested {{ $cashAdvance->requested_date->format('M d, Y') }}
+                                            </div>
                                         @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
@@ -237,11 +257,6 @@
                                                 </span>
                                                 @break
                                         @endswitch
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">
-                                            {{ $cashAdvance->requested_date->format('M d, Y') }}
-                                        </div>
                                     </td>
                                 </tr>
                                 @endforeach

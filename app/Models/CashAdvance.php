@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 
@@ -13,6 +14,7 @@ class CashAdvance extends Model
 
     protected $fillable = [
         'employee_id',
+        'payroll_id',
         'reference_number',
         'requested_amount',
         'approved_amount',
@@ -28,6 +30,8 @@ class CashAdvance extends Model
         'requested_date',
         'approved_date',
         'first_deduction_date',
+        'deduction_period',
+        'semi_monthly_distribution',
         'requested_by',
         'approved_by',
     ];
@@ -45,10 +49,29 @@ class CashAdvance extends Model
         'first_deduction_date' => 'date',
     ];
 
-    // Relationships
+    protected $attributes = [
+        'status' => 'pending',
+        'outstanding_balance' => 0,
+        'interest_rate' => 0,
+        'interest_amount' => 0,
+    ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['*'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
+
     public function employee()
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function payroll()
+    {
+        return $this->belongsTo(Payroll::class);
     }
 
     public function requestedBy()
@@ -66,222 +89,256 @@ class CashAdvance extends Model
         return $this->hasMany(CashAdvancePayment::class);
     }
 
-    // Scopes
-    public function scopePending($query)
+    public function deductions()
     {
-        return $query->where('status', 'pending');
+        return $this->hasMany(Deduction::class, 'cash_advance_id');
     }
 
-    public function scopeApproved($query)
+    public function payrollDetails()
     {
-        return $query->where('status', 'approved');
+        return $this->hasMany(PayrollDetail::class, 'cash_advance_id');
     }
 
-    public function scopeActive($query)
+    // Scope for filtering by status
+    public function scopeByStatus($query, $status)
     {
-        return $query->whereIn('status', ['approved'])
-            ->where('outstanding_balance', '>', 0);
+        return $query->where('status', $status);
     }
 
-    public function scopeForEmployee($query, $employeeId)
+    // Scope for filtering by employee
+    public function scopeByEmployee($query, $employeeId)
     {
         return $query->where('employee_id', $employeeId);
     }
 
-    // Accessors & Mutators
-    public function getStatusBadgeAttribute()
+    // Calculate total amount to be repaid (principal + interest)
+    public function getTotalAmountAttribute($value)
     {
-        $badges = [
-            'pending' => 'bg-yellow-100 text-yellow-800',
-            'approved' => 'bg-green-100 text-green-800',
-            'rejected' => 'bg-red-100 text-red-800',
-            'fully_paid' => 'bg-blue-100 text-blue-800',
-            'cancelled' => 'bg-gray-100 text-gray-800',
-        ];
-
-        return $badges[$this->status] ?? 'bg-gray-100 text-gray-800';
+        if ($value) {
+            return $value;
+        }
+        return $this->approved_amount + $this->interest_amount;
     }
 
-    public function getIsActiveAttribute()
-    {
-        return $this->status === 'approved' && $this->outstanding_balance > 0;
-    }
-
+    // Calculate total amount paid so far
     public function getTotalPaidAttribute()
     {
-        return $this->approved_amount - $this->outstanding_balance;
+        return $this->payments()->sum('amount');
     }
 
-    public function getPaymentProgressAttribute()
+    // Calculate remaining balance
+    public function getRemainingBalanceAttribute()
     {
-        if ($this->approved_amount <= 0) return 0;
-        return ($this->total_paid / $this->approved_amount) * 100;
+        return $this->total_amount - $this->total_paid;
     }
 
-    // Methods
-    public static function generateReferenceNumber()
+    // Check if cash advance is fully paid
+    public function getIsFullyPaidAttribute()
     {
-        $prefix = 'CA-' . date('Y') . '-';
-        $lastRecord = static::where('reference_number', 'like', $prefix . '%')
-            ->orderByDesc('id')
-            ->first();
+        return $this->remaining_balance <= 0;
+    }
 
-        if ($lastRecord) {
-            $lastNumber = intval(substr($lastRecord->reference_number, -4));
-            $newNumber = $lastNumber + 1;
-        } else {
-            $newNumber = 1;
+    // Get next payment due date
+    public function getNextPaymentDueDateAttribute()
+    {
+        if ($this->is_fully_paid) {
+            return null;
         }
 
-        return $prefix . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
+        $lastPayment = $this->payments()->latest('payment_date')->first();
+        if (!$lastPayment) {
+            return $this->first_deduction_date;
+        }
+
+        // Calculate next payment date based on payroll frequency
+        return $lastPayment->payment_date->addDays(15); // Assuming bi-weekly payroll
     }
 
+    // Generate unique reference number
+    public static function generateReferenceNumber()
+    {
+        $year = date('Y');
+        $month = date('m');
+        $lastRecord = self::whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        $sequence = $lastRecord ? (int)substr($lastRecord->reference_number, -4) + 1 : 1;
+
+        return 'CA-' . $year . $month . str_pad($sequence, 4, '0', STR_PAD_LEFT);
+    }
+
+    // Calculate installment amount
     public function calculateInstallmentAmount()
     {
-        if ($this->approved_amount && $this->installments > 0) {
-            return round($this->approved_amount / $this->installments, 2);
+        if ($this->installments > 0) {
+            return round($this->total_amount / $this->installments, 2);
         }
         return 0;
     }
 
-    public function approve($approvedAmount = null, $installments = null, $approvedBy = null, $remarks = null, $interestRate = null)
+    // Update outstanding balance
+    public function updateOutstandingBalance()
     {
-        $this->approved_amount = $approvedAmount ?? $this->requested_amount;
-        $this->installments = $installments ?? $this->installments;
-
-        // Update interest rate if provided
-        if ($interestRate !== null) {
-            $this->interest_rate = $interestRate;
-        }
-
-        // Calculate interest and total amounts
-        $this->updateCalculations();
-
-        // Set outstanding balance to total amount (including interest)
-        $this->outstanding_balance = $this->total_amount;
-        $this->status = 'approved';
-        $this->approved_date = now();
-        $this->approved_by = $approvedBy ?? auth()->id();
-
-        if ($remarks) {
-            $this->remarks = $remarks;
-        }
-
+        $this->outstanding_balance = $this->remaining_balance;
         $this->save();
-
-        // Create automatic deduction record
-        $this->createAutomaticDeduction();
-
-        return $this;
     }
 
-    public function reject($remarks = null, $rejectedBy = null)
+    // Add cash advance to current payroll period
+    public function addToCurrentPayroll()
     {
-        $this->status = 'rejected';
-        $this->approved_by = $rejectedBy ?? auth()->id();
+        // Get current payroll period for this employee
+        $currentPayroll = Payroll::where('employee_id', $this->employee_id)
+            ->whereIn('status', ['draft', 'in_progress'])
+            ->orderBy('pay_period_end', 'desc')
+            ->first();
 
-        if ($remarks) {
-            $this->remarks = $remarks;
+        if (!$currentPayroll) {
+            return false;
         }
 
-        $this->save();
-
-        return $this;
+        // Create automatic deduction
+        return $this->createAutomaticDeduction($currentPayroll);
     }
 
-    public function recordPayment($payrollId, $payrollDetailId, $paymentAmount, $notes = null)
+    // Create automatic deduction for payroll
+    public function createAutomaticDeduction($payroll)
     {
-        $payment = CashAdvancePayment::create([
+        // Check if deduction already exists for this payroll
+        $existingDeduction = Deduction::where('payroll_id', $payroll->id)
+            ->where('cash_advance_id', $this->id)
+            ->first();
+
+        if ($existingDeduction) {
+            return $existingDeduction;
+        }
+
+        // Calculate deduction amount (installment amount or remaining balance, whichever is smaller)
+        $deductionAmount = min($this->installment_amount, $this->remaining_balance);
+
+        if ($deductionAmount <= 0) {
+            return null;
+        }
+
+        // Create deduction record
+        $deduction = Deduction::create([
+            'payroll_id' => $payroll->id,
             'cash_advance_id' => $this->id,
-            'payroll_id' => $payrollId,
-            'payroll_detail_id' => $payrollDetailId,
-            'payment_amount' => $paymentAmount,
-            'remaining_balance' => $this->outstanding_balance - $paymentAmount,
-            'payment_date' => now(),
-            'notes' => $notes,
+            'type' => 'cash_advance',
+            'description' => 'Cash Advance Deduction - ' . $this->reference_number,
+            'amount' => $deductionAmount,
+            'status' => 'active',
         ]);
 
         // Update outstanding balance
-        $this->outstanding_balance -= $paymentAmount;
+        $this->outstanding_balance = $this->remaining_balance - $deductionAmount;
 
-        // Check if fully paid
+        // Mark as fully paid if balance reaches zero
         if ($this->outstanding_balance <= 0) {
+            $this->status = 'completed';
             $this->outstanding_balance = 0;
-            $this->status = 'fully_paid';
         }
 
         $this->save();
 
-        return $payment;
+        return $deduction;
     }
 
-    /**
-     * Calculate interest amount based on principal and interest rate
-     */
-    public function calculateInterest($principal = null, $rate = null)
+    // Get deduction schedule
+    public function getDeductionSchedule()
     {
-        $principal = $principal ?? $this->approved_amount ?? $this->requested_amount;
-        $rate = $rate ?? $this->interest_rate ?? 0;
+        $schedule = [];
+        $remainingBalance = $this->total_amount;
+        $currentDate = $this->first_deduction_date;
 
-        return ($principal * $rate) / 100;
+        for ($i = 1; $i <= $this->installments && $remainingBalance > 0; $i++) {
+            $deductionAmount = min($this->installment_amount, $remainingBalance);
+
+            $schedule[] = [
+                'installment' => $i,
+                'date' => $currentDate,
+                'amount' => $deductionAmount,
+                'remaining_balance' => $remainingBalance - $deductionAmount,
+            ];
+
+            $remainingBalance -= $deductionAmount;
+            $currentDate = $currentDate->addDays(15); // Assuming bi-weekly payroll
+        }
+
+        return $schedule;
     }
 
-    /**
-     * Calculate total amount (principal + interest)
-     */
-    public function calculateTotalAmount($principal = null, $rate = null)
+    // Check if cash advance can be deleted
+    public function canBeDeleted()
     {
-        $principal = $principal ?? $this->approved_amount ?? $this->requested_amount;
-        $interestAmount = $this->calculateInterest($principal, $rate);
-
-        return $principal + $interestAmount;
+        // Can't delete if there are payments or if status is not pending
+        return $this->payments()->count() === 0 && $this->status === 'pending';
     }
 
-    /**
-     * Update interest and total calculations
-     */
-    public function updateCalculations()
+    // Auto-approve if amount is within policy limits
+    public function autoApproveIfEligible()
     {
-        if ($this->approved_amount && $this->interest_rate !== null) {
-            $this->interest_amount = $this->calculateInterest();
-            $this->total_amount = $this->calculateTotalAmount();
+        // Example: Auto-approve if amount is less than 10,000 and employee has good standing
+        if ($this->requested_amount <= 10000 && $this->employee->hasGoodStanding()) {
+            $this->status = 'approved';
+            $this->approved_amount = $this->requested_amount;
+            $this->approved_date = now();
+            $this->approved_by = Auth::id();
 
-            // Update installment amount based on total amount
-            if ($this->installments > 0) {
-                $this->installment_amount = $this->total_amount / $this->installments;
-            }
+            // Calculate total amount with interest
+            $this->calculateInterestAndTotal();
 
-            // Update outstanding balance to total amount when first approved
-            if ($this->status === 'approved' && $this->outstanding_balance == 0) {
-                $this->outstanding_balance = $this->total_amount;
-            }
+            $this->save();
+            return true;
+        }
+
+        return false;
+    }
+
+    // Calculate interest and total amount
+    public function calculateInterestAndTotal()
+    {
+        // Use approved_amount if set, otherwise use requested_amount for calculations
+        $baseAmount = $this->approved_amount ?? $this->requested_amount;
+
+        if ($this->interest_rate > 0 && $baseAmount) {
+            $this->interest_amount = round(($baseAmount * $this->interest_rate / 100), 2);
+        } else {
+            $this->interest_amount = 0;
+        }
+
+        $this->total_amount = $baseAmount + $this->interest_amount;
+        $this->outstanding_balance = $this->total_amount;
+
+        // Calculate installment amount based on total amount (including interest)
+        if ($this->installments > 0) {
+            $this->installment_amount = round($this->total_amount / $this->installments, 2);
         }
     }
 
-    protected function createAutomaticDeduction()
+    // Update calculations - alias for calculateInterestAndTotal
+    public function updateCalculations()
     {
-        // Create a deduction record for automatic payroll deduction
-        Deduction::create([
-            'employee_id' => $this->employee_id,
-            'name' => 'Cash Advance - ' . $this->reference_number,
-            'type' => 'cash_advance',
-            'amount' => $this->installment_amount,
-            'frequency' => 'per_payroll',
-            'start_date' => $this->first_deduction_date ?? now(),
-            'installments' => $this->installments,
-            'remaining_installments' => $this->installments,
-            'balance' => $this->approved_amount,
-            'is_active' => true,
-            'description' => "Cash advance deduction for {$this->reference_number}",
-        ]);
+        return $this->calculateInterestAndTotal();
     }
 
-    // Activity Log
-    public function getActivitylogOptions(): LogOptions
+    // Approve the cash advance
+    public function approve($approvedAmount, $installments, $approvedById, $remarks = null, $interestRate = null)
     {
-        return LogOptions::defaults()
-            ->logFillable()
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
+        $this->approved_amount = $approvedAmount;
+        $this->installments = $installments;
+        $this->interest_rate = $interestRate ?? $this->interest_rate;
+        $this->approved_by = $approvedById;
+        $this->approved_date = now();
+        $this->remarks = $remarks;
+        $this->status = 'approved';
+
+        // Recalculate all amounts based on approved amount
+        $this->calculateInterestAndTotal();
+
+        $this->save();
+
+        return true;
     }
 }
