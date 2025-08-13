@@ -125,7 +125,7 @@
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][time_in]" 
-                                                       value="{{ $day['time_in'] ? (is_string($day['time_in']) ? \Carbon\Carbon::parse($day['time_in'])->format('H:i') : $day['time_in']->format('H:i')) : '' }}"
+                                                       value="{{ $day['time_in'] ? (is_string($day['time_in']) ? (strlen($day['time_in']) >= 5 ? substr($day['time_in'], 0, 5) : $day['time_in']) : $day['time_in']->format('H:i')) : '' }}"
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
                                                        data-row="{{ $index }}"
                                                        onchange="calculateHours({{ $index }})">
@@ -133,7 +133,7 @@
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][time_out]" 
-                                                       value="{{ $day['time_out'] ? (is_string($day['time_out']) ? \Carbon\Carbon::parse($day['time_out'])->format('H:i') : $day['time_out']->format('H:i')) : '' }}"
+                                                       value="{{ $day['time_out'] ? (is_string($day['time_out']) ? (strlen($day['time_out']) >= 5 ? substr($day['time_out'], 0, 5) : $day['time_out']) : $day['time_out']->format('H:i')) : '' }}"
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
                                                        data-row="{{ $index }}"
                                                        onchange="calculateHours({{ $index }})">
@@ -141,13 +141,13 @@
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][break_in]" 
-                                                       value="{{ $day['break_in'] ? (is_string($day['break_in']) ? \Carbon\Carbon::parse($day['break_in'])->format('H:i') : $day['break_in']->format('H:i')) : '' }}"
+                                                       value="{{ $day['break_in'] ? (is_string($day['break_in']) ? (strlen($day['break_in']) >= 5 ? substr($day['break_in'], 0, 5) : $day['break_in']) : $day['break_in']->format('H:i')) : '' }}"
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500">
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][break_out]" 
-                                                       value="{{ $day['break_out'] ? (is_string($day['break_out']) ? \Carbon\Carbon::parse($day['break_out'])->format('H:i') : $day['break_out']->format('H:i')) : '' }}"
+                                                       value="{{ $day['break_out'] ? (is_string($day['break_out']) ? (strlen($day['break_out']) >= 5 ? substr($day['break_out'], 0, 5) : $day['break_out']) : $day['break_out']->format('H:i')) : '' }}"
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500">
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
@@ -192,7 +192,7 @@
                                                 @endif
                                             </td>
                                             <td class="px-3 py-2">
-                                                <div class="flex space-x-1">
+                                                <div class="flex gap-2">
                                                     <button type="button" 
                                                             onclick="setRegularHours({{ $index }})"
                                                             class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
@@ -311,22 +311,15 @@
             const timeOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_out]"]`);
             const breakInInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_in]"]`);
             const breakOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_out]"]`);
-            const logTypeSelect = document.querySelector(`select[name="time_logs[${rowIndex}][log_type]"]`);
             
+            // Only set times, do NOT change the day type
             if (timeInInput) timeInInput.value = '08:00';       // 8:00 AM
             if (timeOutInput) timeOutInput.value = '17:00';     // 5:00 PM  
             if (breakInInput) breakInInput.value = '12:00';     // 12:00 PM
             if (breakOutInput) breakOutInput.value = '13:00';   // 1:00 PM
             
-            // Set to "Regular Day" specifically 
-            if (logTypeSelect) {
-                for (let option of logTypeSelect.options) {
-                    if (option.text === 'Regular Day') {
-                        option.selected = true;
-                        break;
-                    }
-                }
-            }
+            // Do NOT change the log type - preserve the current selection
+            // This allows users to set regular times on Rest Days, Holidays, etc. without changing the type
             
             // Trigger calculation if function exists
             if (typeof calculateHours === 'function') {
@@ -341,21 +334,52 @@
             const breakInInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_in]"]`);
             const breakOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_out]"]`);
             const logTypeSelect = document.querySelector(`select[name="time_logs[${rowIndex}][log_type]"]`);
+            const row = document.querySelector(`tbody tr:nth-child(${rowIndex + 1})`);
             
             if (timeInInput) timeInInput.value = '';
             if (timeOutInput) timeOutInput.value = '';
             if (breakInInput) breakInInput.value = '';
             if (breakOutInput) breakOutInput.value = '';
             
-            // Reset to "Regular Day" specifically instead of first option
-            if (logTypeSelect) {
+            // Smart default based on actual day type
+            if (logTypeSelect && row) {
+                const isWeekend = row.classList.contains('bg-gray-100');
+                const isHoliday = row.classList.contains('bg-yellow-50');
+                
+                // Determine appropriate default based on day type
+                let defaultType = 'Regular Day'; // Default for weekdays
+                
+                if (isWeekend && !isHoliday) {
+                    defaultType = 'Rest Day';
+                } else if (isHoliday && !isWeekend) {
+                    // Check for holiday type in hidden inputs or span text
+                    const holidaySpan = row.querySelector('.text-red-600');
+                    if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('regular')) {
+                        defaultType = 'RE Holiday';
+                    } else if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('special')) {
+                        defaultType = 'SP Holiday';
+                    }
+                } else if (isWeekend && isHoliday) {
+                    // Weekend + Holiday combination
+                    const holidaySpan = row.querySelector('.text-red-600');
+                    if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('regular')) {
+                        defaultType = 'Rest + RE Holiday';
+                    } else if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('special')) {
+                        defaultType = 'Rest + SP Holiday';
+                    } else {
+                        defaultType = 'Rest Day';
+                    }
+                }
+                
+                // Set the appropriate default
                 for (let option of logTypeSelect.options) {
-                    if (option.text === 'Regular Day') {
+                    if (option.text === defaultType) {
                         option.selected = true;
                         break;
                     }
                 }
-                // If "Regular Day" not found, fallback to first option
+                
+                // If specific type not found, fallback to first option
                 if (!logTypeSelect.value && logTypeSelect.options.length > 0) {
                     logTypeSelect.selectedIndex = 0;
                 }

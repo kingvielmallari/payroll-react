@@ -685,8 +685,13 @@ class PayrollController extends Controller
         $totalGrossPay = 0;
         $payBreakdown = [];
 
-        // Process each time log with its rate multiplier
+        // Process each time log with its rate multiplier (exclude incomplete records)
         foreach ($timeLogs as $timeLog) {
+            // Skip incomplete records - those marked as incomplete or missing time in/out
+            if ($timeLog->remarks === 'Incomplete Time Record' || !$timeLog->time_in || !$timeLog->time_out) {
+                continue;
+            }
+
             if ($timeLog->total_hours <= 0) {
                 continue;
             }
@@ -1274,8 +1279,8 @@ class PayrollController extends Controller
                 $timeLog = $employeeTimeLogs->get($date, collect())->first();
                 $employeeDtr[$date] = $timeLog;
 
-                // Track time breakdown by type
-                if ($timeLog) {
+                // Track time breakdown by type (exclude incomplete records)
+                if ($timeLog && !($timeLog->remarks === 'Incomplete Time Record' || (!$timeLog->time_in || !$timeLog->time_out))) {
                     $logType = $timeLog->log_type;
                     if (!isset($employeeBreakdown[$logType])) {
                         $employeeBreakdown[$logType] = [
@@ -1311,29 +1316,28 @@ class PayrollController extends Controller
         foreach ($payroll->payrollDetails as $detail) {
             $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
             $hourlyRate = $detail->employee->hourly_rate ?? 0;
-            
+
             $basicPay = 0; // Regular workday pay only
             $holidayPay = 0; // All holiday-related pay
-            
+
             foreach ($employeeBreakdown as $logType => $breakdown) {
                 $rateConfig = $breakdown['rate_config'];
                 if (!$rateConfig) continue;
-                
+
                 // Calculate pay amounts using rate multipliers
                 $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
                 $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
-                
+
                 $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
                 $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
-                $totalPay = $regularPay + $overtimePay;
-                
+
                 if ($logType === 'regular_workday') {
-                    $basicPay += $totalPay;
+                    $basicPay += $regularPay; // Only add regular pay to basic pay, not overtime
                 } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
-                    $holidayPay += $totalPay;
+                    $holidayPay += ($regularPay + $overtimePay); // Holiday pay can include both regular and OT
                 }
             }
-            
+
             $payBreakdownByEmployee[$detail->employee_id] = [
                 'basic_pay' => $basicPay,
                 'holiday_pay' => $holidayPay,
@@ -1369,6 +1373,9 @@ class PayrollController extends Controller
             }
         }
 
+        // Calculate total holiday pay for summary
+        $totalHolidayPay = array_sum(array_column($payBreakdownByEmployee, 'holiday_pay'));
+
         return view('payrolls.show', compact(
             'payroll',
             'dtrData',
@@ -1377,7 +1384,8 @@ class PayrollController extends Controller
             'deductionSettings',
             'isDynamic',
             'timeBreakdowns',
-            'payBreakdownByEmployee'
+            'payBreakdownByEmployee',
+            'totalHolidayPay'
         ));
     }
 

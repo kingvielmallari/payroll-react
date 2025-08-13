@@ -49,7 +49,7 @@
                     @foreach($typeConfigurations as $configuration)
                         <tr class="hover:bg-gray-50 cursor-pointer {{ !$configuration->is_active ? 'opacity-50 bg-gray-50' : '' }}" 
                             data-context-menu
-                            oncontextmenu="showRateConfigContextMenu(event, {{ $configuration->id }}, {{ json_encode($configuration->display_name) }}, {{ json_encode($type) }}, {{ $configuration->is_active ? 'true' : 'false' }}, {{ $configuration->is_system ? 'true' : 'false' }})">>
+                            oncontextmenu="showRateConfigContextMenu(event, {{ $configuration->id }}, {{ json_encode($configuration->display_name) }}, {{ json_encode($type) }}, {{ $configuration->is_active ? 'true' : 'false' }}, {{ $configuration->is_system ? 'true' : 'false' }})">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm font-medium {{ !$configuration->is_active ? 'text-gray-400' : 'text-gray-900' }}">{{ $configuration->display_name }}</div>
                             </td>

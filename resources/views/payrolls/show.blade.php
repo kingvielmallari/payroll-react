@@ -28,14 +28,18 @@
 
     <div class="py-6">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-            
+               
             <!-- Payroll Summary -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                         <div class="bg-blue-50 p-4 rounded-lg">
                             <div class="text-2xl font-bold text-blue-600">₱{{ number_format($payroll->payrollDetails->sum('regular_pay'), 2) }}</div>
                             <div class="text-sm text-blue-800">Total Basic</div>
+                        </div>
+                        <div class="bg-purple-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-purple-600">₱{{ number_format($totalHolidayPay ?? 0, 2) }}</div>
+                            <div class="text-sm text-purple-800">Total Holiday</div>
                         </div>
                         <div class="bg-green-50 p-4 rounded-lg">
                             <div class="text-2xl font-bold text-green-600">₱{{ number_format($payroll->total_gross, 2) }}</div>
@@ -45,9 +49,9 @@
                             <div class="text-2xl font-bold text-red-600">₱{{ number_format($payroll->total_deductions, 2) }}</div>
                             <div class="text-sm text-red-800">Total Deductions</div>
                         </div>
-                        <div class="bg-purple-50 p-4 rounded-lg">
-                            <div class="text-2xl font-bold text-purple-600">₱{{ number_format($payroll->total_net, 2) }}</div>
-                            <div class="text-sm text-purple-800">Total Net</div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <div class="text-2xl font-bold text-gray-600">₱{{ number_format($payroll->total_net, 2) }}</div>
+                            <div class="text-sm text-gray-800">Total Net</div>
                         </div>
                     </div>
 
@@ -270,7 +274,7 @@
                                             $basicOvertimeHours = $regularWorkdayBreakdown['overtime_hours'];
                                         @endphp
                                         <div class="font-bold text-blue-600">₱{{ number_format($basicPay, 2) }}</div>
-                                        <div class="text-xs text-gray-500">{{ number_format($basicRegularHours + $basicOvertimeHours, 1) }} hrs</div>
+                                        <div class="text-xs text-gray-500">{{ number_format($basicRegularHours, 1) }} hrs</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
@@ -289,8 +293,25 @@
                                         <div class="text-xs text-gray-500">{{ number_format($totalHolidayHours, 1) }} hrs</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
-                                        <div class="font-bold text-orange-600">₱{{ number_format($detail->overtime_pay, 2) }}</div>
-                                        <div class="text-xs text-gray-500">{{ number_format($detail->overtime_hours ?? 0, 1) }} hrs</div>
+                                        @php 
+                                            // Calculate total overtime pay from all types using rate multipliers
+                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                            $totalOvertimePay = 0;
+                                            $totalOvertimeHours = 0;
+                                            
+                                            foreach ($employeeBreakdown as $logType => $breakdown) {
+                                                $rateConfig = $breakdown['rate_config'];
+                                                if ($rateConfig && $breakdown['overtime_hours'] > 0) {
+                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+                                                    $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                                    $totalOvertimePay += $overtimePay;
+                                                    $totalOvertimeHours += $breakdown['overtime_hours'];
+                                                }
+                                            }
+                                        @endphp
+                                        <div class="font-bold text-orange-600">₱{{ number_format($totalOvertimePay, 2) }}</div>
+                                        <div class="text-xs text-gray-500">{{ number_format($totalOvertimeHours, 1) }} hrs</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
@@ -375,71 +396,141 @@
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
                                             @if($detail->total_deductions > 0)
-                                                <!-- Show Government Contributions with EE/ER Share -->
-                                                <div class="mb-2 p-2 bg-red-50 rounded border border-red-200">
-                                                    <div class="text-xs font-medium text-red-800 mb-1">Deductions (EE Share):</div>
-                                                    
-                                                    @if($detail->sss_contribution > 0)
-                                                        <div class="text-xs text-red-700 flex justify-between">
-                                                            <span>SSS ({{ number_format($detail->sss_contribution, 2) }}):</span>
-                                                            <span>₱{{ number_format($detail->sss_contribution, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                                    
-                                                    @if($detail->philhealth_contribution > 0)
-                                                        <div class="text-xs text-red-700 flex justify-between">
-                                                            <span>PHIC ({{ number_format($detail->philhealth_contribution, 2) }}):</span>
-                                                            <span>₱{{ number_format($detail->philhealth_contribution, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                                    
-                                                    @if($detail->pagibig_contribution > 0)
-                                                        <div class="text-xs text-red-700 flex justify-between">
-                                                            <span>HDMF ({{ number_format($detail->pagibig_contribution, 2) }}):</span>
-                                                            <span>₱{{ number_format($detail->pagibig_contribution, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                                    
-                                                    @if($detail->withholding_tax > 0)
-                                                        <div class="text-xs text-red-700 flex justify-between">
-                                                            <span>TAX ({{ number_format($detail->withholding_tax, 2) }}):</span>
-                                                            <span>₱{{ number_format($detail->withholding_tax, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                                    
-                                                    @if($detail->late_deductions > 0)
-                                                        <div class="text-xs text-red-700 flex justify-between">
-                                                            <span>LATE ({{ number_format($detail->late_deductions, 2) }}):</span>
-                                                            <span>₱{{ number_format($detail->late_deductions, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                                    
-                                                    @if($detail->undertime_deductions > 0)
-                                                        <div class="text-xs text-red-700 flex justify-between">
-                                                            <span>UT ({{ number_format($detail->undertime_deductions, 2) }}):</span>
-                                                            <span>₱{{ number_format($detail->undertime_deductions, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                                    
-                                                    @if($detail->cash_advance_deductions > 0)
-                                                        <div class="text-xs text-red-700 flex justify-between">
-                                                            <span>CA:</span>
-                                                            <span>₱{{ number_format($detail->cash_advance_deductions, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                                    
-                                                    @if($detail->other_deductions > 0)
-                                                        <div class="text-xs text-red-700 flex justify-between">
-                                                            <span>OTHER ({{ number_format($detail->other_deductions, 2) }}):</span>
-                                                            <span>₱{{ number_format($detail->other_deductions, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                                </div>
+                                                <!-- Show Deduction Breakdown if available -->
+                                                @if(isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown) && !empty($detail->deduction_breakdown))
+                                                    <div class="mb-2 p-2 bg-red-50 rounded border border-red-200">
+                                                        <div class="text-xs font-medium text-red-800 mb-1">Deductions Breakdown:</div>
+                                                        @foreach($detail->deduction_breakdown as $code => $deductionData)
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>{{ $deductionData['name'] ?? $code }}:</span>
+                                                                <span>₱{{ number_format($deductionData['amount'] ?? $deductionData, 2) }}</span>
+                                                            </div>
+                                                        @endforeach
+                                                    </div>
+                                                @elseif(isset($isDynamic) && $isDynamic && $deductionSettings->isNotEmpty())
+                                                    <!-- Show Active Deduction Settings with Calculated Amounts -->
+                                                    <div class="mb-2 p-2 bg-red-50 rounded border border-red-200">
+                                                        <div class="text-xs font-medium text-red-800 mb-1">Deductions (EE Share):</div>
+                                                        @php
+                                                            $calculatedDeductionTotal = 0;
+                                                        @endphp
+                                                        @foreach($deductionSettings as $setting)
+                                                            @php
+                                                                // Calculate actual deduction amount for this employee
+                                                                $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->basic_pay ?? 0;
+                                                                $grossPay = $detail->gross_pay ?? 0;
+                                                                $overtimePay = $detail->overtime_pay ?? 0;
+                                                                $allowances = $detail->allowances ?? 0;
+                                                                $bonuses = $detail->bonuses ?? 0;
+                                                                
+                                                                $calculatedAmount = $setting->calculateDeduction(
+                                                                    $basicPay, 
+                                                                    $overtimePay, 
+                                                                    $bonuses, 
+                                                                    $allowances, 
+                                                                    $grossPay
+                                                                );
+                                                                $calculatedDeductionTotal += $calculatedAmount;
+                                                            @endphp
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>{{ $setting->name }}:</span>
+                                                                <span>₱{{ number_format($calculatedAmount, 2) }}</span>
+                                                            </div>
+                                                        @endforeach
+                                                    </div>
+                                                @else
+                                                    <!-- Fallback: Show Traditional Breakdown -->
+                                                    <div class="mb-2 p-2 bg-red-50 rounded border border-red-200">
+                                                        <div class="text-xs font-medium text-red-800 mb-1">Deductions (EE Share):</div>
+                                                        
+                                                        @if($detail->sss_contribution > 0)
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>SSS ({{ number_format($detail->sss_contribution, 2) }}):</span>
+                                                                <span>₱{{ number_format($detail->sss_contribution, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        
+                                                        @if($detail->philhealth_contribution > 0)
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>PHIC ({{ number_format($detail->philhealth_contribution, 2) }}):</span>
+                                                                <span>₱{{ number_format($detail->philhealth_contribution, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        
+                                                        @if($detail->pagibig_contribution > 0)
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>HDMF ({{ number_format($detail->pagibig_contribution, 2) }}):</span>
+                                                                <span>₱{{ number_format($detail->pagibig_contribution, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        
+                                                        @if($detail->withholding_tax > 0)
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>TAX ({{ number_format($detail->withholding_tax, 2) }}):</span>
+                                                                <span>₱{{ number_format($detail->withholding_tax, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        
+                                                        @if($detail->late_deductions > 0)
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>LATE ({{ number_format($detail->late_deductions, 2) }}):</span>
+                                                                <span>₱{{ number_format($detail->late_deductions, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        
+                                                        @if($detail->undertime_deductions > 0)
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>UT ({{ number_format($detail->undertime_deductions, 2) }}):</span>
+                                                                <span>₱{{ number_format($detail->undertime_deductions, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        
+                                                        @if($detail->cash_advance_deductions > 0)
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>CA:</span>
+                                                                <span>₱{{ number_format($detail->cash_advance_deductions, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                        
+                                                        @if($detail->other_deductions > 0)
+                                                            <div class="text-xs text-red-700 flex justify-between">
+                                                                <span>OTHER ({{ number_format($detail->other_deductions, 2) }}):</span>
+                                                                <span>₱{{ number_format($detail->other_deductions, 2) }}</span>
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                @endif
                                                 
-                                                <div class="font-medium text-red-600">
-                                                    ₱{{ number_format($detail->total_deductions, 2) }}
-                                                </div>
+                                                @if(isset($isDynamic) && $isDynamic && $deductionSettings->isNotEmpty())
+                                                    <div class="font-medium text-red-600">
+                                                        ₱{{ number_format($calculatedDeductionTotal ?? $detail->total_deductions, 2) }}
+                                                    </div>
+                                                @else
+                                                    <div class="font-medium text-red-600">
+                                                        ₱{{ number_format($detail->total_deductions, 2) }}
+                                                    </div>
+                                                @endif
                                             @else
+                                                @if(isset($isDynamic) && $isDynamic && $deductionSettings->isNotEmpty())
+                                                    <!-- Show Available Deduction Settings when no deductions applied -->
+                                                    <div class="mb-2 p-2 bg-gray-50 rounded border border-gray-200">
+                                                        <div class="text-xs font-medium text-gray-600 mb-1">Available Deductions:</div>
+                                                        @foreach($deductionSettings as $setting)
+                                                            <div class="text-xs text-gray-500 flex justify-between">
+                                                                <span>{{ $setting->name }}:</span>
+                                                                <span>
+                                                                    @if($setting->calculation_type === 'fixed_amount')
+                                                                        ₱{{ number_format($setting->fixed_amount, 2) }}
+                                                                    @elseif($setting->calculation_type === 'percentage')
+                                                                        {{ $setting->rate_percentage }}%
+                                                                    @else
+                                                                        {{ ucfirst(str_replace('_', ' ', $setting->calculation_type)) }}
+                                                                    @endif
+                                                                </span>
+                                                            </div>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
                                                 <div class="text-gray-400">₱0.00</div>
                                             @endif
                                             
@@ -557,12 +648,12 @@
                                         <span class="text-gray-400 normal-case">{{ \Carbon\Carbon::parse($date)->format('D') }}</span>
                                     </th>
                                     @endforeach
-                                    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    {{-- <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Total<br>Hours
                                     </th>
                                     <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Overtime<br>Hours
-                                    </th>
+                                    </th> --}}
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
@@ -582,156 +673,138 @@
                                     @foreach($periodDates as $date)
                                     @php 
                                         $timeLog = $dtrData[$detail->employee_id][$date] ?? null;
-                                        $regularHours = $timeLog ? ($timeLog->regular_hours ?? 0) : 0;
-                                        $overtimeHours = $timeLog ? ($timeLog->overtime_hours ?? 0) : 0;
+                                        
+                                        // Exclude incomplete records from hour calculation
+                                        $isIncompleteRecord = $timeLog && ($timeLog->remarks === 'Incomplete Time Record' || (!$timeLog->time_in || !$timeLog->time_out));
+                                        
+                                        $regularHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->regular_hours ?? 0) : 0;
+                                        $overtimeHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->overtime_hours ?? 0) : 0;
                                         $totalEmployeeHours += $regularHours;
                                         $totalEmployeeOvertimeHours += $overtimeHours;
                                         $isWeekend = \Carbon\Carbon::parse($date)->isWeekend();
+                                        
+                                        // Get day type for indicator
+                                        $dayType = 'Regular Day';
+                                        $dayTypeColor = 'bg-green-100 text-green-800';
+                                        
+                                        if ($timeLog && $timeLog->log_type) {
+                                            $rateConfig = $timeLog->getRateConfiguration();
+                                            if ($rateConfig) {
+                                                $dayType = $rateConfig->display_name;
+                                                // Set color based on type
+                                                if (str_contains($dayType, 'Holiday')) {
+                                                    $dayTypeColor = 'bg-red-100 text-red-800';
+                                                } elseif (str_contains($dayType, 'Rest')) {
+                                                    $dayTypeColor = 'bg-blue-100 text-blue-800';
+                                                } else {
+                                                    $dayTypeColor = 'bg-green-100 text-green-800';
+                                                }
+                                            }
+                                        } elseif ($isWeekend) {
+                                            $dayType = 'Rest Day';
+                                            $dayTypeColor = 'bg-blue-100 text-blue-800';
+                                        }
                                     @endphp
                                     <td class="px-2 py-4 text-xs text-center {{ $isWeekend ? 'bg-gray-100' : '' }}">
+                                        <!-- Day Type Indicator -->
+                                        <div class="mb-2">
+                                            <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full {{ $dayTypeColor }}">
+                                                {{ $dayType }}
+                                            </span>
+                                        </div>
+                                        
                                         @if($timeLog)
-                                            <div class="space-y-1">
-                                                @if($timeLog->time_in && $timeLog->time_out)
-                                                <div class="text-green-600 font-medium">
-                                                    {{ \Carbon\Carbon::parse($timeLog->time_in)->format('H:i') }} - {{ \Carbon\Carbon::parse($timeLog->time_out)->format('H:i') }}
+                                            @if($timeLog->remarks === 'Incomplete Time Record' || (!$timeLog->time_in || !$timeLog->time_out))
+                                                {{-- Display INC for incomplete records --}}
+                                                <div class="text-red-600 font-bold">
+                                                    INC
                                                 </div>
-                                                @endif
-                                                @if($timeLog->break_in && $timeLog->break_out)
-                                                <div class="text-gray-600 text-xs">
-                                                    Break: {{ \Carbon\Carbon::parse($timeLog->break_in)->format('H:i') }} - {{ \Carbon\Carbon::parse($timeLog->break_out)->format('H:i') }}
+                                            @else
+                                                <div class="space-y-1">
+                                                    @if($timeLog->time_in || $timeLog->time_out)
+                                                    <div class="text-green-600 font-medium">
+                                                        {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->time_out ? \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A') : 'N/A' }}
+                                                    </div>
+                                                    @endif
+                                                    @if($timeLog->break_in || $timeLog->break_out)
+                                                    <div class="text-gray-600 text-xs">
+                                                        Break: {{ $timeLog->break_in ? \Carbon\Carbon::parse($timeLog->break_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->break_out ? \Carbon\Carbon::parse($timeLog->break_out)->format('g:i A') : 'N/A' }}
+                                                    </div>
+                                                    @endif
+                                                    @if($regularHours > 0)
+                                                    <div class="text-blue-600">
+                                                        {{ number_format($regularHours, 1) }}h
+                                                    </div>
+                                                    @endif
+                                                    @if($overtimeHours > 0)
+                                                    <div class="text-orange-600">
+                                                        OT: {{ number_format($overtimeHours, 1) }}h
+                                                    </div>
+                                                    @endif
+                                                    {{-- @if($timeLog->late_hours)
+                                                    <div class="text-red-600">
+                                                        Late: {{ number_format($timeLog->late_hours, 1) }}h
+                                                    </div>
+                                                    @endif --}}
                                                 </div>
-                                                @endif
-                                                @if($regularHours > 0)
-                                                <div class="text-blue-600">
-                                                    {{ number_format($regularHours, 1) }}h
-                                                </div>
-                                                @endif
-                                                @if($overtimeHours > 0)
-                                                <div class="text-orange-600">
-                                                    OT: {{ number_format($overtimeHours, 1) }}h
-                                                </div>
-                                                @endif
-                                                @if($timeLog->late_hours)
-                                                <div class="text-red-600">
-                                                    Late: {{ number_format($timeLog->late_hours, 1) }}h
-                                                </div>
-                                                @endif
-                                            </div>
+                                            @endif
                                         @else
-                                            <div class="text-gray-300">-</div>
+                                            {{-- Display N/A when there's no record from database --}}
+                                            <div class="text-gray-600 font-bold">N/A</div>
                                         @endif
                                     </td>
                                     @endforeach
-                                    <td class="px-3 py-4 text-sm font-medium text-center border-l">
+                                    {{-- <td class="px-3 py-4 text-sm font-medium text-center border-l">
                                         <div class="text-blue-600">{{ number_format($totalEmployeeHours, 1) }} hrs</div>
+                                        @php
+                                            // Calculate total regular pay using rate multipliers
+                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                            $totalRegularPay = 0;
+                                            
+                                            foreach ($employeeBreakdown as $logType => $breakdown) {
+                                                $rateConfig = $breakdown['rate_config'];
+                                                if ($rateConfig && $breakdown['regular_hours'] > 0) {
+                                                    $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                                                    $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                                    $totalRegularPay += $regularPay;
+                                                }
+                                            }
+                                        @endphp
                                         <div class="text-xs text-gray-500">
-                                            ₱{{ number_format($totalEmployeeHours * ($detail->employee->hourly_rate ?? 0), 2) }}
+                                            ₱{{ number_format($totalRegularPay, 2) }}
                                         </div>
-                                    </td>
-                                    <td class="px-3 py-4 text-sm font-medium text-center border-l">
+                                    </td> --}}
+                                    {{-- <td class="px-3 py-4 text-sm font-medium text-center border-l">
                                         <div class="text-orange-600">{{ number_format($totalEmployeeOvertimeHours, 1) }} hrs</div>
                                         @if($totalEmployeeOvertimeHours > 0)
+                                        @php
+                                            // Calculate total overtime pay using rate multipliers
+                                            $totalOvertimePayCalc = 0;
+                                            
+                                            foreach ($employeeBreakdown as $logType => $breakdown) {
+                                                $rateConfig = $breakdown['rate_config'];
+                                                if ($rateConfig && $breakdown['overtime_hours'] > 0) {
+                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+                                                    $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                                    $totalOvertimePayCalc += $overtimePay;
+                                                }
+                                            }
+                                        @endphp
                                         <div class="text-xs text-gray-500">
-                                            ₱{{ number_format($totalEmployeeOvertimeHours * (($detail->employee->hourly_rate ?? 0) * 1.25), 2) }}
+                                            ₱{{ number_format($totalOvertimePayCalc, 2) }}
                                         </div>
                                         @endif
-                                    </td>
+                                    </td> --}}
                                 </tr>
                                 @endforeach
                             </tbody>
                         </table>
                     </div>
                     
-                    <!-- Detailed Time Breakdown by Type -->
-                    @if(isset($timeBreakdowns) && !empty($timeBreakdowns))
-                    <div class="mt-8">
-                        <h4 class="text-lg font-medium text-gray-900 mb-4">Detailed Time & Pay Breakdown by Type</h4>
-                        <div class="space-y-6">
-                            @foreach($payroll->payrollDetails as $detail)
-                            @php 
-                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                            @endphp
-                            @if(!empty($employeeBreakdown))
-                            <div class="bg-gray-50 rounded-lg p-4">
-                                <h5 class="font-medium text-gray-900 mb-3">
-                                    {{ $detail->employee->user->name }} 
-                                    <span class="text-sm font-normal text-blue-600">(₱{{ number_format($hourlyRate, 2) }}/hr)</span>
-                                </h5>
-                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    @foreach($employeeBreakdown as $logType => $breakdown)
-                                    @php
-                                        $rateConfig = $breakdown['rate_config'];
-                                        $displayName = $breakdown['display_name'] ?: $logType;
-                                        
-                                        // Calculate pay amounts using rate multipliers
-                                        $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.0;
-                                        $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
-                                        
-                                        $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
-                                        $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
-                                        $totalPay = $regularPay + $overtimePay;
-                                    @endphp
-                                    <div class="bg-white border border-gray-200 rounded-lg p-3">
-                                        <div class="font-medium text-gray-900 mb-2">{{ $displayName }}</div>
-                                        <div class="space-y-1 text-sm">
-                                            <div class="flex justify-between">
-                                                <span class="text-gray-600">Days:</span>
-                                                <span class="font-medium">{{ $breakdown['days_count'] }}</span>
-                                            </div>
-                                            
-                                            @if($breakdown['regular_hours'] > 0)
-                                            <div class="border-t pt-1">
-                                                <div class="flex justify-between">
-                                                    <span class="text-gray-600">Regular Hours:</span>
-                                                    <span class="font-medium">{{ number_format($breakdown['regular_hours'], 1) }}h</span>
-                                                </div>
-                                                <div class="flex justify-between text-xs text-gray-500">
-                                                    <span>Rate:</span>
-                                                    <span>₱{{ number_format($hourlyRate, 2) }} × {{ number_format($regularMultiplier * 100, 0) }}%</span>
-                                                </div>
-                                                <div class="flex justify-between font-medium text-blue-600">
-                                                    <span>Regular Pay:</span>
-                                                    <span>₱{{ number_format($regularPay, 2) }}</span>
-                                                </div>
-                                            </div>
-                                            @endif
-                                            
-                                            @if($breakdown['overtime_hours'] > 0)
-                                            <div class="border-t pt-1">
-                                                <div class="flex justify-between">
-                                                    <span class="text-gray-600">Overtime Hours:</span>
-                                                    <span class="font-medium">{{ number_format($breakdown['overtime_hours'], 1) }}h</span>
-                                                </div>
-                                                <div class="flex justify-between text-xs text-gray-500">
-                                                    <span>Rate:</span>
-                                                    <span>₱{{ number_format($hourlyRate, 2) }} × {{ number_format($overtimeMultiplier * 100, 0) }}%</span>
-                                                </div>
-                                                <div class="flex justify-between font-medium text-orange-600">
-                                                    <span>OT Pay:</span>
-                                                    <span>₱{{ number_format($overtimePay, 2) }}</span>
-                                                </div>
-                                            </div>
-                                            @endif
-                                            
-                                            <div class="border-t pt-1">
-                                                <div class="flex justify-between font-bold text-green-600">
-                                                    <span>Total {{ $displayName }}:</span>
-                                                    <span>₱{{ number_format($totalPay, 2) }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    @endforeach
-                                </div>
-                            </div>
-                            @endif
-                            @endforeach
-                        </div>
-                    </div>
-                    @endif
+                   
                     
-                    <div class="mt-4 text-sm text-gray-600">
+                    {{-- <div class="mt-4 text-sm text-gray-600">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <strong>Legend:</strong>
@@ -750,7 +823,7 @@
                                 <strong>Weekend days</strong> are highlighted in gray background
                             </div>
                         </div>
-                    </div>
+                    </div> --}}
                 </div>
             </div>
         </div>
