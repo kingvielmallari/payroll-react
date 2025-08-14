@@ -101,7 +101,7 @@
                                 <svg class="w-5 h-5 text-blue-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
                                 </svg>
-                                <span class="text-xs text-blue-700"><strong>Tip:</strong> Right-click on any employee row to access View, Edit, and Delete actions.</span>
+                                <span class="text-xs text-blue-700"><strong>Tip:</strong> Click on any employee row to view details | Right-click for Edit, Delete and other actions.</span>
                             </div>
                         </div>
                         
@@ -110,9 +110,10 @@
                             @foreach($employees as $employee)
                                 <div class="bg-gray-50 rounded-lg p-4 cursor-pointer hover:bg-gray-100 transition-colors duration-150" 
                                      oncontextmenu="showContextMenu(event, '{{ $employee->employee_number }}', '{{ $employee->full_name }}', '{{ $employee->employee_number }}')"
+                                     onclick="window.location.href='{{ route('employees.show', $employee) }}'"
                                      data-employee-id="{{ $employee->id }}"
                                      data-user-role="{{ $employee->user->roles->first()?->name ?? 'Employee' }}"
-                                     title="Right-click for actions">
+                                     title="Click to view details | Right-click for more actions">
                                     <div class="flex items-center mb-3">
                                         <div class="flex-shrink-0 h-10 w-10">
                                             <div class="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
@@ -182,9 +183,10 @@
                                     @foreach($employees as $employee)
                                         <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
                                             oncontextmenu="showContextMenu(event, '{{ $employee->employee_number }}', '{{ $employee->full_name }}', '{{ $employee->employee_number }}')"
+                                            onclick="window.location.href='{{ route('employees.show', $employee) }}'"
                                             data-employee-id="{{ $employee->id }}"
                                             data-user-role="{{ $employee->user->roles->first()?->name ?? 'Employee' }}"
-                                            title="Right-click for actions">
+                                            title="Click to view details | Right-click for more actions">
                                             <td class="px-3 py-4">
                                                 <div class="flex items-center">
                                                     <div class="flex-shrink-0 h-8 w-8">

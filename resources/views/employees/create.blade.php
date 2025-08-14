@@ -406,7 +406,7 @@
                         </div>
                         
                         <!-- Salary Calculation Summary -->
-                        <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                        {{-- <div class="mt-6 p-4 bg-gray-50 rounded-lg">
                             <h4 class="text-sm font-medium text-gray-900 mb-2">Salary Breakdown</h4>
                             <div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs text-gray-600">
                                 <div>Hourly: <span id="calc_hourly" class="font-medium text-gray-900">₱0.00</span></div>
@@ -415,7 +415,7 @@
                                 <div>Semi-Monthly: <span id="calc_semi" class="font-medium text-gray-900">₱0.00</span></div>
                                 <div>Monthly: <span id="calc_monthly" class="font-medium text-gray-900">₱0.00</span></div>
                             </div>
-                        </div>
+                        </div> --}}
                     </div>
                 </div>
 

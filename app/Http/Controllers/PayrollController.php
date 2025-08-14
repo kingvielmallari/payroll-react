@@ -26,7 +26,7 @@ class PayrollController extends Controller
         $this->authorize('view payrolls');
 
         // Get all payrolls with filters
-        $query = Payroll::with(['creator', 'approver'])
+        $query = Payroll::with(['creator', 'approver', 'payrollDetails.employee'])
             ->withCount('payrollDetails')
             ->orderBy('created_at', 'desc');
 
@@ -89,7 +89,7 @@ class PayrollController extends Controller
         }
 
         // Show payrolls for selected schedule
-        $query = Payroll::with(['creator', 'approver'])
+        $query = Payroll::with(['creator', 'approver', 'payrollDetails.employee'])
             ->withCount('payrollDetails')
             ->where('pay_schedule', $selectedSchedule)
             ->orderBy('created_at', 'desc');
@@ -457,7 +457,7 @@ class PayrollController extends Controller
         $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
 
         // Get paginated payrolls for this schedule AND current period only
-        $payrolls = Payroll::with(['creator', 'approver'])
+        $payrolls = Payroll::with(['creator', 'approver', 'payrollDetails.employee'])
             ->withCount('payrollDetails')
             ->where('pay_schedule', $schedule)
             ->where('payroll_type', 'automated')

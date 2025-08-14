@@ -105,7 +105,7 @@
                                         Type
                                     </th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Employees
+                                        Employee
                                     </th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Total Gross (DTR)
@@ -142,7 +142,24 @@
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {{ $payroll->payroll_details_count }} employees
+                                        @if($payroll->payroll_details_count <= 3)
+                                            @foreach($payroll->payrollDetails as $detail)
+                                                <div class="text-sm">
+                                                    <span class="font-medium">{{ $detail->employee->full_name }}</span>
+                                                    <span class="text-gray-500 text-xs ml-1">({{ $detail->employee->employee_number }})</span>
+                                                </div>
+                                            @endforeach
+                                        @else
+                                            @foreach($payroll->payrollDetails->take(2) as $detail)
+                                                <div class="text-sm">
+                                                    <span class="font-medium">{{ $detail->employee->full_name }}</span>
+                                                    <span class="text-gray-500 text-xs ml-1">({{ $detail->employee->employee_number }})</span>
+                                                </div>
+                                            @endforeach
+                                            <div class="text-xs text-gray-500 mt-1">
+                                                +{{ $payroll->payroll_details_count - 2 }} more employees
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                         <div class="font-medium text-green-600">₱{{ number_format($payroll->total_gross, 2) }}</div>
@@ -339,14 +356,7 @@
             
             // Show Delete if user has permission
             @can('delete payrolls')
-            if (status === 'draft' || status === 'processing') {
-                document.getElementById('contextMenuDelete').style.display = 'flex';
-            }
-            @endcan
-            
-            // Show Delete for approved payrolls if user has special permission
-            @can('delete approved payrolls')
-            if (status === 'approved') {
+            if (status === 'draft' || status === 'processing' || status === 'approved') {
                 document.getElementById('contextMenuDelete').style.display = 'flex';
             }
             @endcan

@@ -60,7 +60,7 @@
                                     <tr>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payroll</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Period</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employees</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Net</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
@@ -88,7 +88,18 @@
                                                 <div class="text-sm text-gray-500">Pay: {{ \Carbon\Carbon::parse($payroll->pay_date)->format('M d, Y') }}</div>
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                {{ $payroll->payroll_details_count }}
+                                                @if($payroll->payrollDetails->count() > 0)
+                                                    @if($payroll->payrollDetails->count() == 1)
+                                                        @php $employee = $payroll->payrollDetails->first()->employee @endphp
+                                                        <div class="text-sm font-medium text-gray-900">{{ $employee->full_name }}</div>
+                                                        <div class="text-sm text-gray-500">{{ $employee->employee_number }}</div>
+                                                    @else
+                                                        <div class="text-sm font-medium text-gray-900">{{ $payroll->payrollDetails->count() }} employees</div>
+                                                        <div class="text-sm text-gray-500">Multiple employees</div>
+                                                    @endif
+                                                @else
+                                                    <div class="text-sm text-gray-500">No employees</div>
+                                                @endif
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                 ₱{{ number_format($payroll->total_net ?? 0, 2) }}
