@@ -7,6 +7,7 @@ use App\Models\PayrollDetail;
 use App\Models\Employee;
 use App\Models\TimeLog;
 use App\Models\PayScheduleSetting;
+use App\Http\Controllers\TimeLogController;
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
@@ -3533,6 +3534,9 @@ class PayrollController extends Controller
             // Always perform full recalculation to reflect current data
             Log::info('Auto-recalculating payroll on view', ['payroll_id' => $payroll->id]);
 
+            // First, recalculate all time log hours for this payroll period
+            $this->recalculateTimeLogsForPayroll($payroll);
+
             $totalGross = 0;
             $totalDeductions = 0;
             $totalNet = 0;
@@ -3563,6 +3567,35 @@ class PayrollController extends Controller
                 'error' => $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Recalculate time log hours for all employees in a payroll period
+     */
+    private function recalculateTimeLogsForPayroll(Payroll $payroll)
+    {
+        $employeeIds = $payroll->payrollDetails->pluck('employee_id');
+
+        $timeLogs = TimeLog::whereIn('employee_id', $employeeIds)
+            ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+            ->get();
+
+        $timeLogController = app(TimeLogController::class);
+
+        foreach ($timeLogs as $timeLog) {
+            // Skip if incomplete record
+            if (!$timeLog->time_in || !$timeLog->time_out) {
+                continue;
+            }
+
+            // Recalculate hours using the current logic
+            $timeLogController->calculateHours($timeLog);
+        }
+
+        Log::info('Recalculated time logs for payroll', [
+            'payroll_id' => $payroll->id,
+            'time_logs_count' => $timeLogs->count()
+        ]);
     }
 
     /**

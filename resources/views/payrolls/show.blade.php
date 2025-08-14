@@ -32,7 +32,7 @@
             <!-- Payroll Summary -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
                         <div class="bg-blue-50 p-4 rounded-lg">
                             @php
                                 // Calculate total basic pay - use the same logic as employee details
@@ -50,9 +50,35 @@
                             <div class="text-2xl font-bold text-purple-600">₱{{ number_format($payroll->payrollDetails->sum('holiday_pay'), 2) }}</div>
                             <div class="text-sm text-purple-800">Total Holiday</div>
                         </div>
+                        <div class="bg-cyan-50 p-4 rounded-lg">
+                            @php
+                                // Calculate total rest pay
+                                $totalRestPay = 0;
+                                foreach($payroll->payrollDetails as $detail) {
+                                    $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                    $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                    
+                                    if (isset($employeeBreakdown['rest_day'])) {
+                                        $restBreakdown = $employeeBreakdown['rest_day'];
+                                        $rateConfig = $restBreakdown['rate_config'];
+                                        if ($rateConfig) {
+                                            $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
+                                            $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                            
+                                            $regularRestPay = $restBreakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                            $overtimeRestPay = $restBreakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                            
+                                            $totalRestPay += $regularRestPay + $overtimeRestPay;
+                                        }
+                                    }
+                                }
+                            @endphp
+                            <div class="text-2xl font-bold text-cyan-600">₱{{ number_format($totalRestPay, 2) }}</div>
+                            <div class="text-sm text-cyan-800">Total Rest</div>
+                        </div>
                         <div class="bg-green-50 p-4 rounded-lg">
                             @php
-                                // Calculate correct gross pay: Basic + Holiday + Overtime + Allowances
+                                // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances
                                 $totalGrossPay = 0;
                                 foreach($payroll->payrollDetails as $detail) {
                                     $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
@@ -60,7 +86,26 @@
                                     $overtimePay = $detail->overtime_pay ?? 0;
                                     $allowances = $detail->allowances ?? 0;
                                     
-                                    $detailGross = $basicPay + $holidayPay + $overtimePay + $allowances;
+                                    // Calculate rest pay for this employee
+                                    $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                    $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                    $restPay = 0;
+                                    
+                                    if (isset($employeeBreakdown['rest_day'])) {
+                                        $restBreakdown = $employeeBreakdown['rest_day'];
+                                        $rateConfig = $restBreakdown['rate_config'];
+                                        if ($rateConfig) {
+                                            $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
+                                            $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                            
+                                            $regularRestPay = $restBreakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                            $overtimeRestPay = $restBreakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                            
+                                            $restPay = $regularRestPay + $overtimeRestPay;
+                                        }
+                                    }
+                                    
+                                    $detailGross = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances;
                                     $totalGrossPay += $detailGross;
                                 }
                             @endphp
@@ -300,6 +345,9 @@
                                         Holiday
                                     </th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Rest
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Overtime
                                     </th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -339,7 +387,7 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
                                             $payBreakdown = $payBreakdownByEmployee[$detail->employee_id] ?? ['basic_pay' => 0, 'holiday_pay' => 0];
                                             $basicPay = $payBreakdown['basic_pay'];
@@ -350,7 +398,7 @@
                                         <div class="font-bold text-blue-600">₱{{ number_format($basicPay, 2) }}</div>
                                         <div class="text-xs text-gray-500">{{ number_format($basicRegularHours, 1) }} hrs</div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
                                             $holidayPay = $payBreakdown['holiday_pay'];
                                             // Calculate total holiday hours from all holiday types
@@ -366,7 +414,34 @@
                                         <div class="font-bold text-purple-600">₱{{ number_format($holidayPay, 2) }}</div>
                                         <div class="text-xs text-gray-500">{{ number_format($totalHolidayHours, 1) }} hrs</div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
+                                        @php 
+                                            // Calculate rest day pay (excluding holidays on rest days)
+                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                            $totalRestPay = 0;
+                                            $totalRestHours = 0;
+                                            
+                                            // Only count rest_day type, not rest_day_regular_holiday or rest_day_special_holiday
+                                            if (isset($employeeBreakdown['rest_day'])) {
+                                                $restBreakdown = $employeeBreakdown['rest_day'];
+                                                $rateConfig = $restBreakdown['rate_config'];
+                                                if ($rateConfig) {
+                                                    $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
+                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                                    
+                                                    $regularRestPay = $restBreakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                                    $overtimeRestPay = $restBreakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                                    
+                                                    $totalRestPay = $regularRestPay + $overtimeRestPay;
+                                                    $totalRestHours = $restBreakdown['regular_hours'] + $restBreakdown['overtime_hours'];
+                                                }
+                                            }
+                                        @endphp
+                                        <div class="font-bold text-cyan-600">₱{{ number_format($totalRestPay, 2) }}</div>
+                                        <div class="text-xs text-gray-500">{{ number_format($totalRestHours, 1) }} hrs</div>
+                                    </td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
                                             // Calculate total overtime pay from all types using rate multipliers
                                             $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
@@ -387,7 +462,7 @@
                                         <div class="font-bold text-orange-600">₱{{ number_format($totalOvertimePay, 2) }}</div>
                                         <div class="text-xs text-gray-500">{{ number_format($totalOvertimeHours, 1) }} hrs</div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
                                             @if($detail->allowances > 0)
                                                 <!-- Show Calculated Allowance Breakdown -->
@@ -464,15 +539,34 @@
                                             @endif
                                         </div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php
-                                            // Calculate correct gross pay: Basic + Holiday + Overtime + Allowances
+                                            // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances
                                             $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
                                             $holidayPay = $detail->holiday_pay ?? 0;
                                             $overtimePay = $detail->overtime_pay ?? 0;
                                             $allowances = $detail->allowances ?? 0;
                                             
-                                            $calculatedGrossPay = $basicPay + $holidayPay + $overtimePay + $allowances;
+                                            // Calculate rest pay for gross pay calculation
+                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                            $restPay = 0;
+                                            
+                                            if (isset($employeeBreakdown['rest_day'])) {
+                                                $restBreakdown = $employeeBreakdown['rest_day'];
+                                                $rateConfig = $restBreakdown['rate_config'];
+                                                if ($rateConfig) {
+                                                    $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
+                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                                    
+                                                    $regularRestPay = $restBreakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                                    $overtimeRestPay = $restBreakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                                    
+                                                    $restPay = $regularRestPay + $overtimeRestPay;
+                                                }
+                                            }
+                                            
+                                            $calculatedGrossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances;
                                         @endphp
                                         <div class="font-bold text-green-600">₱{{ number_format($calculatedGrossPay, 2) }}</div>
                                     </td>
@@ -639,7 +733,7 @@
                                         </div>
                                     </td>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php
                                             // Calculate net pay dynamically using same logic as top summary
                                             $detailDeductionTotal = 0;
@@ -649,7 +743,27 @@
                                             $holidayPay = $detail->holiday_pay ?? 0;
                                             $overtimePay = $detail->overtime_pay ?? 0;
                                             $allowances = $detail->allowances ?? 0;
-                                            $calculatedGrossPay = $basicPay + $holidayPay + $overtimePay + $allowances;
+                                            
+                                            // Calculate rest pay for this employee
+                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                            $restPay = 0;
+                                            
+                                            if (isset($employeeBreakdown['rest_day'])) {
+                                                $restBreakdown = $employeeBreakdown['rest_day'];
+                                                $rateConfig = $restBreakdown['rate_config'];
+                                                if ($rateConfig) {
+                                                    $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
+                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                                    
+                                                    $regularRestPay = $restBreakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                                    $overtimeRestPay = $restBreakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                                    
+                                                    $restPay = $regularRestPay + $overtimeRestPay;
+                                                }
+                                            }
+                                            
+                                            $calculatedGrossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances;
                                             
                                             // Check if this payroll uses dynamic calculations
                                             if(isset($isDynamic) && $isDynamic && isset($deductionSettings) && $deductionSettings->isNotEmpty()) {
@@ -778,7 +892,16 @@
                                     <td class="px-3 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r">
                                         <div>
                                             {{ $detail->employee->user->name }}
-                                            <div class="text-xs text-gray-600">{{ $detail->employee->schedule_display }}</div>
+                                            @php
+                                                $daySchedule = $detail->employee->daySchedule;
+                                                $timeSchedule = $detail->employee->timeSchedule;
+                                            @endphp
+                                            @if($daySchedule && $timeSchedule)
+                                                <div class="text-xs text-gray-600">{{ $daySchedule->days_display }}</div>
+                                                <div class="text-xs text-gray-600">{{ $timeSchedule->time_range_display }}</div>
+                                            @else
+                                                <div class="text-xs text-gray-600">No schedule assigned</div>
+                                            @endif
                                             <div class="text-xs text-blue-600">₱{{ number_format($detail->employee->hourly_rate ?? 0, 2) }}/hr</div>
                                         </div>
                                     </td>
@@ -837,31 +960,89 @@
                                                 </div>
                                             @else
                                                 <div class="space-y-1">
+                                                    {{-- Main work schedule with regular hours --}}
                                                     @if($timeLog->time_in || $timeLog->time_out)
                                                     <div class="text-green-600 font-medium">
                                                         {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->time_out ? \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A') : 'N/A' }}
                                                     </div>
-                                                    @endif
-                                                    @if($timeLog->break_in || $timeLog->break_out)
-                                                    <div class="text-gray-600 text-xs">
-                                                        Break: {{ $timeLog->break_in ? \Carbon\Carbon::parse($timeLog->break_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->break_out ? \Carbon\Carbon::parse($timeLog->break_out)->format('g:i A') : 'N/A' }}
-                                                    </div>
-                                                    @endif
-                                                    @if($regularHours > 0)
+                                                    {{-- Always show hours, even if 0 --}}
                                                     <div class="text-blue-600">
                                                         {{ number_format($regularHours, 1) }}h
                                                     </div>
                                                     @endif
+                                                    
+                                                    {{-- Break schedule with break hours --}}
+                                                    @php
+                                                        // Calculate break duration - only if BOTH break_in and break_out exist
+                                                        $breakHours = 0;
+                                                        $showBreakTime = false;
+                                                        
+                                                        if ($timeLog->break_in && $timeLog->break_out && $timeLog->time_in && $timeLog->time_out) {
+                                                            $breakStart = \Carbon\Carbon::parse($timeLog->break_in);
+                                                            $breakEnd = \Carbon\Carbon::parse($timeLog->break_out);
+                                                            $workStart = \Carbon\Carbon::parse($timeLog->time_in);
+                                                            $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
+                                                            
+                                                            // Only show break time if employee was present during the break period
+                                                            // Check if break period overlaps with work period
+                                                            if ($breakStart >= $workStart && $breakEnd <= $workEnd) {
+                                                                $breakHours = $breakEnd->diffInMinutes($breakStart) / 60;
+                                                                $showBreakTime = true;
+                                                            }
+                                                            // Special case: if employee came in during break time (e.g., 1pm when break is 12pm-1pm)
+                                                            // Don't show break since they weren't present for it
+                                                            elseif ($workStart >= $breakStart && $workStart < $breakEnd) {
+                                                                // Employee came in during break time, so no break deduction applies
+                                                                $showBreakTime = false;
+                                                            }
+                                                            // Special case: if employee left during break time
+                                                            elseif ($workEnd > $breakStart && $workEnd <= $breakEnd) {
+                                                                // Employee left during break time, only count partial break
+                                                                $actualBreakStart = max($breakStart, $workStart);
+                                                                $actualBreakEnd = min($breakEnd, $workEnd);
+                                                                if ($actualBreakEnd > $actualBreakStart) {
+                                                                    $breakHours = $actualBreakEnd->diffInMinutes($actualBreakStart) / 60;
+                                                                    $showBreakTime = true;
+                                                                }
+                                                            }
+                                                        }
+                                                    @endphp
+                                                    {{-- Commented out break time display as requested --}}
+                                                    {{-- @if($showBreakTime)
+                                                    <div class="text-gray-600 text-xs">
+                                                        {{ $timeLog->break_in ? \Carbon\Carbon::parse($timeLog->break_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->break_out ? \Carbon\Carbon::parse($timeLog->break_out)->format('g:i A') : 'N/A' }}
+                                                    </div>
+                                                    @if($breakHours > 0)
+                                                    <div class="text-gray-600 text-xs">
+                                                        {{ number_format($breakHours, 1) }}h
+                                                    </div>
+                                                    @endif
+                                                    @endif --}}
+                                                    
+                                                    {{-- Additional overtime schedule if needed --}}
                                                     @if($overtimeHours > 0)
-                                                    <div class="text-orange-600">
+                                                    @php
+                                                        // Calculate overtime period (this is simplified - you may need more logic based on your system)
+                                                        $overtimeStart = '';
+                                                        $overtimeEnd = '';
+                                                        if ($timeLog->time_out) {
+                                                            $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
+                                                            $workStart = \Carbon\Carbon::parse($timeLog->time_in);
+                                                            
+                                                            // If overtime exists, show a period extending beyond normal hours
+                                                            $overtimeStart = $workEnd->copy()->subHours($overtimeHours)->format('g:i A');
+                                                            $overtimeEnd = $workEnd->format('g:i A');
+                                                        }
+                                                    @endphp
+                                                    @if($overtimeStart && $overtimeEnd)
+                                                    <div class="text-orange-600 text-xs">
+                                                        {{ $overtimeStart }} - {{ $overtimeEnd }}
+                                                    </div>
+                                                    @endif
+                                                    <div class="text-orange-600 text-xs">
                                                         OT: {{ number_format($overtimeHours, 1) }}h
                                                     </div>
                                                     @endif
-                                                    {{-- @if($timeLog->late_hours)
-                                                    <div class="text-red-600">
-                                                        Late: {{ number_format($timeLog->late_hours, 1) }}h
-                                                    </div>
-                                                    @endif --}}
                                                 </div>
                                             @endif
                                         @else

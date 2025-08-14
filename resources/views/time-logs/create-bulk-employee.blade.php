@@ -76,18 +76,23 @@
                             <h4 class="text-md font-medium text-blue-900 mb-3">Quick Fill Actions</h4>
                             <div class="flex flex-wrap gap-2">
                                 <button type="button" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600" onclick="fillRegularHours('08:00', '17:00')">
-                                    Fill Empty Fields (8:00 AM - 5:00 PM)
+                                    Fill Time & Break Fields (8:00 AM - 5:00 PM)
                                 </button>
-                                <button type="button" class="px-3 py-1 bg-purple-500 text-white text-sm rounded hover:bg-purple-600" onclick="fillRegularHoursAll('08:00', '17:00')">
+                                {{-- <button type="button" class="px-3 py-1 bg-purple-500 text-white text-sm rounded hover:bg-purple-600" onclick="fillRegularHoursAll('08:00', '17:00')">
                                     Fill All Fields (Overwrite)
-                                </button>
-                                <button type="button" class="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600" onclick="clearAll()">
-                                    Clear All
+                                </button> --}}
+                                {{-- <button type="button" class="px-3 py-1 bg-orange-500 text-white text-sm rounded hover:bg-orange-600" onclick="clearAndSetRegular()">
+                                    Clear & Set Regular
+                                </button> --}}
+                                <button type="button" class="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600" onclick="resetAll()">
+                                    Reset All
                                 </button>
                             </div>
                             <p class="text-xs text-blue-700 mt-2">
                                 <strong>Fill Empty Fields:</strong> Only fills blank time entries, preserves existing data.<br>
-                                <strong>Fill All Fields:</strong> Overwrites all time entries with standard schedule.
+                                <strong>Fill All Fields:</strong> Overwrites all time entries with standard schedule.<br>
+                                <strong>Clear & Set Regular:</strong> Clears only time logs (time in/out, break in/out), preserves types.<br>
+                                <strong>Reset All:</strong> Clears all fields and resets types to default based on day.
                             </p>
                         </div>
 
@@ -160,25 +165,31 @@
                                                             $isHoliday = isset($holidays[$dateKey]);
                                                             $holidayType = $isHoliday ? $holidays[$dateKey]->type : null;
                                                             
-                                                            // Smart default selection logic based on actual display names
-                                                            if (!$day['is_weekend'] && !$isHoliday && $label === 'Regular Day') {
-                                                                // 1. Regular Day (default for weekdays without holidays)
+                                                            // Priority 1: Use actual log_type from database if exists
+                                                            if ($day['log_type'] && $value === $day['log_type']) {
                                                                 $selected = 'selected';
-                                                            } elseif ($day['is_weekend'] && !$isHoliday && $label === 'Rest Day') {
-                                                                // 2. Rest Day (default for weekends without holidays) 
-                                                                $selected = 'selected';
-                                                            } elseif ($isHoliday && $holidayType === 'regular' && !$day['is_weekend'] && $label === 'RE Holiday') {
-                                                                // 3. RE Holiday (default for active regular holidays on weekdays)
-                                                                $selected = 'selected';
-                                                            } elseif ($isHoliday && $holidayType === 'special' && !$day['is_weekend'] && $label === 'SP Holiday') {
-                                                                // 4. SP Holiday (default for active special holidays on weekdays)
-                                                                $selected = 'selected';
-                                                            } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'regular' && $label === 'Rest + RE Holiday') {
-                                                                // Rest Day + RE Holiday (weekend + regular holiday)
-                                                                $selected = 'selected';
-                                                            } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'special' && $label === 'Rest + SP Holiday') {
-                                                                // Rest Day + SE Holiday (weekend + special holiday)
-                                                                $selected = 'selected';
+                                                            }
+                                                            // Priority 2: Smart default selection logic (only if no existing log_type)
+                                                            elseif (!$day['log_type']) {
+                                                                if (!$day['is_weekend'] && !$isHoliday && $label === 'Regular Day') {
+                                                                    // 1. Regular Day (default for weekdays without holidays)
+                                                                    $selected = 'selected';
+                                                                } elseif ($day['is_weekend'] && !$isHoliday && $label === 'Rest Day') {
+                                                                    // 2. Rest Day (default for weekends without holidays) 
+                                                                    $selected = 'selected';
+                                                                } elseif ($isHoliday && $holidayType === 'regular' && !$day['is_weekend'] && $label === 'RE Holiday') {
+                                                                    // 3. RE Holiday (default for active regular holidays on weekdays)
+                                                                    $selected = 'selected';
+                                                                } elseif ($isHoliday && $holidayType === 'special' && !$day['is_weekend'] && $label === 'SP Holiday') {
+                                                                    // 4. SP Holiday (default for active special holidays on weekdays)
+                                                                    $selected = 'selected';
+                                                                } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'regular' && $label === 'Rest + RE Holiday') {
+                                                                    // Rest Day + RE Holiday (weekend + regular holiday)
+                                                                    $selected = 'selected';
+                                                                } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'special' && $label === 'Rest + SP Holiday') {
+                                                                    // Rest Day + SE Holiday (weekend + special holiday)
+                                                                    $selected = 'selected';
+                                                                }
                                                             }
                                                         @endphp
                                                         <option value="{{ $value }}" {{ $selected }}>{{ $label }}</option>
@@ -296,11 +307,57 @@
             });
         }
 
-        function clearAll() {
-            const inputs = document.querySelectorAll('input[type="time"], input[type="text"]:not([type="hidden"])');
-            inputs.forEach(input => {
-                if (!input.name.includes('[log_date]') && !input.name.includes('[is_')) {
-                    input.value = '';
+        function clearAndSetRegular() {
+            // Clear only time logs (time in/out, break in/out), preserve types
+            const timeInputs = document.querySelectorAll('input[name*="[time_in]"], input[name*="[time_out]"], input[name*="[break_in]"], input[name*="[break_out]"]');
+            timeInputs.forEach(input => {
+                input.value = '';
+            });
+        }
+
+        function resetAll() {
+            // Clear all fields AND reset types to default based on day
+            const timeInputs = document.querySelectorAll('input[name*="[time_in]"], input[name*="[time_out]"], input[name*="[break_in]"], input[name*="[break_out]"]');
+            timeInputs.forEach(input => {
+                input.value = '';
+            });
+
+            // Reset all log types to default based on day
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach((row, index) => {
+                const logTypeSelect = row.querySelector('select[name*="[log_type]"]');
+                
+                if (logTypeSelect) {
+                    const isWeekend = row.classList.contains('bg-gray-100');
+                    const isHoliday = row.classList.contains('bg-yellow-50');
+                    
+                    // Determine appropriate default based on day type
+                    let defaultType = 'regular_workday'; // Default for weekdays
+                    
+                    if (isWeekend && !isHoliday) {
+                        defaultType = 'rest_day';
+                    } else if (isHoliday && !isWeekend) {
+                        // Check for holiday type in hidden inputs or span text
+                        const holidaySpan = row.querySelector('.text-red-600');
+                        if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('regular')) {
+                            defaultType = 'regular_holiday';
+                        } else if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('special')) {
+                            defaultType = 'special_holiday';
+                        }
+                    } else if (isWeekend && isHoliday) {
+                        // Weekend + Holiday combination
+                        const holidaySpan = row.querySelector('.text-red-600');
+                        if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('regular')) {
+                            defaultType = 'rest_day_regular_holiday';
+                        } else if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('special')) {
+                            defaultType = 'rest_day_special_holiday';
+                        } else {
+                            defaultType = 'rest_day';
+                        }
+                    }
+                    
+                    // Set the appropriate default value
+                    logTypeSelect.value = defaultType;
                 }
             });
         }
@@ -328,62 +385,17 @@
         }
 
         function clearRowTimes(rowIndex) {
-            // Clear all time entries for a specific row
+            // Clear only time entries for a specific row, preserve the log type
             const timeInInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_in]"]`);
             const timeOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_out]"]`);
             const breakInInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_in]"]`);
             const breakOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_out]"]`);
-            const logTypeSelect = document.querySelector(`select[name="time_logs[${rowIndex}][log_type]"]`);
-            const row = document.querySelector(`tbody tr:nth-child(${rowIndex + 1})`);
             
+            // Clear only time fields, do NOT change the log type
             if (timeInInput) timeInInput.value = '';
             if (timeOutInput) timeOutInput.value = '';
             if (breakInInput) breakInInput.value = '';
             if (breakOutInput) breakOutInput.value = '';
-            
-            // Smart default based on actual day type
-            if (logTypeSelect && row) {
-                const isWeekend = row.classList.contains('bg-gray-100');
-                const isHoliday = row.classList.contains('bg-yellow-50');
-                
-                // Determine appropriate default based on day type
-                let defaultType = 'Regular Day'; // Default for weekdays
-                
-                if (isWeekend && !isHoliday) {
-                    defaultType = 'Rest Day';
-                } else if (isHoliday && !isWeekend) {
-                    // Check for holiday type in hidden inputs or span text
-                    const holidaySpan = row.querySelector('.text-red-600');
-                    if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('regular')) {
-                        defaultType = 'RE Holiday';
-                    } else if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('special')) {
-                        defaultType = 'SP Holiday';
-                    }
-                } else if (isWeekend && isHoliday) {
-                    // Weekend + Holiday combination
-                    const holidaySpan = row.querySelector('.text-red-600');
-                    if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('regular')) {
-                        defaultType = 'Rest + RE Holiday';
-                    } else if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('special')) {
-                        defaultType = 'Rest + SP Holiday';
-                    } else {
-                        defaultType = 'Rest Day';
-                    }
-                }
-                
-                // Set the appropriate default
-                for (let option of logTypeSelect.options) {
-                    if (option.text === defaultType) {
-                        option.selected = true;
-                        break;
-                    }
-                }
-                
-                // If specific type not found, fallback to first option
-                if (!logTypeSelect.value && logTypeSelect.options.length > 0) {
-                    logTypeSelect.selectedIndex = 0;
-                }
-            }
             
             // Trigger calculation if function exists
             if (typeof calculateHours === 'function') {
