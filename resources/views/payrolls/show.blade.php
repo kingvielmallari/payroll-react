@@ -32,7 +32,7 @@
             <!-- Payroll Summary -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+                    <div class="flex flex-row gap-2 justify-between">
                         <div class="bg-blue-50 p-4 rounded-lg">
                             @php
                                 // Calculate total basic pay - use the same logic as employee details
