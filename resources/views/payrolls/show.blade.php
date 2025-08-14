@@ -34,23 +34,97 @@
                 <div class="p-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                         <div class="bg-blue-50 p-4 rounded-lg">
-                            <div class="text-2xl font-bold text-blue-600">₱{{ number_format($payroll->payrollDetails->sum('regular_pay'), 2) }}</div>
+                            @php
+                                // Calculate total basic pay - use the same logic as employee details
+                                $totalBasicPay = 0;
+                                foreach($payroll->payrollDetails as $detail) {
+                                    // Use basic pay from payBreakdown if available, otherwise use stored value
+                                    $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                    $totalBasicPay += $basicPay;
+                                }
+                            @endphp
+                            <div class="text-2xl font-bold text-blue-600">₱{{ number_format($totalBasicPay, 2) }}</div>
                             <div class="text-sm text-blue-800">Total Basic</div>
                         </div>
                         <div class="bg-purple-50 p-4 rounded-lg">
-                            <div class="text-2xl font-bold text-purple-600">₱{{ number_format($totalHolidayPay ?? 0, 2) }}</div>
+                            <div class="text-2xl font-bold text-purple-600">₱{{ number_format($payroll->payrollDetails->sum('holiday_pay'), 2) }}</div>
                             <div class="text-sm text-purple-800">Total Holiday</div>
                         </div>
                         <div class="bg-green-50 p-4 rounded-lg">
-                            <div class="text-2xl font-bold text-green-600">₱{{ number_format($payroll->total_gross, 2) }}</div>
+                            @php
+                                // Calculate correct gross pay: Basic + Holiday + Overtime + Allowances
+                                $totalGrossPay = 0;
+                                foreach($payroll->payrollDetails as $detail) {
+                                    $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                    $holidayPay = $detail->holiday_pay ?? 0;
+                                    $overtimePay = $detail->overtime_pay ?? 0;
+                                    $allowances = $detail->allowances ?? 0;
+                                    
+                                    $detailGross = $basicPay + $holidayPay + $overtimePay + $allowances;
+                                    $totalGrossPay += $detailGross;
+                                }
+                            @endphp
+                            <div class="text-2xl font-bold text-green-600">₱{{ number_format($totalGrossPay, 2) }}</div>
                             <div class="text-sm text-green-800">Total Gross</div>
                         </div>
                         <div class="bg-red-50 p-4 rounded-lg">
-                            <div class="text-2xl font-bold text-red-600">₱{{ number_format($payroll->total_deductions, 2) }}</div>
+                            @php
+                                // Calculate actual total deductions using the same logic as employee details
+                                $actualTotalDeductions = 0;
+                                
+                                foreach($payroll->payrollDetails as $detail) {
+                                    $detailDeductionTotal = 0;
+                                    
+                                    // Check if this payroll uses dynamic calculations
+                                    if(isset($isDynamic) && $isDynamic && isset($deductionSettings) && $deductionSettings->isNotEmpty()) {
+                                        // Use dynamic calculation like in employee details section
+                                        foreach($deductionSettings as $setting) {
+                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->basic_pay ?? 0;
+                                            $grossPay = $detail->gross_pay ?? 0;
+                                            $overtimePay = $detail->overtime_pay ?? 0;
+                                            $allowances = $detail->allowances ?? 0;
+                                            $bonuses = $detail->bonuses ?? 0;
+                                            
+                                            $calculatedAmount = $setting->calculateDeduction(
+                                                $basicPay, 
+                                                $overtimePay, 
+                                                $bonuses, 
+                                                $allowances, 
+                                                $grossPay
+                                            );
+                                            $detailDeductionTotal += $calculatedAmount;
+                                        }
+                                    } else {
+                                        // Use stored values for non-dynamic payrolls
+                                        $detailDeductionTotal = $detail->sss_contribution + $detail->philhealth_contribution + $detail->pagibig_contribution + $detail->withholding_tax + $detail->late_deductions + $detail->undertime_deductions + $detail->cash_advance_deductions + $detail->other_deductions;
+                                    }
+                                    
+                                    $actualTotalDeductions += $detailDeductionTotal;
+                                }
+                                
+                                // Debug output (remove this after fixing)
+                                $firstDetail = $payroll->payrollDetails->first();
+                                if ($firstDetail) {
+                                    $debugComponents = [
+                                        'SSS' => $firstDetail->sss_contribution,
+                                        'PhilHealth' => $firstDetail->philhealth_contribution,
+                                        'PagIBIG' => $firstDetail->pagibig_contribution,
+                                        'isDynamic' => isset($isDynamic) ? ($isDynamic ? 'Y' : 'N') : 'NULL',
+                                        'hasSettings' => isset($deductionSettings) ? $deductionSettings->count() : 'NULL',
+                                    ];
+                                }
+                            @endphp
+                            <div class="text-2xl font-bold text-red-600">₱{{ number_format($actualTotalDeductions, 2) }}</div>
                             <div class="text-sm text-red-800">Total Deductions</div>
+                            
+                           
                         </div>
                         <div class="bg-gray-50 p-4 rounded-lg">
-                            <div class="text-2xl font-bold text-gray-600">₱{{ number_format($payroll->total_net, 2) }}</div>
+                            @php
+                                // Calculate correct net pay: Correct Gross - Actual Deductions
+                                $correctNetPay = $totalGrossPay - $actualTotalDeductions;
+                            @endphp
+                            <div class="text-2xl font-bold text-gray-600">₱{{ number_format($correctNetPay, 2) }}</div>
                             <div class="text-sm text-gray-800">Total Net</div>
                         </div>
                     </div>
@@ -391,7 +465,16 @@
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
-                                        <div class="font-bold text-green-600">₱{{ number_format($detail->gross_pay, 2) }}</div>
+                                        @php
+                                            // Calculate correct gross pay: Basic + Holiday + Overtime + Allowances
+                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                            $holidayPay = $detail->holiday_pay ?? 0;
+                                            $overtimePay = $detail->overtime_pay ?? 0;
+                                            $allowances = $detail->allowances ?? 0;
+                                            
+                                            $calculatedGrossPay = $basicPay + $holidayPay + $overtimePay + $allowances;
+                                        @endphp
+                                        <div class="font-bold text-green-600">₱{{ number_format($calculatedGrossPay, 2) }}</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
@@ -557,7 +640,40 @@
                                     </td>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
-                                        <div class="font-bold text-purple-600">₱{{ number_format($detail->net_pay, 2) }}</div>
+                                        @php
+                                            // Calculate net pay dynamically using same logic as top summary
+                                            $detailDeductionTotal = 0;
+                                            
+                                            // First calculate the correct gross pay for this detail
+                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                            $holidayPay = $detail->holiday_pay ?? 0;
+                                            $overtimePay = $detail->overtime_pay ?? 0;
+                                            $allowances = $detail->allowances ?? 0;
+                                            $calculatedGrossPay = $basicPay + $holidayPay + $overtimePay + $allowances;
+                                            
+                                            // Check if this payroll uses dynamic calculations
+                                            if(isset($isDynamic) && $isDynamic && isset($deductionSettings) && $deductionSettings->isNotEmpty()) {
+                                                // Use dynamic calculation 
+                                                foreach($deductionSettings as $setting) {
+                                                    $bonuses = $detail->bonuses ?? 0;
+                                                    
+                                                    $calculatedAmount = $setting->calculateDeduction(
+                                                        $basicPay, 
+                                                        $overtimePay, 
+                                                        $bonuses, 
+                                                        $allowances, 
+                                                        $calculatedGrossPay
+                                                    );
+                                                    $detailDeductionTotal += $calculatedAmount;
+                                                }
+                                            } else {
+                                                // Use stored values for non-dynamic payrolls
+                                                $detailDeductionTotal = $detail->sss_contribution + $detail->philhealth_contribution + $detail->pagibig_contribution + $detail->withholding_tax + $detail->late_deductions + $detail->undertime_deductions + $detail->cash_advance_deductions + $detail->other_deductions;
+                                            }
+                                            
+                                            $calculatedNetPay = $calculatedGrossPay - $detailDeductionTotal;
+                                        @endphp
+                                        <div class="font-bold text-purple-600">₱{{ number_format($calculatedNetPay, 2) }}</div>
                                     </td>
                                     {{-- @if($payroll->status == 'approved')
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
