@@ -762,7 +762,7 @@
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php
-                                            // Calculate net pay dynamically using EXACT same logic as deduction column
+                                            // Calculate net pay - use snapshot data for processing/approved payrolls
                                             $detailDeductionTotal = 0;
                                             
                                             // First calculate the correct gross pay for this detail
@@ -792,8 +792,19 @@
                                             
                                             $calculatedGrossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances;
                                             
-                                            // Check if this payroll uses dynamic calculations - USE EXACT SAME LOGIC AS DEDUCTION COLUMN
-                                            if(isset($isDynamic) && $isDynamic && isset($deductionSettings) && $deductionSettings->isNotEmpty()) {
+                                            // For processing/approved payrolls with snapshots, use the snapshot deduction total
+                                            if (!isset($isDynamic) || !$isDynamic) {
+                                                // Use snapshot data - same logic as deduction column
+                                                if (isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown)) {
+                                                    // Sum up snapshot breakdown amounts
+                                                    foreach ($detail->deduction_breakdown as $deduction) {
+                                                        $detailDeductionTotal += $deduction['amount'] ?? 0;
+                                                    }
+                                                } else {
+                                                    // Fallback to stored values
+                                                    $detailDeductionTotal = $detail->total_deductions ?? 0;
+                                                }
+                                            } elseif(isset($isDynamic) && $isDynamic && isset($deductionSettings) && $deductionSettings->isNotEmpty()) {
                                                 // Use dynamic calculation with SAME variables as deduction column
                                                 foreach($deductionSettings as $setting) {
                                                     // Use same variable mapping as deduction column calculation
