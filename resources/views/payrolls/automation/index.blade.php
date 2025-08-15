@@ -25,7 +25,7 @@
                     <div class="mb-6 flex flex-row items-center justify-between gap-4">
                         <h3 class="text-lg font-medium text-gray-900">Create Automated Payroll</h3>
                         <div class="flex items-center">
-                            <div class="bg-blue-100 border border-blue-300 rounded-lg px-4 py-2 text-right">
+                            <div class="bg-blue-100 border border-blue-300 rounded-lg px-8 py-2 text-right">
                                 <span class="text-lg font-bold text-blue-800">{{ now()->format('F d, Y') }}</span>
                                 <div class="text-xs text-blue-600 text-center">{{ now()->format('l') }}</div>
                             </div>

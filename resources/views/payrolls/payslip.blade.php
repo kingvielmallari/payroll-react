@@ -210,51 +210,80 @@
                     <div>
                         <h3 class="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-1">Deductions</h3>
                         <div class="space-y-3">
-                            @if($detail->sss_contribution > 0)
-                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span class="text-sm text-gray-700">SSS Contribution</span>
-                                <span class="font-semibold text-red-600">₱{{ number_format($detail->sss_contribution, 2) }}</span>
-                            </div>
+                            @php
+                                $calculatedDeductionTotal = 0;
+                                $hasDeductionBreakdown = false;
+                            @endphp
+                            
+                            <!-- Show deduction breakdown if available from snapshot -->
+                            @if(isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown) && !empty($detail->deduction_breakdown))
+                                @php $hasDeductionBreakdown = true; @endphp
+                                @foreach($detail->deduction_breakdown as $code => $deductionData)
+                                    @php
+                                        $amount = $deductionData['amount'] ?? $deductionData;
+                                        $calculatedDeductionTotal += $amount;
+                                    @endphp
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm text-gray-700">{{ $deductionData['name'] ?? $code }}</span>
+                                        <span class="font-semibold text-red-600">₱{{ number_format($amount, 2) }}</span>
+                                    </div>
+                                @endforeach
+                            @else
+                                <!-- Traditional breakdown display -->
+                                @if($detail->sss_contribution > 0)
+                                    @php $calculatedDeductionTotal += $detail->sss_contribution; @endphp
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm text-gray-700">SSS Contribution</span>
+                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->sss_contribution, 2) }}</span>
+                                    </div>
+                                @endif
+                                @if($detail->philhealth_contribution > 0)
+                                    @php $calculatedDeductionTotal += $detail->philhealth_contribution; @endphp
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm text-gray-700">PhilHealth Contribution</span>
+                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->philhealth_contribution, 2) }}</span>
+                                    </div>
+                                @endif
+                                @if($detail->pagibig_contribution > 0)
+                                    @php $calculatedDeductionTotal += $detail->pagibig_contribution; @endphp
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm text-gray-700">Pag-IBIG Contribution</span>
+                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->pagibig_contribution, 2) }}</span>
+                                    </div>
+                                @endif
+                                @if($detail->withholding_tax > 0)
+                                    @php $calculatedDeductionTotal += $detail->withholding_tax; @endphp
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm text-gray-700">Withholding Tax</span>
+                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->withholding_tax, 2) }}</span>
+                                    </div>
+                                @endif
+                                @if($detail->cash_advance_deductions > 0)
+                                    @php $calculatedDeductionTotal += $detail->cash_advance_deductions; @endphp
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm text-gray-700">Cash Advance</span>
+                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->cash_advance_deductions, 2) }}</span>
+                                    </div>
+                                @endif
+                                @if($detail->other_deductions > 0)
+                                    @php $calculatedDeductionTotal += $detail->other_deductions; @endphp
+                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                        <span class="text-sm text-gray-700">Other Deductions</span>
+                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->other_deductions, 2) }}</span>
+                                    </div>
+                                @endif
                             @endif
-                            @if($detail->philhealth_contribution > 0)
-                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span class="text-sm text-gray-700">PhilHealth Contribution</span>
-                                <span class="font-semibold text-red-600">₱{{ number_format($detail->philhealth_contribution, 2) }}</span>
-                            </div>
-                            @endif
-                            @if($detail->pagibig_contribution > 0)
-                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span class="text-sm text-gray-700">Pag-IBIG Contribution</span>
-                                <span class="font-semibold text-red-600">₱{{ number_format($detail->pagibig_contribution, 2) }}</span>
-                            </div>
-                            @endif
-                            @if($detail->tax_withheld > 0)
-                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span class="text-sm text-gray-700">Withholding Tax</span>
-                                <span class="font-semibold text-red-600">₱{{ number_format($detail->tax_withheld, 2) }}</span>
-                            </div>
-                            @endif
-                            @if($detail->cash_advance_deduction > 0)
-                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span class="text-sm text-gray-700">Cash Advance</span>
-                                <span class="font-semibold text-red-600">₱{{ number_format($detail->cash_advance_deduction, 2) }}</span>
-                            </div>
-                            @endif
-                            @if($detail->other_deductions > 0)
-                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span class="text-sm text-gray-700">Other Deductions</span>
-                                <span class="font-semibold text-red-600">₱{{ number_format($detail->other_deductions, 2) }}</span>
-                            </div>
-                            @endif
-                            @if($detail->total_deductions == 0)
+                            
+                            @if($calculatedDeductionTotal == 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-400">No deductions</span>
                                 <span class="font-semibold text-gray-400">₱0.00</span>
                             </div>
                             @endif
+                            
                             <div class="flex justify-between items-center py-3 border-t-2 border-gray-300 bg-red-50">
                                 <span class="font-semibold text-gray-800">Total Deductions</span>
-                                <span class="font-bold text-lg text-red-600">₱{{ number_format($detail->total_deductions, 2) }}</span>
+                                <span class="font-bold text-lg text-red-600">₱{{ number_format($calculatedDeductionTotal > 0 ? $calculatedDeductionTotal : $detail->total_deductions, 2) }}</span>
                             </div>
                         </div>
                     </div>

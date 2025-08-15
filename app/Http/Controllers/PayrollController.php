@@ -1360,16 +1360,66 @@ class PayrollController extends Controller
                 ->orderBy('sort_order')
                 ->get();
         } else {
-            // For processing/approved payrolls, get settings from snapshots if available
-            $firstSnapshot = $payroll->snapshots()->first();
-            if ($firstSnapshot && $firstSnapshot->settings_snapshot) {
-                $settingsSnapshot = $firstSnapshot->settings_snapshot;
+            // For processing/approved payrolls, use snapshot data
+            $snapshots = $payroll->snapshots()->get();
+            if ($snapshots->isNotEmpty()) {
+                // Update payroll details with snapshot values to ensure consistency
+                foreach ($payroll->payrollDetails as $detail) {
+                    $snapshot = $snapshots->where('employee_id', $detail->employee_id)->first();
+                    if ($snapshot) {
+                        // Override detail values with snapshot values
+                        $detail->basic_salary = $snapshot->basic_salary;
+                        $detail->daily_rate = $snapshot->daily_rate;
+                        $detail->hourly_rate = $snapshot->hourly_rate;
+                        $detail->days_worked = $snapshot->days_worked;
+                        $detail->regular_hours = $snapshot->regular_hours;
+                        $detail->overtime_hours = $snapshot->overtime_hours;
+                        $detail->holiday_hours = $snapshot->holiday_hours;
+                        $detail->regular_pay = $snapshot->regular_pay;
+                        $detail->overtime_pay = $snapshot->overtime_pay;
+                        $detail->holiday_pay = $snapshot->holiday_pay;
+                        $detail->allowances = $snapshot->allowances_total;
+                        $detail->bonuses = $snapshot->bonuses_total;
+                        $detail->gross_pay = $snapshot->gross_pay;
+                        $detail->sss_contribution = $snapshot->sss_contribution;
+                        $detail->philhealth_contribution = $snapshot->philhealth_contribution;
+                        $detail->pagibig_contribution = $snapshot->pagibig_contribution;
+                        $detail->withholding_tax = $snapshot->withholding_tax;
+                        $detail->late_deductions = $snapshot->late_deductions;
+                        $detail->undertime_deductions = $snapshot->undertime_deductions;
+                        $detail->cash_advance_deductions = $snapshot->cash_advance_deductions;
+                        $detail->other_deductions = $snapshot->other_deductions;
+                        $detail->total_deductions = $snapshot->total_deductions;
+                        $detail->net_pay = $snapshot->net_pay;
 
-                if (isset($settingsSnapshot['allowance_settings'])) {
-                    $allowanceSettings = collect($settingsSnapshot['allowance_settings']);
+                        // Set breakdown data from snapshots
+                        if ($snapshot->allowances_breakdown) {
+                            $detail->earnings_breakdown = json_encode([
+                                'allowances' => is_string($snapshot->allowances_breakdown)
+                                    ? json_decode($snapshot->allowances_breakdown, true)
+                                    : $snapshot->allowances_breakdown
+                            ]);
+                        }
+
+                        if ($snapshot->deductions_breakdown) {
+                            $detail->deduction_breakdown = is_string($snapshot->deductions_breakdown)
+                                ? json_decode($snapshot->deductions_breakdown, true)
+                                : $snapshot->deductions_breakdown;
+                        }
+                    }
                 }
-                if (isset($settingsSnapshot['deduction_settings'])) {
-                    $deductionSettings = collect($settingsSnapshot['deduction_settings']);
+
+                // Get settings from snapshot
+                $firstSnapshot = $snapshots->first();
+                if ($firstSnapshot && $firstSnapshot->settings_snapshot) {
+                    $settingsSnapshot = $firstSnapshot->settings_snapshot;
+
+                    if (isset($settingsSnapshot['allowance_settings'])) {
+                        $allowanceSettings = collect($settingsSnapshot['allowance_settings']);
+                    }
+                    if (isset($settingsSnapshot['deduction_settings'])) {
+                        $deductionSettings = collect($settingsSnapshot['deduction_settings']);
+                    }
                 }
             }
         }
@@ -1408,6 +1458,61 @@ class PayrollController extends Controller
             'approver'
         ]);
 
+        // Apply the same snapshot logic as show method for approved/processing payrolls
+        $isDynamic = $payroll->status === 'draft';
+
+        if (!$isDynamic) {
+            // For processing/approved payrolls, use snapshot data
+            $snapshots = $payroll->snapshots()->get();
+            if ($snapshots->isNotEmpty()) {
+                // Update payroll details with snapshot values to ensure consistency
+                foreach ($payroll->payrollDetails as $detail) {
+                    $snapshot = $snapshots->where('employee_id', $detail->employee_id)->first();
+                    if ($snapshot) {
+                        // Override detail values with snapshot values
+                        $detail->basic_salary = $snapshot->basic_salary;
+                        $detail->daily_rate = $snapshot->daily_rate;
+                        $detail->hourly_rate = $snapshot->hourly_rate;
+                        $detail->days_worked = $snapshot->days_worked;
+                        $detail->regular_hours = $snapshot->regular_hours;
+                        $detail->overtime_hours = $snapshot->overtime_hours;
+                        $detail->holiday_hours = $snapshot->holiday_hours;
+                        $detail->regular_pay = $snapshot->regular_pay;
+                        $detail->overtime_pay = $snapshot->overtime_pay;
+                        $detail->holiday_pay = $snapshot->holiday_pay;
+                        $detail->allowances = $snapshot->allowances_total;
+                        $detail->bonuses = $snapshot->bonuses_total;
+                        $detail->gross_pay = $snapshot->gross_pay;
+                        $detail->sss_contribution = $snapshot->sss_contribution;
+                        $detail->philhealth_contribution = $snapshot->philhealth_contribution;
+                        $detail->pagibig_contribution = $snapshot->pagibig_contribution;
+                        $detail->withholding_tax = $snapshot->withholding_tax;
+                        $detail->late_deductions = $snapshot->late_deductions;
+                        $detail->undertime_deductions = $snapshot->undertime_deductions;
+                        $detail->cash_advance_deductions = $snapshot->cash_advance_deductions;
+                        $detail->other_deductions = $snapshot->other_deductions;
+                        $detail->total_deductions = $snapshot->total_deductions;
+                        $detail->net_pay = $snapshot->net_pay;
+
+                        // Set breakdown data from snapshots
+                        if ($snapshot->allowances_breakdown) {
+                            $detail->earnings_breakdown = json_encode([
+                                'allowances' => is_string($snapshot->allowances_breakdown)
+                                    ? json_decode($snapshot->allowances_breakdown, true)
+                                    : $snapshot->allowances_breakdown
+                            ]);
+                        }
+
+                        if ($snapshot->deductions_breakdown) {
+                            $detail->deduction_breakdown = is_string($snapshot->deductions_breakdown)
+                                ? json_decode($snapshot->deductions_breakdown, true)
+                                : $snapshot->deductions_breakdown;
+                        }
+                    }
+                }
+            }
+        }
+
         // Get company information (you may need to create a Company model or use settings)
         $company = (object)[
             'name' => config('app.name', 'Your Company Name'),
@@ -1416,7 +1521,7 @@ class PayrollController extends Controller
             'email' => 'hr@company.com'
         ];
 
-        return view('payrolls.payslip', compact('payroll', 'company'));
+        return view('payrolls.payslip', compact('payroll', 'company', 'isDynamic'));
     }
 
     /**
@@ -3659,6 +3764,26 @@ class PayrollController extends Controller
             // Get current settings snapshot
             $settingsSnapshot = $this->getCurrentSettingsSnapshot($employee);
 
+            // Calculate corrected total deductions using dynamic calculation
+            $correctedTotalDeductions = 0;
+
+            // Check if we have active deduction settings for dynamic calculation
+            $activeDeductionSettings = \App\Models\DeductionTaxSetting::active()
+                ->forBenefitStatus($employee->benefits_status)
+                ->get();
+
+            if ($activeDeductionSettings->isNotEmpty()) {
+                // Use dynamic calculation - sum up the breakdown amounts
+                foreach ($deductionsBreakdown as $deduction) {
+                    $correctedTotalDeductions += $deduction['amount'] ?? 0;
+                }
+            } else {
+                // Fallback to stored values for non-dynamic payrolls (excluding late/undertime as they're already accounted for in hours)
+                $correctedTotalDeductions = $detail->sss_contribution + $detail->philhealth_contribution + $detail->pagibig_contribution + $detail->withholding_tax + $detail->cash_advance_deductions + $detail->other_deductions;
+            }
+
+            $correctedNetPay = $detail->gross_pay - $correctedTotalDeductions;
+
             // Create snapshot
             \App\Models\PayrollSnapshot::create([
                 'payroll_id' => $payroll->id,
@@ -3690,12 +3815,12 @@ class PayrollController extends Controller
                 'philhealth_contribution' => $detail->philhealth_contribution,
                 'pagibig_contribution' => $detail->pagibig_contribution,
                 'withholding_tax' => $detail->withholding_tax,
-                'late_deductions' => $detail->late_deductions,
-                'undertime_deductions' => $detail->undertime_deductions,
+                'late_deductions' => 0, // Set to 0 as late/undertime are already accounted for in hours
+                'undertime_deductions' => 0, // Set to 0 as late/undertime are already accounted for in hours
                 'cash_advance_deductions' => $detail->cash_advance_deductions,
                 'other_deductions' => $detail->other_deductions,
-                'total_deductions' => $detail->total_deductions,
-                'net_pay' => $detail->net_pay,
+                'total_deductions' => $correctedTotalDeductions,
+                'net_pay' => $correctedNetPay,
                 'settings_snapshot' => $settingsSnapshot,
                 'remarks' => 'Snapshot created at ' . now()->format('Y-m-d H:i:s'),
             ]);
@@ -3805,62 +3930,73 @@ class PayrollController extends Controller
     {
         $breakdown = [];
 
-        // Standard government deductions
-        if ($detail->sss_contribution > 0) {
-            $breakdown[] = [
-                'name' => 'SSS Contribution',
-                'code' => 'sss',
-                'amount' => $detail->sss_contribution,
-                'type' => 'government'
-            ];
+        // Get active deduction settings that apply to this employee's benefit status
+        $deductionSettings = \App\Models\DeductionTaxSetting::active()
+            ->forBenefitStatus($employee->benefits_status)
+            ->orderBy('sort_order')
+            ->get();
+
+        if ($deductionSettings->isNotEmpty()) {
+            // Use dynamic calculation for active deduction settings
+            foreach ($deductionSettings as $setting) {
+                $amount = $setting->calculateDeduction(
+                    $detail->regular_pay ?? 0,
+                    $detail->overtime_pay ?? 0,
+                    $detail->bonuses ?? 0,
+                    $detail->allowances ?? 0,
+                    $detail->gross_pay ?? 0
+                );
+
+                if ($amount > 0) {
+                    $breakdown[] = [
+                        'name' => $setting->name,
+                        'code' => $setting->code ?? strtolower(str_replace(' ', '_', $setting->name)),
+                        'amount' => $amount,
+                        'type' => $setting->type ?? 'government',
+                        'calculation_type' => $setting->calculation_type
+                    ];
+                }
+            }
+        } else {
+            // Fallback to traditional static deductions if no active settings
+            if ($detail->sss_contribution > 0) {
+                $breakdown[] = [
+                    'name' => 'SSS Contribution',
+                    'code' => 'sss',
+                    'amount' => $detail->sss_contribution,
+                    'type' => 'government'
+                ];
+            }
+
+            if ($detail->philhealth_contribution > 0) {
+                $breakdown[] = [
+                    'name' => 'PhilHealth Contribution',
+                    'code' => 'philhealth',
+                    'amount' => $detail->philhealth_contribution,
+                    'type' => 'government'
+                ];
+            }
+
+            if ($detail->pagibig_contribution > 0) {
+                $breakdown[] = [
+                    'name' => 'Pag-IBIG Contribution',
+                    'code' => 'pagibig',
+                    'amount' => $detail->pagibig_contribution,
+                    'type' => 'government'
+                ];
+            }
+
+            if ($detail->withholding_tax > 0) {
+                $breakdown[] = [
+                    'name' => 'Withholding Tax',
+                    'code' => 'withholding_tax',
+                    'amount' => $detail->withholding_tax,
+                    'type' => 'tax'
+                ];
+            }
         }
 
-        if ($detail->philhealth_contribution > 0) {
-            $breakdown[] = [
-                'name' => 'PhilHealth Contribution',
-                'code' => 'philhealth',
-                'amount' => $detail->philhealth_contribution,
-                'type' => 'government'
-            ];
-        }
-
-        if ($detail->pagibig_contribution > 0) {
-            $breakdown[] = [
-                'name' => 'Pag-IBIG Contribution',
-                'code' => 'pagibig',
-                'amount' => $detail->pagibig_contribution,
-                'type' => 'government'
-            ];
-        }
-
-        if ($detail->withholding_tax > 0) {
-            $breakdown[] = [
-                'name' => 'Withholding Tax',
-                'code' => 'withholding_tax',
-                'amount' => $detail->withholding_tax,
-                'type' => 'tax'
-            ];
-        }
-
-        // Time-based deductions
-        if ($detail->late_deductions > 0) {
-            $breakdown[] = [
-                'name' => 'Late Deductions',
-                'code' => 'late',
-                'amount' => $detail->late_deductions,
-                'type' => 'time'
-            ];
-        }
-
-        if ($detail->undertime_deductions > 0) {
-            $breakdown[] = [
-                'name' => 'Undertime Deductions',
-                'code' => 'undertime',
-                'amount' => $detail->undertime_deductions,
-                'type' => 'time'
-            ];
-        }
-
+        // Always include other deductions (excluding late/undertime as they're already accounted for in hours)
         if ($detail->cash_advance_deductions > 0) {
             $breakdown[] = [
                 'name' => 'Cash Advance',
