@@ -571,9 +571,16 @@ class PayrollController extends Controller
                     $payrollDetail = PayrollDetail::create([
                         'payroll_id' => $payroll->id,
                         'employee_id' => $employee->id,
-                        'basic_salary' => $payrollCalculation['basic_salary'] ?? 0,
-                        'regular_pay' => $payrollCalculation['gross_pay'] ?? 0, // Use actual calculated gross pay, not basic salary
+                        'basic_salary' => $employee->basic_salary ?? 0,
+                        'daily_rate' => $employee->daily_rate ?? 0,
+                        'hourly_rate' => $employee->hourly_rate ?? 0,
+                        'days_worked' => $payrollCalculation['days_worked'] ?? 0,
+                        'regular_hours' => $payrollCalculation['hours_worked'] ?? 0,
+                        'overtime_hours' => $payrollCalculation['overtime_hours'] ?? 0,
+                        'holiday_hours' => $payrollCalculation['holiday_hours'] ?? 0,
+                        'regular_pay' => $payrollCalculation['regular_pay'] ?? 0, // Use the calculated basic pay
                         'overtime_pay' => $payrollCalculation['overtime_pay'] ?? 0,
+                        'holiday_pay' => $payrollCalculation['holiday_pay'] ?? 0,
                         'allowances' => $payrollCalculation['allowances'] ?? 0,
                         'bonuses' => $payrollCalculation['bonuses'] ?? 0,
                         'gross_pay' => $payrollCalculation['gross_pay'] ?? 0,
@@ -581,11 +588,12 @@ class PayrollController extends Controller
                         'philhealth_contribution' => $payrollCalculation['philhealth_deduction'] ?? 0,
                         'pagibig_contribution' => $payrollCalculation['pagibig_deduction'] ?? 0,
                         'withholding_tax' => $payrollCalculation['tax_deduction'] ?? 0,
+                        'late_deductions' => $payrollCalculation['late_deductions'] ?? 0,
+                        'undertime_deductions' => $payrollCalculation['undertime_deductions'] ?? 0,
+                        'cash_advance_deductions' => $payrollCalculation['cash_advance_deductions'] ?? 0,
                         'other_deductions' => $payrollCalculation['other_deductions'] ?? 0,
                         'total_deductions' => $payrollCalculation['total_deductions'] ?? 0,
                         'net_pay' => $payrollCalculation['net_pay'] ?? 0,
-                        'regular_hours' => $payrollCalculation['hours_worked'] ?? 0,
-                        'days_worked' => $payrollCalculation['days_worked'] ?? 0,
                         'earnings_breakdown' => json_encode([
                             'allowances' => $payrollCalculation['allowances_details'] ?? [],
                             'bonuses' => $payrollCalculation['bonuses_details'] ?? [],
@@ -675,8 +683,10 @@ class PayrollController extends Controller
         $netPay = $totalGrossPay - $deductions['total'];
 
         return [
-            'basic_salary' => $basicSalary,
+            'basic_salary' => $basicSalary,  // Employee's base salary
+            'regular_pay' => $grossPay,      // Calculated basic pay based on time worked
             'overtime_pay' => $overtimePay,
+            'holiday_pay' => 0,              // TODO: Extract from rate multipliers calculation
             'allowances' => $allowancesTotal,
             'allowances_details' => $allowancesData['details'],
             'bonuses' => $bonusesTotal,
@@ -692,6 +702,12 @@ class PayrollController extends Controller
             'net_pay' => $netPay,
             'hours_worked' => $hoursWorked,
             'days_worked' => $daysWorked,
+            'regular_hours' => $hoursWorked, // TODO: Separate regular vs overtime hours
+            'overtime_hours' => 0,           // TODO: Calculate from time logs
+            'holiday_hours' => 0,            // TODO: Calculate from time logs
+            'late_deductions' => 0,          // TODO: Calculate from time logs  
+            'undertime_deductions' => 0,     // TODO: Calculate from time logs
+            'cash_advance_deductions' => 0,  // TODO: Get from cash advances
         ];
     }
 
@@ -4548,17 +4564,121 @@ class PayrollController extends Controller
             ->orderBy('sort_order')
             ->get();
 
+        // Calculate time breakdowns and pay breakdowns like the regular show method
+        $timeBreakdowns = [];
+        foreach ($payroll->payrollDetails as $detail) {
+            $employeeLogs = $timeLogs->get($detail->employee_id, collect());
+            $employeeBreakdown = [];
+
+            foreach ($periodDates as $date) {
+                $dayLogs = $employeeLogs->where('log_date', $date);
+                if ($dayLogs->isNotEmpty()) {
+                    $timeLog = $dayLogs->first();
+                    if ($timeLog && !($timeLog->remarks === 'Incomplete Time Record' || (!$timeLog->time_in || !$timeLog->time_out))) {
+                        $logType = $timeLog->log_type;
+                        if (!isset($employeeBreakdown[$logType])) {
+                            $employeeBreakdown[$logType] = [
+                                'regular_hours' => 0,
+                                'overtime_hours' => 0,
+                                'total_hours' => 0,
+                                'days_count' => 0,
+                                'display_name' => '',
+                                'rate_config' => null
+                            ];
+                        }
+
+                        $employeeBreakdown[$logType]['regular_hours'] += $timeLog->regular_hours ?? 0;
+                        $employeeBreakdown[$logType]['overtime_hours'] += $timeLog->overtime_hours ?? 0;
+                        $employeeBreakdown[$logType]['total_hours'] += $timeLog->total_hours ?? 0;
+                        $employeeBreakdown[$logType]['days_count']++;
+
+                        // Get rate configuration for this type
+                        $rateConfig = $timeLog->getRateConfiguration();
+                        if ($rateConfig) {
+                            $employeeBreakdown[$logType]['display_name'] = $rateConfig->display_name;
+                            $employeeBreakdown[$logType]['rate_config'] = $rateConfig;
+                        }
+                    }
+                }
+            }
+
+            $timeBreakdowns[$detail->employee_id] = $employeeBreakdown;
+        }
+
+        // Calculate separate basic pay and holiday pay for each employee
+        $payBreakdownByEmployee = [];
+        foreach ($payroll->payrollDetails as $detail) {
+            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+
+            $basicPay = 0; // Regular workday pay only
+            $holidayPay = 0; // All holiday-related pay
+
+            foreach ($employeeBreakdown as $logType => $breakdown) {
+                $rateConfig = $breakdown['rate_config'];
+                if (!$rateConfig) continue;
+
+                // Calculate pay amounts using rate multipliers
+                $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+
+                $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+
+                if ($logType === 'regular_workday') {
+                    $basicPay += $regularPay; // Only add regular pay to basic pay, not overtime
+                } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                    $holidayPay += ($regularPay + $overtimePay); // Holiday pay can include both regular and OT
+                }
+            }
+
+            $payBreakdownByEmployee[$detail->employee_id] = [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+            ];
+        }
+
+        $totalHolidayPay = array_sum(array_column($payBreakdownByEmployee, 'holiday_pay'));
+
+        // Check if payroll has snapshots (processing/approved status)
+        $snapshots = $payroll->snapshots()->get();
+        if ($snapshots->isNotEmpty()) {
+            // For processing/approved payrolls, use snapshot data for breakdowns
+            foreach ($payroll->payrollDetails as $detail) {
+                $snapshot = $snapshots->where('employee_id', $detail->employee_id)->first();
+                if ($snapshot) {
+                    // Set breakdown data from snapshots
+                    $detail->earnings_breakdown = json_encode([
+                        'allowances' => $snapshot->allowances_breakdown ?? []
+                    ]);
+                    $detail->deductions_breakdown = json_encode([
+                        'deductions' => $snapshot->deductions_breakdown ?? []
+                    ]);
+                }
+            }
+        } else {
+            // For draft payrolls, calculate allowance breakdowns dynamically
+            foreach ($payroll->payrollDetails as $detail) {
+                // Calculate allowances breakdown dynamically
+                $allowancesData = $this->calculateAllowances($detail->employee, $detail->basic_salary, $detail->days_worked, $detail->regular_hours);
+
+                $detail->earnings_breakdown = json_encode([
+                    'allowances' => $allowancesData['breakdown'] ?? []
+                ]);
+            }
+        }
+
         return view('payrolls.show', compact(
             'payroll',
             'dtrData',
             'periodDates',
             'allowanceSettings',
-            'deductionSettings'
+            'deductionSettings',
+            'timeBreakdowns',
+            'payBreakdownByEmployee',
+            'totalHolidayPay'
         ) + [
-            'isDynamic' => false,
-            'timeBreakdowns' => [],
-            'payBreakdownByEmployee' => [],
-            'totalHolidayPay' => 0
+            'isDynamic' => false
         ] + $additionalData);
     }
 
@@ -4807,7 +4927,7 @@ class PayrollController extends Controller
         $draftPayrollDetail->regular_hours = $payrollCalculation['regular_hours'] ?? 0;
         $draftPayrollDetail->overtime_hours = $payrollCalculation['overtime_hours'] ?? 0;
         $draftPayrollDetail->holiday_hours = $payrollCalculation['holiday_hours'] ?? 0;
-        $draftPayrollDetail->regular_pay = $payrollCalculation['basic_salary'] ?? 0;
+        $draftPayrollDetail->regular_pay = $payrollCalculation['regular_pay'] ?? 0;
         $draftPayrollDetail->overtime_pay = $payrollCalculation['overtime_pay'] ?? 0;
         $draftPayrollDetail->holiday_pay = $payrollCalculation['holiday_pay'] ?? 0;
         $draftPayrollDetail->allowances = $payrollCalculation['allowances'] ?? 0;
