@@ -69,6 +69,9 @@
                         @if($payrollId)
                             <input type="hidden" name="payroll_id" value="{{ $payrollId }}">
                         @endif
+                        @if(isset($schedule))
+                            <input type="hidden" name="schedule" value="{{ $schedule }}">
+                        @endif
                         <input type="hidden" name="redirect_to_payroll" value="1">
 
                         <!-- Bulk Actions -->

@@ -368,77 +368,14 @@ class PayrollController extends Controller
                 ->with('error', 'Invalid pay schedule selected.');
         }
 
-        // Check if we should show payrolls list or creation form
-        if (!$request->has('action') || $request->input('action') !== 'create') {
-            // Check if we need to auto-create a payroll for the current period
-            $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
-
-            // Check if payrolls exist for current period (since we create individual payrolls per employee)
-            $existingPayrolls = Payroll::where('pay_schedule', $scheduleCode)
-                ->where('period_start', $currentPeriod['start'])
-                ->where('period_end', $currentPeriod['end'])
-                ->where('payroll_type', 'automated')
-                ->get();
-
-            // If no payrolls exist for current period and we have active employees, auto-create them
-            if ($existingPayrolls->count() === 0) {
-                $activeEmployees = Employee::where('pay_schedule', $scheduleCode)
-                    ->where('employment_status', 'active')
-                    ->get();
-
-                Log::info('Active employees found: ' . $activeEmployees->count() . ' for schedule: ' . $scheduleCode);
-
-                if ($activeEmployees->count() > 0) {
-                    try {
-                        // Auto-create individual payrolls for current period
-                        $this->autoCreatePayrollForPeriod($selectedSchedule, $currentPeriod, $activeEmployees);
-
-                        // Redirect to the automation list to show all created payrolls
-                        return redirect()->route('payrolls.automation.list', $scheduleCode)
-                            ->with('success', "Automated payrolls created successfully! {$activeEmployees->count()} individual payrolls generated.");
-                    } catch (\Exception $e) {
-                        Log::error('Failed to auto-create payrolls: ' . $e->getMessage());
-                        return redirect()->route('payrolls.automation.index')
-                            ->withErrors(['error' => 'Failed to create automated payrolls: ' . $e->getMessage()]);
-                    }
-                } else {
-                    return redirect()->route('payrolls.automation.index')
-                        ->withErrors(['employees' => 'No active employees found for this pay schedule.']);
-                }
-            } else {
-                // If payrolls already exist, show the automation list
-                return redirect()->route('payrolls.automation.list', $scheduleCode)
-                    ->with('info', "Payrolls already exist for current period ({$existingPayrolls->count()} payrolls found).");
-            }
-
-            // This code should not be reached since we handle both cases above
-            return redirect()->route('payrolls.automation.index');
-        }
-
-        // Show creation form
-        // Get suggested pay period (current period, not next)
-        $suggestedPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
-
-        // Get suggested payroll number
-        $suggestedPayrollNumber = $this->generatePayrollNumber($scheduleCode);
-
-        // Get ALL active employees for this schedule (automatic)
-        $employees = Employee::with(['user', 'department', 'position'])
-            ->where('pay_schedule', $scheduleCode)
-            ->where('employment_status', 'active')
-            ->orderBy('first_name')
-            ->get();
-
-        return view('payrolls.automation.create', compact(
-            'selectedSchedule',
-            'suggestedPeriod',
-            'suggestedPayrollNumber',
-            'employees'
-        ));
+        // Redirect directly to the draft automation list instead of creating payrolls
+        return redirect()->route('payrolls.automation.list', $scheduleCode)
+            ->with('success', 'Viewing draft payrolls for ' . $selectedSchedule->name . '. Click on individual employees to view details.');
     }
 
     /**
      * Show list of automated payrolls for a specific schedule
+     * If no payrolls exist, show draft mode. If payrolls exist, show real payrolls.
      */
     public function automationList(Request $request, $schedule)
     {
@@ -457,27 +394,142 @@ class PayrollController extends Controller
         // Calculate current period to filter payrolls
         $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
 
-        // Get paginated payrolls for this schedule AND current period only
-        $payrolls = Payroll::with(['creator', 'approver', 'payrollDetails.employee'])
+        // Check if payrolls exist for this period
+        $existingPayrolls = Payroll::with(['creator', 'approver', 'payrollDetails.employee'])
             ->withCount('payrollDetails')
             ->where('pay_schedule', $schedule)
             ->where('payroll_type', 'automated')
             ->where('period_start', $currentPeriod['start'])
             ->where('period_end', $currentPeriod['end'])
             ->orderBy('created_at', 'desc')
-            ->paginate(15);
+            ->get();
+
+        // If no payrolls exist, show draft mode (like image 1)
+        if ($existingPayrolls->isEmpty()) {
+            return $this->showDraftMode($selectedSchedule, $currentPeriod, $schedule);
+        }
+
+        // If payrolls exist, show real payrolls with processing status
+        $payrolls = new \Illuminate\Pagination\LengthAwarePaginator(
+            $existingPayrolls,
+            $existingPayrolls->count(),
+            15,
+            1,
+            ['path' => request()->url()]
+        );
+
+        // Check if all payrolls are approved
+        $allApproved = $existingPayrolls->every(function ($payroll) {
+            return $payroll->status === 'approved';
+        });
+
+        $hasPayrolls = $existingPayrolls->count() > 0;
 
         return view('payrolls.automation.list', compact(
             'payrolls',
             'selectedSchedule',
+            'currentPeriod',
+            'allApproved',
+            'hasPayrolls'
+        ) + ['scheduleCode' => $schedule, 'isDraft' => false]);
+    }
+
+    /**
+     * Show draft mode with dynamic calculations (not saved to DB)
+     */
+    private function showDraftMode($selectedSchedule, $currentPeriod, $schedule)
+    {
+        // Get active employees for this schedule
+        $employees = Employee::with(['user', 'department', 'position'])
+            ->where('pay_schedule', $schedule)
+            ->where('employment_status', 'active')
+            ->orderBy('first_name')
+            ->get();
+
+        if ($employees->isEmpty()) {
+            return redirect()->route('payrolls.automation.index')
+                ->withErrors(['employees' => 'No active employees found for this pay schedule.']);
+        }
+
+        // Calculate dynamic payroll data for each employee (not saved to DB)
+        $payrollPreviews = collect();
+        $totalGross = 0;
+        $totalDeductions = 0;
+        $totalNet = 0;
+
+        foreach ($employees as $employee) {
+            $payrollCalculation = $this->calculateEmployeePayrollForPeriod($employee, $currentPeriod['start'], $currentPeriod['end']);
+
+            // Create a temporary Payroll model instance (not saved to DB)
+            $mockPayroll = new Payroll();
+            // Use employee ID directly for draft mode
+            $mockPayroll->id = $employee->id;
+            $mockPayroll->payroll_number = 'DRAFT-' . $employee->employee_number;
+            $mockPayroll->period_start = $currentPeriod['start'];
+            $mockPayroll->period_end = $currentPeriod['end'];
+            $mockPayroll->pay_date = $currentPeriod['pay_date'];
+            $mockPayroll->status = 'draft';
+            $mockPayroll->payroll_type = 'automated';
+            $mockPayroll->total_net = $payrollCalculation['net_pay'] ?? 0;
+            $mockPayroll->total_gross = $payrollCalculation['gross_pay'] ?? 0;
+            $mockPayroll->total_deductions = $payrollCalculation['total_deductions'] ?? 0;
+            $mockPayroll->created_at = now();
+
+            // Set fake relationships
+            $fakeCreator = (object) ['name' => 'System (Draft)', 'id' => 0];
+            $mockPayroll->setRelation('creator', $fakeCreator);
+            $mockPayroll->setRelation('approver', null);
+
+            // Mock payroll details collection with single employee
+            $mockPayrollDetail = (object) [
+                'employee' => $employee,
+                'employee_id' => $employee->id,
+                'gross_pay' => $payrollCalculation['gross_pay'] ?? 0,
+                'total_deductions' => $payrollCalculation['total_deductions'] ?? 0,
+                'net_pay' => $payrollCalculation['net_pay'] ?? 0,
+            ];
+            $mockPayroll->setRelation('payrollDetails', collect([$mockPayrollDetail]));
+            $mockPayroll->payroll_details_count = 1;
+
+            $payrollPreviews->push($mockPayroll);
+
+            $totalGross += $payrollCalculation['gross_pay'] ?? 0;
+            $totalDeductions += $payrollCalculation['total_deductions'] ?? 0;
+            $totalNet += $payrollCalculation['net_pay'] ?? 0;
+        }
+
+        // Create paginator for mock data
+        $mockPaginator = new \Illuminate\Pagination\LengthAwarePaginator(
+            $payrollPreviews,
+            $payrollPreviews->count(),
+            15,
+            1,
+            ['path' => request()->url()]
+        );
+
+        // Return draft payrolls that work with existing view
+        return view('payrolls.automation.list', compact(
+            'selectedSchedule',
             'currentPeriod'
-        ) + ['scheduleCode' => $schedule]);
+        ) + [
+            'scheduleCode' => $schedule,
+            'isDraft' => true,
+            'payrolls' => $mockPaginator,
+            'hasPayrolls' => false,
+            'allApproved' => false,
+            'draftTotals' => [
+                'gross' => $totalGross,
+                'deductions' => $totalDeductions,
+                'net' => $totalNet,
+                'count' => $payrollPreviews->count()
+            ]
+        ]);
     }
 
     /**
      * Auto-create individual payrolls for each employee in the period
      */
-    private function autoCreatePayrollForPeriod($scheduleSetting, $period, $employees)
+    private function autoCreatePayrollForPeriod($scheduleSetting, $period, $employees, $status = 'draft')
     {
         DB::beginTransaction();
 
@@ -504,7 +556,7 @@ class PayrollController extends Controller
                         'period_start' => $period['start'],
                         'period_end' => $period['end'],
                         'pay_date' => $period['pay_date'],
-                        'status' => 'draft',
+                        'status' => $status,
                         'payroll_type' => 'automated',
                         'created_by' => Auth::id() ?? 1,
                         'notes' => 'Automatically created payroll for ' . $employee->first_name . ' ' . $employee->last_name . ' (' . $scheduleSetting->name . ' schedule)',
@@ -551,6 +603,19 @@ class PayrollController extends Controller
             }
 
             DB::commit();
+
+            // Create snapshots for processing payrolls
+            if ($status === 'processing') {
+                foreach ($createdPayrolls as $payroll) {
+                    try {
+                        Log::info("Creating snapshots for payroll {$payroll->id}");
+                        $this->createPayrollSnapshots($payroll);
+                    } catch (\Exception $e) {
+                        Log::error("Failed to create snapshots for payroll {$payroll->id}: " . $e->getMessage());
+                        // Don't fail the entire process, but log the error
+                    }
+                }
+            }
 
             Log::info("Successfully created " . count($createdPayrolls) . " individual payrolls for {$scheduleSetting->name} schedule");
 
@@ -1008,7 +1073,7 @@ class PayrollController extends Controller
     }
 
     /**
-     * Store automation payroll
+     * Store automation payroll - now redirects to draft list instead of creating payrolls
      */
     public function automationStore(Request $request)
     {
@@ -1020,8 +1085,13 @@ class PayrollController extends Controller
             'employee_ids.*' => 'exists:employees,id',
         ]);
 
-        // Use the same store logic but mark as automated
-        return $this->processPayrollCreation($validated, 'automated');
+        // Extract schedule from selected_period (format: "schedule_code|start_date|end_date")
+        $periodParts = explode('|', $validated['selected_period']);
+        $scheduleCode = $periodParts[0] ?? 'semi_monthly';
+
+        // Redirect to draft list instead of creating payrolls
+        return redirect()->route('payrolls.automation.list', $scheduleCode)
+            ->with('success', 'Viewing draft payrolls. Review and process individual employees as needed.');
     }
 
     /**
@@ -1227,9 +1297,26 @@ class PayrollController extends Controller
     /**
      * Display the specified payroll.
      */
-    public function show(Payroll $payroll)
+    public function show($payroll)
     {
         $this->authorize('view payrolls');
+
+        // Handle direct employee ID access - redirect to draft mode
+        if (is_numeric($payroll) && !Payroll::where('id', $payroll)->exists()) {
+            // This is likely an employee ID, redirect to draft mode
+            $employee = Employee::find($payroll);
+            if ($employee) {
+                return redirect()->route('payrolls.automation.draft.show', [
+                    'schedule' => $employee->pay_schedule,
+                    'employee' => $payroll
+                ]);
+            }
+        }
+
+        // Handle regular payroll
+        if (!($payroll instanceof Payroll)) {
+            $payroll = Payroll::findOrFail($payroll);
+        }
 
         // Auto-recalculate if needed (for draft payrolls)
         $this->autoRecalculateIfNeeded($payroll);
@@ -4045,6 +4132,835 @@ class PayrollController extends Controller
                 ->toArray(),
             'captured_at' => now()->toISOString(),
         ];
+    }
+
+    /**
+     * Show draft payroll for a specific employee (dynamic calculations)
+     */
+    public function showDraftPayroll(Request $request, $schedule, $employee)
+    {
+        $this->authorize('view payrolls');
+
+        $employee = Employee::findOrFail($employee);
+        $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
+            ->where('code', $schedule)
+            ->first();
+
+        if (!$selectedSchedule) {
+            return redirect()->route('payrolls.automation.index')
+                ->with('error', 'Invalid pay schedule selected.');
+        }
+
+        $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
+        $payrollCalculation = $this->calculateEmployeePayrollForPeriod($employee, $currentPeriod['start'], $currentPeriod['end']);
+
+        // Debug logging
+        Log::info('Draft Payroll Calculation for Employee ' . $employee->id, [
+            'allowances' => $payrollCalculation['allowances'] ?? 'NOT SET',
+            'allowances_details' => $payrollCalculation['allowances_details'] ?? 'NOT SET',
+            'deductions_details' => $payrollCalculation['deductions_details'] ?? 'NOT SET',
+        ]);
+
+        // Create mock payroll for display
+        $draftPayroll = new Payroll();
+        $draftPayroll->id = $employee->id;
+        $draftPayroll->payroll_number = 'DRAFT-' . $employee->employee_number;
+        $draftPayroll->period_start = $currentPeriod['start'];
+        $draftPayroll->period_end = $currentPeriod['end'];
+        $draftPayroll->pay_date = $currentPeriod['pay_date'];
+        $draftPayroll->status = 'draft';
+        $draftPayroll->payroll_type = 'automated';
+        $draftPayroll->total_gross = $payrollCalculation['gross_pay'] ?? 0;
+        $draftPayroll->total_deductions = $payrollCalculation['total_deductions'] ?? 0;
+        $draftPayroll->total_net = $payrollCalculation['net_pay'] ?? 0;
+        $draftPayroll->created_at = now();
+
+        // Set relationships
+        $fakeCreator = (object) ['name' => 'System (Draft)', 'id' => 0];
+        $draftPayroll->setRelation('creator', $fakeCreator);
+        $draftPayroll->setRelation('approver', null);
+
+        // Create mock payroll detail
+        $draftPayrollDetail = new PayrollDetail();
+        $draftPayrollDetail->employee_id = $employee->id;
+        $draftPayrollDetail->basic_salary = $employee->basic_salary ?? 0;
+        $draftPayrollDetail->daily_rate = $employee->daily_rate ?? 0;
+        $draftPayrollDetail->hourly_rate = $employee->hourly_rate ?? 0;
+        $draftPayrollDetail->days_worked = $payrollCalculation['days_worked'] ?? 0;
+        $draftPayrollDetail->regular_hours = $payrollCalculation['regular_hours'] ?? 0;
+        $draftPayrollDetail->overtime_hours = $payrollCalculation['overtime_hours'] ?? 0;
+        $draftPayrollDetail->holiday_hours = $payrollCalculation['holiday_hours'] ?? 0;
+        $draftPayrollDetail->regular_pay = $payrollCalculation['basic_salary'] ?? 0;
+        $draftPayrollDetail->overtime_pay = $payrollCalculation['overtime_pay'] ?? 0;
+        $draftPayrollDetail->holiday_pay = $payrollCalculation['holiday_pay'] ?? 0;
+        $draftPayrollDetail->allowances = $payrollCalculation['allowances'] ?? 0;
+        $draftPayrollDetail->bonuses = $payrollCalculation['bonuses'] ?? 0;
+        $draftPayrollDetail->gross_pay = $payrollCalculation['gross_pay'] ?? 0;
+        $draftPayrollDetail->sss_contribution = $payrollCalculation['sss_deduction'] ?? 0;
+        $draftPayrollDetail->philhealth_contribution = $payrollCalculation['philhealth_deduction'] ?? 0;
+        $draftPayrollDetail->pagibig_contribution = $payrollCalculation['pagibig_deduction'] ?? 0;
+        $draftPayrollDetail->withholding_tax = $payrollCalculation['tax_deduction'] ?? 0;
+        $draftPayrollDetail->late_deductions = 0; // Not calculated in this method yet
+        $draftPayrollDetail->undertime_deductions = 0; // Not calculated in this method yet
+        $draftPayrollDetail->cash_advance_deductions = 0; // Not calculated in this method yet
+        $draftPayrollDetail->other_deductions = $payrollCalculation['other_deductions'] ?? 0;
+        $draftPayrollDetail->total_deductions = $payrollCalculation['total_deductions'] ?? 0;
+        $draftPayrollDetail->net_pay = $payrollCalculation['net_pay'] ?? 0;
+
+        // Set earnings and deduction breakdowns
+        if (isset($payrollCalculation['allowances_details'])) {
+            $draftPayrollDetail->earnings_breakdown = json_encode([
+                'allowances' => $payrollCalculation['allowances_details']
+            ]);
+        }
+        if (isset($payrollCalculation['deductions_details'])) {
+            $draftPayrollDetail->deduction_breakdown = json_encode($payrollCalculation['deductions_details']);
+        }
+
+        // Set employee relationship
+        $draftPayrollDetail->setRelation('employee', $employee->load(['user', 'department', 'position', 'daySchedule', 'timeSchedule']));
+
+        // Set payroll details collection
+        $draftPayroll->setRelation('payrollDetails', collect([$draftPayrollDetail]));
+
+        // Create period dates array
+        $startDate = \Carbon\Carbon::parse($currentPeriod['start']);
+        $endDate = \Carbon\Carbon::parse($currentPeriod['end']);
+        $periodDates = [];
+        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
+            $periodDates[] = $date->format('Y-m-d');
+        }
+
+        // Get DTR data
+        $timeLogs = TimeLog::where('employee_id', $employee->id)
+            ->whereBetween('log_date', [$currentPeriod['start'], $currentPeriod['end']])
+            ->orderBy('log_date')
+            ->get()
+            ->groupBy(function ($item) {
+                return \Carbon\Carbon::parse($item->log_date)->format('Y-m-d');
+            });
+
+        $dtrData = [$employee->id => $timeLogs->toArray()];
+
+        // Create time breakdowns similar to regular show method
+        $timeBreakdowns = [$employee->id => []];
+        $employeeBreakdown = [];
+
+        foreach ($periodDates as $date) {
+            $timeLog = $timeLogs->get($date, collect())->first();
+            if ($timeLog && !($timeLog->remarks === 'Incomplete Time Record' || (!$timeLog->time_in || !$timeLog->time_out))) {
+                $logType = $timeLog->log_type;
+                if (!isset($employeeBreakdown[$logType])) {
+                    $employeeBreakdown[$logType] = [
+                        'regular_hours' => 0,
+                        'overtime_hours' => 0,
+                        'total_hours' => 0,
+                        'days_count' => 0,
+                        'display_name' => '',
+                        'rate_config' => null
+                    ];
+                }
+
+                $employeeBreakdown[$logType]['regular_hours'] += $timeLog->regular_hours ?? 0;
+                $employeeBreakdown[$logType]['overtime_hours'] += $timeLog->overtime_hours ?? 0;
+                $employeeBreakdown[$logType]['total_hours'] += $timeLog->total_hours ?? 0;
+                $employeeBreakdown[$logType]['days_count']++;
+
+                // Get rate configuration for this type
+                $rateConfig = $timeLog->getRateConfiguration();
+                if ($rateConfig) {
+                    $employeeBreakdown[$logType]['display_name'] = $rateConfig->display_name;
+                    $employeeBreakdown[$logType]['rate_config'] = $rateConfig;
+                }
+            }
+        }
+
+        $timeBreakdowns[$employee->id] = $employeeBreakdown;
+
+        // Calculate pay breakdown by employee
+        $hourlyRate = $employee->hourly_rate ?? 0;
+        $basicPay = 0;
+        $holidayPay = 0;
+
+        foreach ($employeeBreakdown as $logType => $breakdown) {
+            $rateConfig = $breakdown['rate_config'];
+            if (!$rateConfig) continue;
+
+            $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+            $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+
+            $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+            $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+
+            if ($logType === 'regular_workday') {
+                $basicPay += $regularPay;
+            } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                $holidayPay += ($regularPay + $overtimePay);
+            }
+        }
+
+        $payBreakdownByEmployee = [
+            $employee->id => [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+            ]
+        ];
+
+        // Get settings
+        $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'allowance')
+            ->orderBy('sort_order')
+            ->get();
+        $deductionSettings = \App\Models\DeductionTaxSetting::active()
+            ->orderBy('sort_order')
+            ->get();
+
+        $totalHolidayPay = $holidayPay;
+
+        return view('payrolls.show', compact(
+            'draftPayroll',
+            'dtrData',
+            'periodDates',
+            'allowanceSettings',
+            'deductionSettings',
+            'timeBreakdowns',
+            'payBreakdownByEmployee',
+            'totalHolidayPay'
+        ) + [
+            'payroll' => $draftPayroll,
+            'isDraft' => true,
+            'isDynamic' => true,
+            'schedule' => $schedule,
+            'employee' => $employee->id
+        ]);
+    }
+
+    /**
+     * Process draft payroll (save to database)
+     */
+    public function processDraftPayroll(Request $request, $schedule, $employee)
+    {
+        $this->authorize('create payrolls');
+
+        $employee = Employee::findOrFail($employee);
+        $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
+            ->where('code', $schedule)
+            ->first();
+
+        if (!$selectedSchedule) {
+            return redirect()->route('payrolls.automation.index')
+                ->with('error', 'Invalid pay schedule selected.');
+        }
+
+        $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
+
+        // Check if payroll already exists
+        $existingPayroll = Payroll::whereHas('payrollDetails', function ($query) use ($employee) {
+            $query->where('employee_id', $employee->id);
+        })
+            ->where('pay_schedule', $schedule)
+            ->where('period_start', $currentPeriod['start'])
+            ->where('period_end', $currentPeriod['end'])
+            ->where('payroll_type', 'automated')
+            ->first();
+
+        if ($existingPayroll) {
+            return redirect()->route('payrolls.automation.processing.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('info', 'This payroll is already processed.');
+        }
+
+        try {
+            // Create payroll with snapshot and "processing" status
+            $employees = collect([$employee]);
+            $createdPayroll = $this->autoCreatePayrollForPeriod($selectedSchedule, $currentPeriod, $employees, 'processing');
+
+            return redirect()->route('payrolls.automation.processing.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('success', 'Payroll processed and saved to database with data snapshot.');
+        } catch (\Exception $e) {
+            Log::error('Failed to process draft payroll: ' . $e->getMessage());
+            return redirect()->route('payrolls.automation.draft.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('error', 'Failed to process payroll: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show processing payroll (saved to database)
+     */
+    public function showProcessingPayroll(Request $request, $schedule, $employee)
+    {
+        $this->authorize('view payrolls');
+
+        $employee = Employee::findOrFail($employee);
+        $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
+            ->where('code', $schedule)
+            ->first();
+
+        if (!$selectedSchedule) {
+            return redirect()->route('payrolls.automation.index')
+                ->with('error', 'Invalid pay schedule selected.');
+        }
+
+        $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
+
+        // Find existing payroll
+        $payroll = Payroll::whereHas('payrollDetails', function ($query) use ($employee) {
+            $query->where('employee_id', $employee->id);
+        })
+            ->where('pay_schedule', $schedule)
+            ->where('period_start', $currentPeriod['start'])
+            ->where('period_end', $currentPeriod['end'])
+            ->where('payroll_type', 'automated')
+            ->first();
+
+        if (!$payroll) {
+            return redirect()->route('payrolls.automation.draft.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('info', 'No processed payroll found. Showing draft mode.');
+        }
+
+        // Call the regular show method but pass additional data for automation context
+        $originalShow = $this->show($payroll);
+
+        // Add automation-specific data to the view data
+        $viewData = $originalShow->getData();
+        $viewData['schedule'] = $schedule;
+        $viewData['employee'] = $employee->id;
+
+        return $originalShow->with($viewData);
+    }
+
+    /**
+     * Back to draft for single employee
+     */
+    public function backToDraftSingle(Request $request, $schedule, $employee)
+    {
+        $this->authorize('delete payrolls');
+
+        $employee = Employee::findOrFail($employee);
+        $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
+            ->where('code', $schedule)
+            ->first();
+
+        if (!$selectedSchedule) {
+            return redirect()->route('payrolls.automation.index')
+                ->with('error', 'Invalid pay schedule selected.');
+        }
+
+        $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
+
+        // Find existing payroll
+        $existingPayroll = Payroll::whereHas('payrollDetails', function ($query) use ($employee) {
+            $query->where('employee_id', $employee->id);
+        })
+            ->where('pay_schedule', $schedule)
+            ->where('period_start', $currentPeriod['start'])
+            ->where('period_end', $currentPeriod['end'])
+            ->where('payroll_type', 'automated')
+            ->first();
+
+        if (!$existingPayroll) {
+            return redirect()->route('payrolls.automation.draft.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('info', 'No saved payroll found. Already in draft mode.');
+        }
+
+        if ($existingPayroll->status === 'approved') {
+            return redirect()->route('payrolls.automation.processing.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('error', 'Cannot return to draft mode. This payroll is already approved.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Delete payroll details and payroll
+            PayrollDetail::where('payroll_id', $existingPayroll->id)->delete();
+            $existingPayroll->delete();
+
+            DB::commit();
+
+            return redirect()->route('payrolls.automation.draft.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('success', 'Successfully deleted saved payroll. Returned to draft mode.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to return payroll to draft: ' . $e->getMessage());
+            return redirect()->route('payrolls.automation.processing.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('error', 'Failed to return to draft mode: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show payroll with additional data for automation context
+     */
+    private function showPayrollWithAdditionalData($payroll, $additionalData = [])
+    {
+        // Load all required relationships
+        $payroll->load([
+            'payrollDetails.employee.user',
+            'payrollDetails.employee.department',
+            'payrollDetails.employee.position',
+            'creator',
+            'approver'
+        ]);
+
+        // Get all the data needed for the show view (simplified version)
+        $employeeIds = $payroll->payrollDetails->pluck('employee_id');
+
+        $startDate = \Carbon\Carbon::parse($payroll->period_start);
+        $endDate = \Carbon\Carbon::parse($payroll->period_end);
+        $periodDates = [];
+        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
+            $periodDates[] = $date->format('Y-m-d');
+        }
+
+        $timeLogs = TimeLog::whereIn('employee_id', $employeeIds)
+            ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+            ->orderBy('log_date')
+            ->get()
+            ->groupBy(['employee_id']);
+
+        $dtrData = [];
+        foreach ($payroll->payrollDetails as $detail) {
+            $employeeLogs = $timeLogs->get($detail->employee_id, collect());
+            $dtrData[$detail->employee_id] = $employeeLogs->groupBy(function ($item) {
+                return \Carbon\Carbon::parse($item->log_date)->format('Y-m-d');
+            })->toArray();
+        }
+
+        $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'allowance')
+            ->orderBy('sort_order')
+            ->get();
+        $deductionSettings = \App\Models\DeductionTaxSetting::active()
+            ->orderBy('sort_order')
+            ->get();
+
+        return view('payrolls.show', compact(
+            'payroll',
+            'dtrData',
+            'periodDates',
+            'allowanceSettings',
+            'deductionSettings'
+        ) + [
+            'isDynamic' => false,
+            'timeBreakdowns' => [],
+            'payBreakdownByEmployee' => [],
+            'totalHolidayPay' => 0
+        ] + $additionalData);
+    }
+
+    // ===== UNIFIED AUTOMATION PAYROLL METHODS =====
+
+    /**
+     * Show unified payroll view (handles draft, processing, approved statuses)
+     */
+    public function showUnifiedPayroll(Request $request, $schedule, $employee)
+    {
+        $this->authorize('view payrolls');
+
+        $employee = Employee::findOrFail($employee);
+        $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
+            ->where('code', $schedule)
+            ->first();
+
+        if (!$selectedSchedule) {
+            return redirect()->route('payrolls.automation.index')
+                ->with('error', 'Invalid pay schedule selected.');
+        }
+
+        $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
+
+        // Check if a saved payroll exists for this employee and period
+        $existingPayroll = Payroll::whereHas('payrollDetails', function ($query) use ($employee) {
+            $query->where('employee_id', $employee->id);
+        })
+            ->where('pay_schedule', $schedule)
+            ->where('period_start', $currentPeriod['start'])
+            ->where('period_end', $currentPeriod['end'])
+            ->where('payroll_type', 'automated')
+            ->first();
+
+        if ($existingPayroll) {
+            // Show saved payroll (processing or approved)
+            return $this->showSavedPayroll($existingPayroll, $schedule, $employee->id);
+        } else {
+            // Show draft payroll (dynamic calculations)
+            return $this->showDraftPayrollUnified($schedule, $employee, $currentPeriod);
+        }
+    }
+
+    /**
+     * Process unified payroll (draft to processing)
+     */
+    public function processUnifiedPayroll(Request $request, $schedule, $employee)
+    {
+        $this->authorize('create payrolls');
+
+        $employee = Employee::findOrFail($employee);
+        $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
+            ->where('code', $schedule)
+            ->first();
+
+        if (!$selectedSchedule) {
+            return redirect()->route('payrolls.automation.index')
+                ->with('error', 'Invalid pay schedule selected.');
+        }
+
+        $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
+
+        // Check if payroll already exists
+        $existingPayroll = Payroll::whereHas('payrollDetails', function ($query) use ($employee) {
+            $query->where('employee_id', $employee->id);
+        })
+            ->where('pay_schedule', $schedule)
+            ->where('period_start', $currentPeriod['start'])
+            ->where('period_end', $currentPeriod['end'])
+            ->where('payroll_type', 'automated')
+            ->first();
+
+        if ($existingPayroll) {
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('info', 'This payroll is already processed.');
+        }
+
+        try {
+            // Create payroll with snapshots
+            $employees = collect([$employee]);
+            $createdPayroll = $this->autoCreatePayrollForPeriod($selectedSchedule, $currentPeriod, $employees, 'processing');
+
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('success', 'Payroll processed and saved to database with data snapshot.');
+        } catch (\Exception $e) {
+            Log::error('Failed to process unified payroll: ' . $e->getMessage());
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('error', 'Failed to process payroll: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Back to draft from unified payroll
+     */
+    public function backToUnifiedDraft(Request $request, $schedule, $employee)
+    {
+        $this->authorize('edit payrolls');
+
+        $employee = Employee::findOrFail($employee);
+        $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
+            ->where('code', $schedule)
+            ->first();
+
+        if (!$selectedSchedule) {
+            return redirect()->route('payrolls.automation.index')
+                ->with('error', 'Invalid pay schedule selected.');
+        }
+
+        $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
+
+        try {
+            DB::beginTransaction();
+
+            // Delete payroll and related data
+            $payrolls = Payroll::whereHas('payrollDetails', function ($query) use ($employee) {
+                $query->where('employee_id', $employee->id);
+            })
+                ->where('pay_schedule', $schedule)
+                ->where('period_start', $currentPeriod['start'])
+                ->where('period_end', $currentPeriod['end'])
+                ->where('payroll_type', 'automated')
+                ->get();
+
+            foreach ($payrolls as $payroll) {
+                // Delete snapshots
+                $payroll->snapshots()->delete();
+                // Delete payroll details
+                $payroll->payrollDetails()->delete();
+                // Delete payroll
+                $payroll->delete();
+            }
+
+            DB::commit();
+
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('success', 'Successfully deleted saved payroll. Returned to draft mode.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to return unified payroll to draft: ' . $e->getMessage());
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('error', 'Failed to return to draft: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Approve unified payroll
+     */
+    public function approveUnifiedPayroll(Request $request, $schedule, $employee)
+    {
+        $this->authorize('approve payrolls');
+
+        $employee = Employee::findOrFail($employee);
+        $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
+            ->where('code', $schedule)
+            ->first();
+
+        if (!$selectedSchedule) {
+            return redirect()->route('payrolls.automation.index')
+                ->with('error', 'Invalid pay schedule selected.');
+        }
+
+        $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
+
+        // Find existing payroll
+        $payroll = Payroll::whereHas('payrollDetails', function ($query) use ($employee) {
+            $query->where('employee_id', $employee->id);
+        })
+            ->where('pay_schedule', $schedule)
+            ->where('period_start', $currentPeriod['start'])
+            ->where('period_end', $currentPeriod['end'])
+            ->where('payroll_type', 'automated')
+            ->first();
+
+        if (!$payroll) {
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('error', 'No payroll found to approve.');
+        }
+
+        try {
+            $payroll->status = 'approved';
+            $payroll->approved_by = Auth::id();
+            $payroll->approved_at = now();
+            $payroll->save();
+
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('success', 'Payroll approved successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to approve unified payroll: ' . $e->getMessage());
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $schedule,
+                'employee' => $employee->id
+            ])->with('error', 'Failed to approve payroll: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show draft payroll for unified view
+     */
+    private function showDraftPayrollUnified($schedule, $employee, $currentPeriod)
+    {
+        $payrollCalculation = $this->calculateEmployeePayrollForPeriod($employee, $currentPeriod['start'], $currentPeriod['end']);
+
+        // Log what we're getting
+        Log::info('Draft Payroll Calculation for Employee ' . $employee->id, $payrollCalculation);
+
+        // Create mock payroll for display
+        $draftPayroll = new Payroll();
+        $draftPayroll->id = $employee->id;
+        $draftPayroll->payroll_number = 'DRAFT-' . $employee->employee_number;
+        $draftPayroll->period_start = $currentPeriod['start'];
+        $draftPayroll->period_end = $currentPeriod['end'];
+        $draftPayroll->pay_date = $currentPeriod['pay_date'];
+        $draftPayroll->status = 'draft';
+        $draftPayroll->payroll_type = 'automated';
+        $draftPayroll->total_gross = $payrollCalculation['gross_pay'] ?? 0;
+        $draftPayroll->total_deductions = $payrollCalculation['total_deductions'] ?? 0;
+        $draftPayroll->total_net = $payrollCalculation['net_pay'] ?? 0;
+        $draftPayroll->created_at = now();
+
+        // Set relationships
+        $fakeCreator = (object) ['name' => 'System (Draft)', 'id' => 0];
+        $draftPayroll->setRelation('creator', $fakeCreator);
+        $draftPayroll->setRelation('approver', null);
+
+        // Create mock payroll detail
+        $draftPayrollDetail = new PayrollDetail();
+        $draftPayrollDetail->employee_id = $employee->id;
+        $draftPayrollDetail->basic_salary = $employee->basic_salary ?? 0;
+        $draftPayrollDetail->daily_rate = $employee->daily_rate ?? 0;
+        $draftPayrollDetail->hourly_rate = $employee->hourly_rate ?? 0;
+        $draftPayrollDetail->days_worked = $payrollCalculation['days_worked'] ?? 0;
+        $draftPayrollDetail->regular_hours = $payrollCalculation['regular_hours'] ?? 0;
+        $draftPayrollDetail->overtime_hours = $payrollCalculation['overtime_hours'] ?? 0;
+        $draftPayrollDetail->holiday_hours = $payrollCalculation['holiday_hours'] ?? 0;
+        $draftPayrollDetail->regular_pay = $payrollCalculation['basic_salary'] ?? 0;
+        $draftPayrollDetail->overtime_pay = $payrollCalculation['overtime_pay'] ?? 0;
+        $draftPayrollDetail->holiday_pay = $payrollCalculation['holiday_pay'] ?? 0;
+        $draftPayrollDetail->allowances = $payrollCalculation['allowances'] ?? 0;
+        $draftPayrollDetail->bonuses = $payrollCalculation['bonuses'] ?? 0;
+        $draftPayrollDetail->gross_pay = $payrollCalculation['gross_pay'] ?? 0;
+        $draftPayrollDetail->sss_contribution = $payrollCalculation['sss_deduction'] ?? 0;
+        $draftPayrollDetail->philhealth_contribution = $payrollCalculation['philhealth_deduction'] ?? 0;
+        $draftPayrollDetail->pagibig_contribution = $payrollCalculation['pagibig_deduction'] ?? 0;
+        $draftPayrollDetail->withholding_tax = $payrollCalculation['tax_deduction'] ?? 0;
+        $draftPayrollDetail->late_deductions = $payrollCalculation['late_deductions'] ?? 0;
+        $draftPayrollDetail->undertime_deductions = $payrollCalculation['undertime_deductions'] ?? 0;
+        $draftPayrollDetail->cash_advance_deductions = $payrollCalculation['cash_advance_deductions'] ?? 0;
+        $draftPayrollDetail->other_deductions = $payrollCalculation['other_deductions'] ?? 0;
+        $draftPayrollDetail->total_deductions = $payrollCalculation['total_deductions'] ?? 0;
+        $draftPayrollDetail->net_pay = $payrollCalculation['net_pay'] ?? 0;
+
+        // Set earnings and deduction breakdowns
+        if (isset($payrollCalculation['allowances_details'])) {
+            $draftPayrollDetail->earnings_breakdown = json_encode([
+                'allowances' => $payrollCalculation['allowances_details']
+            ]);
+        }
+        if (isset($payrollCalculation['deductions_details'])) {
+            $draftPayrollDetail->deduction_breakdown = json_encode($payrollCalculation['deductions_details']);
+        }
+
+        // Set employee relationship
+        $draftPayrollDetail->setRelation('employee', $employee->load(['user', 'department', 'position', 'daySchedule', 'timeSchedule']));
+
+        // Set payroll details collection
+        $draftPayroll->setRelation('payrollDetails', collect([$draftPayrollDetail]));
+
+        // Create period dates array
+        $startDate = \Carbon\Carbon::parse($currentPeriod['start']);
+        $endDate = \Carbon\Carbon::parse($currentPeriod['end']);
+        $periodDates = [];
+        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
+            $periodDates[] = $date->format('Y-m-d');
+        }
+
+        // Get DTR data
+        $timeLogs = TimeLog::where('employee_id', $employee->id)
+            ->whereBetween('log_date', [$currentPeriod['start'], $currentPeriod['end']])
+            ->orderBy('log_date')
+            ->get()
+            ->groupBy(function ($item) {
+                return \Carbon\Carbon::parse($item->log_date)->format('Y-m-d');
+            });
+
+        $dtrData = [$employee->id => $timeLogs->toArray()];
+
+        // Create time breakdowns similar to regular show method
+        $timeBreakdowns = [$employee->id => []];
+        $employeeBreakdown = [];
+
+        foreach ($periodDates as $date) {
+            $timeLog = $timeLogs->get($date, collect())->first();
+            if ($timeLog && !($timeLog->remarks === 'Incomplete Time Record' || (!$timeLog->time_in || !$timeLog->time_out))) {
+                $logType = $timeLog->log_type;
+                if (!isset($employeeBreakdown[$logType])) {
+                    $employeeBreakdown[$logType] = [
+                        'regular_hours' => 0,
+                        'overtime_hours' => 0,
+                        'total_hours' => 0,
+                        'days_count' => 0,
+                        'display_name' => '',
+                        'rate_config' => null
+                    ];
+                }
+
+                $employeeBreakdown[$logType]['regular_hours'] += $timeLog->regular_hours ?? 0;
+                $employeeBreakdown[$logType]['overtime_hours'] += $timeLog->overtime_hours ?? 0;
+                $employeeBreakdown[$logType]['total_hours'] += $timeLog->total_hours ?? 0;
+                $employeeBreakdown[$logType]['days_count']++;
+
+                // Get rate configuration for this type
+                $rateConfig = $timeLog->getRateConfiguration();
+                if ($rateConfig) {
+                    $employeeBreakdown[$logType]['display_name'] = $rateConfig->display_name;
+                    $employeeBreakdown[$logType]['rate_config'] = $rateConfig;
+                }
+            }
+        }
+
+        $timeBreakdowns[$employee->id] = $employeeBreakdown;
+
+        // Calculate pay breakdown by employee
+        $hourlyRate = $employee->hourly_rate ?? 0;
+        $basicPay = 0;
+        $holidayPay = 0;
+
+        foreach ($employeeBreakdown as $logType => $breakdown) {
+            $rateConfig = $breakdown['rate_config'];
+            if (!$rateConfig) continue;
+
+            $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+            $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+
+            $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+            $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+
+            if ($logType === 'regular_workday') {
+                $basicPay += $regularPay;
+            } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                $holidayPay += ($regularPay + $overtimePay);
+            }
+        }
+
+        $payBreakdownByEmployee = [
+            $employee->id => [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+            ]
+        ];
+
+        // Get settings
+        $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'allowance')
+            ->orderBy('sort_order')
+            ->get();
+        $deductionSettings = \App\Models\DeductionTaxSetting::active()
+            ->orderBy('sort_order')
+            ->get();
+
+        $totalHolidayPay = $holidayPay;
+
+        return view('payrolls.show', compact(
+            'draftPayroll',
+            'dtrData',
+            'periodDates',
+            'allowanceSettings',
+            'deductionSettings',
+            'timeBreakdowns',
+            'payBreakdownByEmployee',
+            'totalHolidayPay'
+        ) + [
+            'payroll' => $draftPayroll,
+            'isDraft' => true,
+            'isDynamic' => true,
+            'schedule' => $schedule,
+            'employee' => $employee->id
+        ]);
+    }
+
+    /**
+     * Show saved payroll for unified view
+     */
+    private function showSavedPayroll($payroll, $schedule, $employeeId)
+    {
+        return $this->showPayrollWithAdditionalData($payroll, [
+            'schedule' => $schedule,
+            'employee' => $employeeId
+        ]);
     }
 
     /**

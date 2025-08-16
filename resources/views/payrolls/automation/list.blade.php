@@ -70,7 +70,7 @@
                                     @foreach($payrolls as $payroll)
                                         <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
                                            oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ \Carbon\Carbon::parse($payroll->period_start)->format('M d') }} - {{ \Carbon\Carbon::parse($payroll->period_end)->format('M d, Y') }}', '{{ $payroll->status }}')"
-                                           onclick="window.location.href='{{ route('payrolls.show', $payroll) }}'"
+                                           onclick="window.location.href='{{ $payroll->payrollDetails->count() == 1 ? route('payrolls.automation.show', ['schedule' => $scheduleCode, 'employee' => $payroll->payrollDetails->first()->employee_id]) : route('payrolls.show', $payroll) }}'"
                                            title="Right-click for actions">
                                             <td class="px-6 py-4 whitespace-nowrap">
                                                 <div class="text-sm font-medium text-gray-900">{{ $payroll->payroll_number }}</div>

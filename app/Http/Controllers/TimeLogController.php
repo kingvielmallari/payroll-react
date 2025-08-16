@@ -128,23 +128,15 @@ class TimeLogController extends Controller
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'log_date' => 'required|date|before_or_equal:today',
-            'time_in' => 'required|string',
-            'time_out' => 'nullable|string',
-            'break_in' => 'nullable|string',
-            'break_out' => 'nullable|string',
+            'time_in' => 'required|date_format:H:i',
+            'time_out' => 'nullable|date_format:H:i|after:time_in',
+            'break_in' => 'nullable|date_format:H:i',
+            'break_out' => 'nullable|date_format:H:i|after:break_in',
             'log_type' => 'required|in:' . implode(',', $availableLogTypes),
+            'remarks' => 'nullable|string|max:500',
             'is_holiday' => 'boolean',
             'is_rest_day' => 'boolean',
         ]);
-
-        // Convert time format from 12-hour to 24-hour format
-        $validated['time_in'] = $this->convertTo24HourFormat($validated['time_in']);
-        $validated['time_out'] = $validated['time_out'] ? $this->convertTo24HourFormat($validated['time_out']) : null;
-        $validated['break_in'] = $validated['break_in'] ? $this->convertTo24HourFormat($validated['break_in']) : null;
-        $validated['break_out'] = $validated['break_out'] ? $this->convertTo24HourFormat($validated['break_out']) : null;
-
-        // Validate time sequence
-        $this->validateTimeSequence($validated);
 
         // Check if time log already exists for this employee and date
         $existingLog = TimeLog::where('employee_id', $validated['employee_id'])
@@ -246,6 +238,7 @@ class TimeLogController extends Controller
             'undertime_hours' => $undertimeHours,
             'log_type' => $validated['log_type'],
             'creation_method' => 'manual',
+            'remarks' => $validated['remarks'],
             'is_holiday' => $validated['is_holiday'] ?? false,
             'is_rest_day' => $validated['is_rest_day'] ?? false,
         ]);
@@ -324,7 +317,8 @@ class TimeLogController extends Controller
                 'regular_hours' => 0,
                 'overtime_hours' => 0,
                 'late_minutes' => 0,
-                'status' => 'no_record'
+                'status' => 'no_record',
+                'remarks' => null
             ];
 
             $periodDates[] = array_merge($dayData, [
@@ -371,23 +365,15 @@ class TimeLogController extends Controller
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'log_date' => 'required|date|before_or_equal:today',
-            'time_in' => 'required|string',
-            'time_out' => 'nullable|string',
-            'break_in' => 'nullable|string',
-            'break_out' => 'nullable|string',
+            'time_in' => 'required|date_format:H:i',
+            'time_out' => 'nullable|date_format:H:i|after:time_in',
+            'break_in' => 'nullable|date_format:H:i',
+            'break_out' => 'nullable|date_format:H:i|after:break_in',
             'log_type' => 'required|in:' . implode(',', $availableLogTypes),
+            'remarks' => 'nullable|string|max:500',
             'is_holiday' => 'boolean',
             'is_rest_day' => 'boolean',
         ]);
-
-        // Convert time format from 12-hour to 24-hour format
-        $validated['time_in'] = $this->convertTo24HourFormat($validated['time_in']);
-        $validated['time_out'] = $validated['time_out'] ? $this->convertTo24HourFormat($validated['time_out']) : null;
-        $validated['break_in'] = $validated['break_in'] ? $this->convertTo24HourFormat($validated['break_in']) : null;
-        $validated['break_out'] = $validated['break_out'] ? $this->convertTo24HourFormat($validated['break_out']) : null;
-
-        // Validate time sequence
-        $this->validateTimeSequence($validated);
 
         // Recalculate hours (same logic as store method)
         $timeIn = Carbon::createFromFormat('H:i', $validated['time_in']);
@@ -477,6 +463,7 @@ class TimeLogController extends Controller
             'late_hours' => $lateHours,
             'undertime_hours' => $undertimeHours,
             'log_type' => $validated['log_type'],
+            'remarks' => $validated['remarks'],
             'is_holiday' => $validated['is_holiday'] ?? false,
             'is_rest_day' => $validated['is_rest_day'] ?? false,
         ]);
@@ -653,20 +640,12 @@ class TimeLogController extends Controller
 
         $validated = $request->validate([
             'log_date' => 'required|date|before_or_equal:today',
-            'time_in' => 'required|string',
-            'time_out' => 'nullable|string',
-            'break_in' => 'nullable|string',
-            'break_out' => 'nullable|string',
+            'time_in' => 'required|date_format:H:i',
+            'time_out' => 'nullable|date_format:H:i|after:time_in',
+            'break_in' => 'nullable|date_format:H:i',
+            'break_out' => 'nullable|date_format:H:i|after:break_in',
+            'remarks' => 'nullable|string|max:500',
         ]);
-
-        // Convert time format from 12-hour to 24-hour format
-        $validated['time_in'] = $this->convertTo24HourFormat($validated['time_in']);
-        $validated['time_out'] = $validated['time_out'] ? $this->convertTo24HourFormat($validated['time_out']) : null;
-        $validated['break_in'] = $validated['break_in'] ? $this->convertTo24HourFormat($validated['break_in']) : null;
-        $validated['break_out'] = $validated['break_out'] ? $this->convertTo24HourFormat($validated['break_out']) : null;
-
-        // Validate time sequence
-        $this->validateTimeSequence($validated);
 
         // Check if time log already exists
         $existingLog = TimeLog::where('employee_id', $employee->id)
@@ -733,6 +712,7 @@ class TimeLogController extends Controller
             'undertime_hours' => $undertimeHours,
             'log_type' => 'regular',
             'creation_method' => 'manual',
+            'remarks' => $validated['remarks'],
         ]);
 
         return redirect()->route('my-time-logs')
@@ -790,23 +770,15 @@ class TimeLogController extends Controller
             $validated = $request->validate([
                 'employee_id' => 'required|exists:employees,id',
                 'log_date' => 'required|date',
-                'time_in' => 'nullable|string',
-                'time_out' => 'nullable|string',
-                'break_in' => 'nullable|string',
-                'break_out' => 'nullable|string',
+                'time_in' => 'nullable|date_format:H:i',
+                'time_out' => 'nullable|date_format:H:i',
+                'break_in' => 'nullable|date_format:H:i',
+                'break_out' => 'nullable|date_format:H:i',
+                'remarks' => 'nullable|string|max:500',
                 'log_type' => 'required|in:regular,overtime,holiday,rest_day',
                 'is_holiday' => 'boolean',
                 'is_rest_day' => 'boolean',
             ]);
-
-            // Convert time format from 12-hour to 24-hour format
-            $validated['time_in'] = $validated['time_in'] ? $this->convertTo24HourFormat($validated['time_in']) : null;
-            $validated['time_out'] = $validated['time_out'] ? $this->convertTo24HourFormat($validated['time_out']) : null;
-            $validated['break_in'] = $validated['break_in'] ? $this->convertTo24HourFormat($validated['break_in']) : null;
-            $validated['break_out'] = $validated['break_out'] ? $this->convertTo24HourFormat($validated['break_out']) : null;
-
-            // Validate time sequence
-            $this->validateTimeSequence($validated);
 
             // Find existing time log or create new one
             $timeLog = TimeLog::updateOrCreate(
@@ -1029,7 +1001,6 @@ class TimeLogController extends Controller
                 'time_out' => $timeOut,
                 'break_in' => $breakIn,
                 'break_out' => $breakOut,
-                'log_type' => $timeLog ? $timeLog->log_type : null, // Add the actual log_type from database
                 'remarks' => $timeLog ? $timeLog->remarks : null,
                 'regular_hours' => $timeLog ? ($timeLog->regular_hours ?? 0) : 0,
                 'overtime_hours' => $timeLog ? ($timeLog->overtime_hours ?? 0) : 0,
@@ -1054,7 +1025,7 @@ class TimeLogController extends Controller
     /**
      * Calculate hours for a time log entry
      */
-    public function calculateHours(TimeLog $timeLog)
+    private function calculateHours(TimeLog $timeLog)
     {
         if (!$timeLog->time_in || !$timeLog->time_out) {
             $timeLog->update([
@@ -1066,48 +1037,26 @@ class TimeLogController extends Controller
             return;
         }
 
-        // Parse dates correctly - extract just the time parts from datetime casts
-        $logDate = Carbon::parse($timeLog->log_date)->format('Y-m-d');
-        $timeIn = Carbon::parse($logDate . ' ' . Carbon::parse($timeLog->time_in)->format('H:i:s'));
-        $timeOut = Carbon::parse($logDate . ' ' . Carbon::parse($timeLog->time_out)->format('H:i:s'));
+        $timeIn = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_in);
+        $timeOut = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_out);
 
         // Handle next day time out
         if ($timeOut->lt($timeIn)) {
             $timeOut->addDay();
         }
 
-        $totalMinutes = $timeIn->diffInMinutes($timeOut);
+        $totalMinutes = $timeOut->diffInMinutes($timeIn);
 
-        // Handle break time deduction
-        $breakMinutesDeducted = 0;
-
+        // Subtract break time if both break_in and break_out are provided
         if ($timeLog->break_in && $timeLog->break_out) {
-            // If break times are recorded, use them
-            $breakIn = Carbon::parse($logDate . ' ' . Carbon::parse($timeLog->break_in)->format('H:i:s'));
-            $breakOut = Carbon::parse($logDate . ' ' . Carbon::parse($timeLog->break_out)->format('H:i:s'));
+            $breakIn = Carbon::parse($timeLog->log_date . ' ' . $timeLog->break_in);
+            $breakOut = Carbon::parse($timeLog->log_date . ' ' . $timeLog->break_out);
 
             if ($breakOut->gt($breakIn)) {
-                $breakMinutesDeducted = $breakIn->diffInMinutes($breakOut);
-            }
-        } else {
-            // If break times are missing, check if work period spans across standard break time (12:00 PM - 1:00 PM)
-            $standardBreakStart = Carbon::parse($logDate . ' 12:00:00');
-            $standardBreakEnd = Carbon::parse($logDate . ' 13:00:00');
-
-            // Check if work period overlaps with standard break period
-            if ($timeIn->lt($standardBreakEnd) && $timeOut->gt($standardBreakStart)) {
-                // Calculate overlap between work period and break period
-                $overlapStart = max($timeIn->timestamp, $standardBreakStart->timestamp);
-                $overlapEnd = min($timeOut->timestamp, $standardBreakEnd->timestamp);
-
-                if ($overlapEnd > $overlapStart) {
-                    $breakMinutesDeducted = ($overlapEnd - $overlapStart) / 60;
-                }
+                $breakMinutes = $breakOut->diffInMinutes($breakIn);
+                $totalMinutes -= $breakMinutes;
             }
         }
-
-        // Subtract break time from total minutes
-        $totalMinutes -= $breakMinutesDeducted;
 
         $totalHours = $totalMinutes / 60;
 
@@ -1115,27 +1064,24 @@ class TimeLogController extends Controller
         $employee = $timeLog->employee;
         $timeSchedule = $employee->timeSchedule ?? null;
 
-        // Default to 8-5 schedule if no time schedule is set or if times are empty
-        $scheduledStartTime = ($timeSchedule && !empty($timeSchedule->start_time)) ? $timeSchedule->start_time : '08:00';
-        $scheduledEndTime = ($timeSchedule && !empty($timeSchedule->end_time)) ? $timeSchedule->end_time : '17:00';
+        // Default to 8-5 schedule if no time schedule is set
+        $scheduledStartTime = $timeSchedule ? $timeSchedule->start_time : '08:00';
+        $scheduledEndTime = $timeSchedule ? $timeSchedule->end_time : '17:00';
 
         // Calculate scheduled work hours
-        $schedStart = Carbon::parse($logDate . ' ' . $scheduledStartTime);
-        $schedEnd = Carbon::parse($logDate . ' ' . $scheduledEndTime);
+        $schedStart = Carbon::parse($timeLog->log_date . ' ' . $scheduledStartTime);
+        $schedEnd = Carbon::parse($timeLog->log_date . ' ' . $scheduledEndTime);
 
         // Handle next day scheduled end time
         if ($schedEnd->lt($schedStart)) {
             $schedEnd->addDay();
         }
 
-        $scheduledWorkMinutes = $schedStart->diffInMinutes($schedEnd);
+        $scheduledWorkMinutes = $schedEnd->diffInMinutes($schedStart);
         $standardHours = $scheduledWorkMinutes / 60;
 
         // Calculate late hours based on employee's scheduled start time
-        $lateMinutes = 0;
-        if ($timeIn->gt($schedStart)) {
-            $lateMinutes = $schedStart->diffInMinutes($timeIn);
-        }
+        $lateMinutes = max(0, $timeIn->diffInMinutes($schedStart));
         $lateHours = $lateMinutes / 60;
 
         // Calculate regular and overtime hours properly
@@ -1143,7 +1089,7 @@ class TimeLogController extends Controller
         $regularHours = min($totalHours, $standardHours);
 
         // OT should only be calculated when actual end time exceeds scheduled end time
-        $actualEndForOT = Carbon::parse($logDate . ' ' . Carbon::parse($timeLog->time_out)->format('H:i:s'));
+        $actualEndForOT = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_out);
         if ($actualEndForOT->lt($timeIn)) {
             $actualEndForOT->addDay();
         }
@@ -1154,8 +1100,8 @@ class TimeLogController extends Controller
             $overtimeMinutes = $actualEndForOT->diffInMinutes($schedEnd);
             // Subtract break time from OT if break extends into OT period
             if ($timeLog->break_in && $timeLog->break_out) {
-                $breakStart = Carbon::parse($logDate . ' ' . Carbon::parse($timeLog->break_in)->format('H:i:s'));
-                $breakEnd = Carbon::parse($logDate . ' ' . Carbon::parse($timeLog->break_out)->format('H:i:s'));
+                $breakStart = Carbon::parse($timeLog->log_date . ' ' . $timeLog->break_in);
+                $breakEnd = Carbon::parse($timeLog->log_date . ' ' . $timeLog->break_out);
 
                 // If break overlaps with OT period, subtract the overlap
                 if ($breakStart->lt($actualEndForOT) && $breakEnd->gt($schedEnd)) {
@@ -1237,6 +1183,7 @@ class TimeLogController extends Controller
         $periodStart = $request->input('period_start');
         $periodEnd = $request->input('period_end');
         $payrollId = $request->input('payroll_id');
+        $schedule = $request->input('schedule'); // Add schedule parameter
 
         // Generate DTR data for the specific period
         $currentPeriod = [
@@ -1263,6 +1210,7 @@ class TimeLogController extends Controller
             'periodStart',
             'periodEnd',
             'payrollId',
+            'schedule',
             'logTypes',
             'holidays'
         ));
@@ -1289,17 +1237,36 @@ class TimeLogController extends Controller
             'employee_id' => 'required|exists:employees,id',
             'time_logs' => 'required|array',
             'time_logs.*.log_date' => 'required|date',
-            'time_logs.*.time_in' => 'nullable|date_format:H:i',
-            'time_logs.*.time_out' => 'nullable|date_format:H:i',
-            'time_logs.*.break_in' => 'nullable|date_format:H:i',
-            'time_logs.*.break_out' => 'nullable|date_format:H:i',
-            'time_logs.*.log_type' => 'required|in:' . implode(',', $availableLogTypes),
-            'time_logs.*.is_holiday' => 'boolean',
-            'time_logs.*.is_rest_day' => 'boolean',
+            'time_logs.*.time_in' => 'nullable|string',
+            'time_logs.*.time_out' => 'nullable|string',
+            'time_logs.*.break_in' => 'nullable|string',
+            'time_logs.*.break_out' => 'nullable|string',
+            'time_logs.*.log_type' => 'nullable|in:' . implode(',', $availableLogTypes),
+            'time_logs.*.is_holiday' => 'nullable|boolean',
+            'time_logs.*.is_rest_day' => 'nullable|boolean',
         ]);
 
+        // Clean up empty strings to null for proper processing and set default log_type
+        foreach ($validated['time_logs'] as $index => $logData) {
+            // Process HTML time inputs - they come as "HH:MM" format
+            $validated['time_logs'][$index]['time_in'] = $this->processHtmlTimeInput($logData['time_in'] ?? null);
+            $validated['time_logs'][$index]['time_out'] = $this->processHtmlTimeInput($logData['time_out'] ?? null);
+            $validated['time_logs'][$index]['break_in'] = $this->processHtmlTimeInput($logData['break_in'] ?? null);
+            $validated['time_logs'][$index]['break_out'] = $this->processHtmlTimeInput($logData['break_out'] ?? null);
+
+            // Set default log_type if not provided
+            if (empty($validated['time_logs'][$index]['log_type'])) {
+                $validated['time_logs'][$index]['log_type'] = 'regular';
+            }
+
+            // Set default values for boolean fields
+            $validated['time_logs'][$index]['is_holiday'] = $logData['is_holiday'] ?? false;
+            $validated['time_logs'][$index]['is_rest_day'] = $logData['is_rest_day'] ?? false;
+        }
+
         Log::info('Bulk time log validation passed', [
-            'validated_time_logs_count' => count($validated['time_logs'])
+            'validated_time_logs_count' => count($validated['time_logs']),
+            'sample_entry' => $validated['time_logs'][0] ?? 'none'
         ]);
 
         try {
@@ -1310,67 +1277,114 @@ class TimeLogController extends Controller
             $skippedCount = 0;
 
             foreach ($validated['time_logs'] as $logData) {
-                // Find existing time log for this date
+                // Find existing time log or create new one
                 $existingLog = TimeLog::where('employee_id', $validated['employee_id'])
                     ->where('log_date', $logData['log_date'])
                     ->first();
 
-                // Check if we should process this entry
-                $hasAnyTimeData = !empty($logData['time_in']) || !empty($logData['time_out']) ||
-                    !empty($logData['break_in']) || !empty($logData['break_out']);
+                // Only mark as absent if BOTH time_in AND time_out are completely missing
+                // Allow saving partial records (e.g., only time_in filled)
+                $isCompletelyAbsent = empty($logData['time_in']) && empty($logData['time_out']);
 
-                // Skip if no existing record and no time data provided (prevents creating empty records)
-                if (!$existingLog && !$hasAnyTimeData) {
+                // If completely absent, create/update record with absent status
+                if ($isCompletelyAbsent) {
+                    $timeLogData = [
+                        'employee_id' => $validated['employee_id'],
+                        'log_date' => $logData['log_date'],
+                        'time_in' => null,
+                        'time_out' => null,
+                        'break_in' => !empty($logData['break_in']) ? $logData['break_in'] : null,
+                        'break_out' => !empty($logData['break_out']) ? $logData['break_out'] : null,
+                        'total_hours' => 0,
+                        'regular_hours' => 0,
+                        'overtime_hours' => 0,
+                        'late_hours' => 0,
+                        'undertime_hours' => 0,
+                        'log_type' => $logData['log_type'],
+                        'creation_method' => 'manual',
+                        'remarks' => 'Absent',
+                        'is_holiday' => $logData['is_holiday'] ?? false,
+                        'is_rest_day' => $logData['is_rest_day'] ?? false,
+                    ];
+
+                    if ($existingLog) {
+                        $existingLog->update($timeLogData);
+                        $updatedCount++;
+                    } else {
+                        TimeLog::create($timeLogData);
+                        $createdCount++;
+                    }
+                    continue;
+                }
+
+                // For partial records (only time_in or only time_out), still save but mark as incomplete
+                $isIncomplete = empty($logData['time_in']) || empty($logData['time_out']);
+
+                if ($isIncomplete) {
+                    $timeLogData = [
+                        'employee_id' => $validated['employee_id'],
+                        'log_date' => $logData['log_date'],
+                        'time_in' => !empty($logData['time_in']) ? $logData['time_in'] : null,
+                        'time_out' => !empty($logData['time_out']) ? $logData['time_out'] : null,
+                        'break_in' => !empty($logData['break_in']) ? $logData['break_in'] : null,
+                        'break_out' => !empty($logData['break_out']) ? $logData['break_out'] : null,
+                        'total_hours' => 0,
+                        'regular_hours' => 0,
+                        'overtime_hours' => 0,
+                        'late_hours' => 0,
+                        'undertime_hours' => 0,
+                        'log_type' => $logData['log_type'],
+                        'creation_method' => 'manual',
+                        'remarks' => 'Incomplete Time Record',
+                        'is_holiday' => $logData['is_holiday'] ?? false,
+                        'is_rest_day' => $logData['is_rest_day'] ?? false,
+                    ];
+
+                    if ($existingLog) {
+                        $existingLog->update($timeLogData);
+                        $updatedCount++;
+                    } else {
+                        TimeLog::create($timeLogData);
+                        $createdCount++;
+                    }
+                    continue;
+                }
+
+                // Calculate hours safely with null checks for complete records
+                $timeIn = null;
+                $timeOut = null;
+                $breakIn = null;
+                $breakOut = null;
+
+                try {
+                    // Since we already processed HTML time inputs, they're in "HH:MM" format
+                    if (!empty($logData['time_in'])) {
+                        $timeIn = Carbon::createFromFormat('H:i', $logData['time_in']);
+                    }
+                    if (!empty($logData['time_out'])) {
+                        $timeOut = Carbon::createFromFormat('H:i', $logData['time_out']);
+                    }
+                    if (!empty($logData['break_in'])) {
+                        $breakIn = Carbon::createFromFormat('H:i', $logData['break_in']);
+                    }
+                    if (!empty($logData['break_out'])) {
+                        $breakOut = Carbon::createFromFormat('H:i', $logData['break_out']);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Time parsing error for employee ' . $validated['employee_id'] . ' on ' . $logData['log_date'], [
+                        'error' => $e->getMessage(),
+                        'time_in' => $logData['time_in'] ?? null,
+                        'time_out' => $logData['time_out'] ?? null,
+                        'break_in' => $logData['break_in'] ?? null,
+                        'break_out' => $logData['break_out'] ?? null,
+                        'trace' => $e->getTraceAsString()
+                    ]);
+
+                    // Skip this record instead of failing the entire batch
                     $skippedCount++;
                     continue;
                 }
 
-                // Prepare time values (allow null for clearing existing data)
-                $timeIn = !empty($logData['time_in']) ? $logData['time_in'] : null;
-                $timeOut = !empty($logData['time_out']) ? $logData['time_out'] : null;
-                $breakIn = !empty($logData['break_in']) ? $logData['break_in'] : null;
-                $breakOut = !empty($logData['break_out']) ? $logData['break_out'] : null;
-
-                // Determine log_type: use default based on day if all time fields are blank
-                $logType = $logData['log_type'];
-
-                // If all time fields are blank, reset to default based on day type
-                if (!$timeIn && !$timeOut && !$breakIn && !$breakOut) {
-                    $date = Carbon::parse($logData['log_date']);
-                    $isWeekend = $date->isWeekend();
-                    $isHoliday = $logData['is_holiday'] ?? false;
-
-                    // Reset to smart default based on actual day type
-                    if (!$isWeekend && !$isHoliday) {
-                        $logType = 'regular_workday'; // Regular Day
-                    } elseif ($isWeekend && !$isHoliday) {
-                        $logType = 'rest_day'; // Rest Day
-                    } elseif (!$isWeekend && $isHoliday) {
-                        // Query actual holiday type from database
-                        $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
-                            ->where('is_active', true)
-                            ->first();
-
-                        if ($holiday && $holiday->type === 'special') {
-                            $logType = 'special_holiday'; // SP Holiday
-                        } else {
-                            $logType = 'regular_holiday'; // RE Holiday (default)
-                        }
-                    } elseif ($isWeekend && $isHoliday) {
-                        // Weekend + Holiday combination - query holiday type
-                        $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
-                            ->where('is_active', true)
-                            ->first();
-
-                        if ($holiday && $holiday->type === 'special') {
-                            $logType = 'rest_day_special_holiday'; // Rest + SP Holiday
-                        } else {
-                            $logType = 'rest_day_regular_holiday'; // Rest + RE Holiday (default)
-                        }
-                    }
-                }
-
-                // Calculate hours only if we have time_in and time_out
                 $totalHours = 0;
                 $regularHours = 0;
                 $overtimeHours = 0;
@@ -1378,33 +1392,62 @@ class TimeLogController extends Controller
                 $undertimeHours = 0;
 
                 if ($timeIn && $timeOut) {
-                    $timeInCarbon = Carbon::createFromFormat('H:i', $timeIn);
-                    $timeOutCarbon = Carbon::createFromFormat('H:i', $timeOut);
-
-                    $totalMinutes = $timeInCarbon->diffInMinutes($timeOutCarbon);
+                    $totalMinutes = $timeIn->diffInMinutes($timeOut);
 
                     if ($breakIn && $breakOut) {
-                        $breakInCarbon = Carbon::createFromFormat('H:i', $breakIn);
-                        $breakOutCarbon = Carbon::createFromFormat('H:i', $breakOut);
-                        $breakMinutes = $breakInCarbon->diffInMinutes($breakOutCarbon);
+                        $breakMinutes = $breakIn->diffInMinutes($breakOut);
                         $totalMinutes -= $breakMinutes;
                     }
 
                     $totalHours = $totalMinutes / 60;
 
-                    $standardHours = 8;
-                    if ($totalHours <= $standardHours) {
-                        $regularHours = $totalHours;
-                    } else {
-                        $regularHours = $standardHours;
-                        $overtimeHours = $totalHours - $standardHours;
+                    // Get employee's time schedule
+                    $employee = Employee::find($validated['employee_id']);
+                    $timeSchedule = $employee->timeSchedule ?? null;
+
+                    // Default to 8-5 schedule if no time schedule is set
+                    $scheduledStartTime = $timeSchedule ? $timeSchedule->start_time : '08:00';
+                    $scheduledEndTime = $timeSchedule ? $timeSchedule->end_time : '17:00';
+
+                    // Calculate scheduled work hours
+                    $schedStart = Carbon::createFromFormat('H:i', $scheduledStartTime);
+                    $schedEnd = Carbon::createFromFormat('H:i', $scheduledEndTime);
+
+                    // Handle next day scheduled end time
+                    if ($schedEnd->lt($schedStart)) {
+                        $schedEnd->addDay();
                     }
 
-                    $standardTimeIn = Carbon::createFromFormat('H:i', '08:00');
-                    if ($timeInCarbon->greaterThan($standardTimeIn)) {
-                        $lateHours = $standardTimeIn->diffInMinutes($timeInCarbon) / 60;
+                    $scheduledWorkMinutes = $schedStart->diffInMinutes($schedEnd);
+                    $standardHours = $scheduledWorkMinutes / 60;
+
+                    // Calculate late hours based on employee's scheduled start time
+                    if ($timeIn->greaterThan($schedStart)) {
+                        $lateHours = $schedStart->diffInMinutes($timeIn) / 60;
                     }
 
+                    // Calculate regular and overtime hours properly
+                    // Regular hours should not exceed the scheduled work hours
+                    $regularHours = min($totalHours, $standardHours);
+
+                    // OT should only be calculated when actual end time exceeds scheduled end time
+                    $overtimeHours = 0;
+                    if ($timeOut->greaterThan($schedEnd)) {
+                        $overtimeMinutes = $schedEnd->diffInMinutes($timeOut);
+                        // Subtract break time from OT if break extends into OT period
+                        if ($breakIn && $breakOut) {
+                            // If break overlaps with OT period, subtract the overlap
+                            if ($breakIn->lt($timeOut) && $breakOut->gt($schedEnd)) {
+                                $overlapStart = max($breakIn->timestamp, $schedEnd->timestamp);
+                                $overlapEnd = min($breakOut->timestamp, $timeOut->timestamp);
+                                $overlapMinutes = max(0, ($overlapEnd - $overlapStart) / 60);
+                                $overtimeMinutes -= $overlapMinutes;
+                            }
+                        }
+                        $overtimeHours = max(0, $overtimeMinutes / 60);
+                    }
+
+                    // Calculate undertime hours (if total hours < scheduled hours)
                     if ($totalHours < $standardHours) {
                         $undertimeHours = $standardHours - $totalHours;
                     }
@@ -1413,17 +1456,18 @@ class TimeLogController extends Controller
                 $timeLogData = [
                     'employee_id' => $validated['employee_id'],
                     'log_date' => $logData['log_date'],
-                    'time_in' => $timeIn,
-                    'time_out' => $timeOut,
-                    'break_in' => $breakIn,
-                    'break_out' => $breakOut,
+                    'time_in' => $logData['time_in'],
+                    'time_out' => $logData['time_out'],
+                    'break_in' => $logData['break_in'],
+                    'break_out' => $logData['break_out'],
                     'total_hours' => $totalHours,
                     'regular_hours' => $regularHours,
                     'overtime_hours' => $overtimeHours,
                     'late_hours' => $lateHours,
                     'undertime_hours' => $undertimeHours,
-                    'log_type' => $logType, // Use the determined log_type (default or original)
+                    'log_type' => $logData['log_type'],
                     'creation_method' => 'manual',
+                    'remarks' => $logData['remarks'] ?? null,
                     'is_holiday' => $logData['is_holiday'] ?? false,
                     'is_rest_day' => $logData['is_rest_day'] ?? false,
                 ];
@@ -1459,9 +1503,24 @@ class TimeLogController extends Controller
                 ->with('success', $message);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Bulk Time Log Creation Error: ' . $e->getMessage());
+            Log::error('Bulk Time Log Creation Error: ' . $e->getMessage(), [
+                'exception_type' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'employee_id' => $validated['employee_id'] ?? 'unknown',
+                'request_data' => $request->all()
+            ]);
 
-            return back()->withErrors(['error' => 'Failed to create bulk time logs: ' . $e->getMessage()])
+            // More specific error message based on exception type
+            $errorMessage = 'Failed to create bulk time logs: ';
+            if (strpos($e->getMessage(), 'Not enough data available to satisfy format') !== false) {
+                $errorMessage .= 'Invalid time format detected. Please ensure all time fields use the correct HH:MM format (e.g., 08:00, 17:30).';
+            } else {
+                $errorMessage .= $e->getMessage();
+            }
+
+            return back()->withErrors(['error' => $errorMessage])
                 ->withInput();
         }
     }
@@ -1710,130 +1769,5 @@ class TimeLogController extends Controller
 
         // If all formats fail, throw an exception with details
         throw new \Exception("Unable to parse time string: '{$timeString}'");
-    }
-
-    /**
-     * Validate time sequence (time_out after time_in, break_out after break_in)
-     */
-    private function validateTimeSequence($validated)
-    {
-        // Check if time_out is after time_in
-        if ($validated['time_in'] && $validated['time_out']) {
-            $timeIn = Carbon::createFromFormat('H:i', $validated['time_in']);
-            $timeOut = Carbon::createFromFormat('H:i', $validated['time_out']);
-
-            if ($timeOut->lte($timeIn)) {
-                throw new \Exception('Time out must be after time in.');
-            }
-        }
-
-        // Check if break_out is after break_in
-        if ($validated['break_in'] && $validated['break_out']) {
-            $breakIn = Carbon::createFromFormat('H:i', $validated['break_in']);
-            $breakOut = Carbon::createFromFormat('H:i', $validated['break_out']);
-
-            if ($breakOut->lte($breakIn)) {
-                throw new \Exception('Break out must be after break in.');
-            }
-        }
-    }
-
-    /**
-     * Clean time input by removing placeholder values and empty strings
-     */
-    private function cleanTimeInput($timeString)
-    {
-        if (
-            $timeString === null ||
-            $timeString === '' ||
-            trim($timeString) === '' ||
-            trim($timeString) === '--:-- --' ||
-            trim($timeString) === '--:--' ||
-            trim($timeString) === '---' ||
-            preg_match('/^-+:?-+\s*-*$/', trim($timeString))
-        ) {
-            return null;
-        }
-
-        return trim($timeString);
-    }
-
-    /**
-     * Convert time from 12-hour or 24-hour format to 24-hour format
-     */
-    private function convertTo24HourFormat($timeString)
-    {
-        // Handle null, empty string, whitespace-only strings, or placeholder values
-        if (
-            $timeString === null ||
-            $timeString === '' ||
-            trim($timeString) === '' ||
-            trim($timeString) === '--:-- --' ||
-            trim($timeString) === '--:--' ||
-            trim($timeString) === '---' ||
-            preg_match('/^-+:?-+\s*-*$/', trim($timeString))
-        ) {
-            return null;
-        }
-
-        // Clean the string
-        $timeString = trim($timeString);
-
-        // Double-check after trimming for any placeholder patterns
-        if (
-            $timeString === '' ||
-            $timeString === '--:-- --' ||
-            $timeString === '--:--' ||
-            preg_match('/^-+:?-+\s*-*$/', $timeString)
-        ) {
-            return null;
-        }
-
-        // If it's already in 24-hour format, validate and return as is
-        if (preg_match('/^(\d{1,2}):(\d{2})$/', $timeString, $matches)) {
-            $hour = (int)$matches[1];
-            $minute = (int)$matches[2];
-
-            // Validate hour and minute ranges
-            if ($hour > 23 || $minute > 59) {
-                throw new \Exception("Invalid 24-hour time format: '{$timeString}'. Hours must be 0-23, minutes must be 0-59.");
-            }
-
-            try {
-                $carbon = Carbon::createFromFormat('H:i', $timeString);
-                return $carbon->format('H:i');
-            } catch (\Exception $e) {
-                throw new \Exception("Invalid 24-hour time format: '{$timeString}'. Please use format like '14:00'");
-            }
-        }
-
-        // Try to parse 12-hour format
-        try {
-            // Handle various 12-hour formats
-            $formats = [
-                'g:i A',  // 8:00 AM
-                'g:i a',  // 8:00 am
-                'h:i A',  // 08:00 AM
-                'h:i a',  // 08:00 am
-                'g:iA',   // 8:00AM (no space)
-                'g:ia',   // 8:00am (no space)
-                'h:iA',   // 08:00AM (no space)
-                'h:ia',   // 08:00am (no space)
-            ];
-
-            foreach ($formats as $format) {
-                try {
-                    $carbon = Carbon::createFromFormat($format, $timeString);
-                    return $carbon->format('H:i');
-                } catch (\Exception $e) {
-                    continue;
-                }
-            }
-
-            // If all parsing fails, throw a more descriptive error
-            throw new \Exception("Invalid time format: '{$timeString}'. Please use format like '8:00 AM' or '14:00'");
-        } catch (\Exception $e) {
-            throw $e;
-        }
     }
 }

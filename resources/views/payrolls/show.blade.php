@@ -219,7 +219,7 @@
                     </div>
 
                    
-
+{{-- 
                     <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <h4 class="text-sm font-medium text-gray-900">Created By</h4>
@@ -231,12 +231,24 @@
                             <p class="mt-1 text-sm text-gray-600">{{ $payroll->approver->name }} on {{ $payroll->approved_at->format('M d, Y g:i A') }}</p>
                         </div>
                         @endif
-                    </div>
+                    </div> --}}
 
                     <!-- Action Buttons -->
                     <div class="mt-6 flex space-x-3">
                         @can('process payrolls')
                         @if($payroll->status == 'draft')
+                        @if(isset($schedule) && isset($employee))
+                        {{-- Automation payroll - use unified process route --}}
+                        <form method="POST" action="{{ route('payrolls.automation.process', ['schedule' => $schedule, 'employee' => $employee]) }}" class="inline">
+                            @csrf
+                            <button type="submit" 
+                                    class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Submit this payroll for processing? This will save it to the database with locked data snapshots.')">
+                                Submit for Processing
+                            </button>
+                        </form>
+                        @else
+                        {{-- Regular payroll - use standard process route --}}
                         <form method="POST" action="{{ route('payrolls.process', $payroll) }}" class="inline">
                             @csrf
                             <button type="submit" 
@@ -245,6 +257,7 @@
                                 Submit for Processing
                             </button>
                         </form>
+                        @endif
                         @endif
                         @endcan
 
@@ -261,6 +274,18 @@
 
                         @can('approve payrolls')
                         @if($payroll->status == 'processing')
+                        @if(isset($schedule) && isset($employee))
+                        {{-- Automation payroll - use unified approve route --}}
+                        <form method="POST" action="{{ route('payrolls.automation.approve', ['schedule' => $schedule, 'employee' => $employee]) }}" class="inline">
+                            @csrf
+                            <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-purple-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-purple-700 focus:bg-purple-700 active:bg-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Approve this payroll?')">
+                                Approve Payroll
+                            </button>
+                        </form>
+                        @else
+                        {{-- Regular payroll - use standard approve route --}}
                         <form method="POST" action="{{ route('payrolls.approve', $payroll) }}" class="inline">
                             @csrf
                             <button type="submit"
@@ -270,10 +295,26 @@
                             </button>
                         </form>
                         @endif
+                        @endif
                         @endcan
 
                         @can('edit payrolls')
                         @if($payroll->status == 'processing')
+                        @if(isset($schedule) && isset($employee))
+                        {{-- Automation payroll - use unified back-to-draft route --}}
+                        <form method="POST" action="{{ route('payrolls.automation.back-to-draft', ['schedule' => $schedule, 'employee' => $employee]) }}" class="inline">
+                            @csrf
+                            <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-yellow-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-yellow-700 focus:bg-yellow-700 active:bg-yellow-900 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Move this payroll back to draft? This will delete the saved payroll and return to dynamic calculations.')">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12"></path>
+                                </svg>
+                                Back to Draft
+                            </button>
+                        </form>
+                        @else
+                        {{-- Regular payroll - use standard back-to-draft route --}}
                         <form method="POST" action="{{ route('payrolls.back-to-draft', $payroll) }}" class="inline">
                             @csrf
                             <button type="submit"
@@ -285,6 +326,7 @@
                                 Back to Draft
                             </button>
                         </form>
+                        @endif
                         @endif
                         @endcan
 
@@ -311,7 +353,7 @@
                         @endcan
 
                         @can('delete payrolls')
-                        @if($payroll->canBeEdited() || ($payroll->status === 'approved' && auth()->user()->can('delete approved payrolls')))
+                        @if(!($payroll->payroll_type === 'automated' && in_array($payroll->status, ['draft', 'processing'])) && ($payroll->canBeEdited() || ($payroll->status === 'approved' && auth()->user()->can('delete approved payrolls'))))
                         <form method="POST" action="{{ route('payrolls.destroy', $payroll) }}" class="inline">
                             @csrf
                             @method('DELETE')
@@ -894,7 +936,8 @@
                                         'employee_id' => $payroll->payrollDetails->first()->employee_id,
                                         'period_start' => $payroll->period_start->format('Y-m-d'),
                                         'period_end' => $payroll->period_end->format('Y-m-d'),
-                                        'payroll_id' => $payroll->id
+                                        'payroll_id' => $payroll->id,
+                                        'schedule' => $schedule ?? null
                                     ]) }}" 
                                        class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded text-sm flex items-center">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
