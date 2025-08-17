@@ -199,9 +199,22 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         $undertimeGracePeriodMinutes = $gracePeriodSettings->undertime_grace_minutes;
         $overtimeThresholdMinutes = $gracePeriodSettings->overtime_threshold_minutes;
 
-        // STEP 1: Calculate work period based on employee schedule boundaries
-        // If employee comes in early, start counting from scheduled start time
-        $workStartTime = $actualTimeIn->gt($schedStart) ? $actualTimeIn : $schedStart;
+        // STEP 1: Calculate work period based on employee schedule boundaries and grace period
+        // Apply late grace period: if employee is late but within grace period, 
+        // treat as if they came in at scheduled time
+        $workStartTime = $schedStart; // Default to scheduled start time
+        
+        if ($actualTimeIn->gt($schedStart)) {
+            $lateMinutes = $schedStart->diffInMinutes($actualTimeIn);
+            if ($lateMinutes > $lateGracePeriodMinutes) {
+                // Beyond grace period, use actual time in
+                $workStartTime = $actualTimeIn;
+            }
+            // If within grace period, keep workStartTime as scheduled start time
+        } else {
+            // Employee came in early or on time, use scheduled start time
+            $workStartTime = $schedStart;
+        }
 
         // Work end time is the actual time out
         $workEndTime = $actualTimeOut;
@@ -245,15 +258,17 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         $totalWorkingMinutes = max(0, $rawWorkingMinutes - $breakMinutesToDeduct);
         $totalHours = $totalWorkingMinutes / 60;
 
-        // STEP 5: Calculate late hours (with grace period)
+        // STEP 5: Calculate late hours (consistent with grace period logic)
         $lateMinutes = 0;
         if ($actualTimeIn->gt($schedStart)) {
             $actualLateMinutes = $schedStart->diffInMinutes($actualTimeIn);
 
-            // Apply grace period
+            // Only count late hours if beyond grace period (same logic as work start time)
             if ($actualLateMinutes > $lateGracePeriodMinutes) {
-                $lateMinutes = $actualLateMinutes;
+                // Only charge for the time beyond the grace period
+                $lateMinutes = $actualLateMinutes - $lateGracePeriodMinutes;
             }
+            // If within grace period, lateMinutes stays 0
         }
 
         // STEP 6: Calculate standard work hours (scheduled hours minus break)
@@ -277,15 +292,8 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         $regularHours = $totalHours - $overtimeHours;
         $regularHours = min($regularHours, $standardHours);
 
-        // STEP 9: Calculate undertime (with grace period)
+        // STEP 9: Undertime is not calculated as we only count actual work time
         $undertimeHours = 0;
-        if ($totalHours < $standardHours) {
-            $actualUndertimeMinutes = ($standardHours - $totalHours) * 60;
-
-            if ($actualUndertimeMinutes > $undertimeGracePeriodMinutes) {
-                $undertimeHours = ($actualUndertimeMinutes - $undertimeGracePeriodMinutes) / 60;
-            }
-        }
 
         $lateHours = $lateMinutes / 60;
 

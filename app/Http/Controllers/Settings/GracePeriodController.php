@@ -22,7 +22,6 @@ class GracePeriodController extends Controller
 
         return response()->json([
             'late_grace_minutes' => $gracePeriodSettings->late_grace_minutes,
-            'undertime_grace_minutes' => $gracePeriodSettings->undertime_grace_minutes,
             'overtime_threshold_minutes' => $gracePeriodSettings->overtime_threshold_minutes,
         ]);
     }
@@ -36,14 +35,13 @@ class GracePeriodController extends Controller
 
         $request->validate([
             'late_grace_minutes' => 'required|integer|min:0|max:120',
-            'undertime_grace_minutes' => 'required|integer|min:0|max:120',
-            'overtime_threshold_minutes' => 'required|integer|min:0|max:120',
+            'overtime_threshold_minutes' => 'required|integer|min:0|max:600',
         ]);
 
         // Update grace period settings in database
         $gracePeriodSetting = GracePeriodSetting::updateCurrent([
             'late_grace_minutes' => $request->late_grace_minutes,
-            'undertime_grace_minutes' => $request->undertime_grace_minutes,
+            'undertime_grace_minutes' => 0, // Always set to 0 since we don't use it
             'overtime_threshold_minutes' => $request->overtime_threshold_minutes,
         ]);
 
@@ -51,7 +49,6 @@ class GracePeriodController extends Controller
             'message' => 'Grace period settings updated successfully.',
             'data' => [
                 'late_grace_minutes' => $gracePeriodSetting->late_grace_minutes,
-                'undertime_grace_minutes' => $gracePeriodSetting->undertime_grace_minutes,
                 'overtime_threshold_minutes' => $gracePeriodSetting->overtime_threshold_minutes,
             ]
         ]);
