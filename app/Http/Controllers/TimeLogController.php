@@ -255,6 +255,9 @@ class TimeLogController extends Controller
         // Parse DTR data
         $dtrData = json_decode($dtrBatch->dtr_data, true) ?? [];
 
+        // Get employee with day schedule for dynamic rest day determination
+        $employee = Employee::with('daySchedule')->find($dtrBatch->employee_id);
+
         // Get individual time logs for the period (if any exist)
         $timeLogs = TimeLog::where('employee_id', $dtrBatch->employee_id)
             ->whereBetween('log_date', [$dtrBatch->period_start, $dtrBatch->period_end])
@@ -268,10 +271,14 @@ class TimeLogController extends Controller
 
         while ($current->lte($end)) {
             $dateStr = $current->format('Y-m-d');
+
+            // Use employee's day schedule to determine rest day instead of hardcoded weekend
+            $isRestDay = $employee && $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($current) : $current->isWeekend();
+
             $dayData = $dtrData[$dateStr] ?? [
                 'date' => $dateStr,
                 'day_name' => $current->format('l'),
-                'is_weekend' => $current->isWeekend(),
+                'is_weekend' => $isRestDay, // Keep field name for compatibility but use dynamic logic
                 'time_in' => null,
                 'time_out' => null,
                 'break_start' => null,
@@ -792,13 +799,14 @@ class TimeLogController extends Controller
             $timeLog = $timeLogs->get($dateStr);
             $holiday = $holidays->get($dateStr);
 
-            $isWeekend = $currentDate->isWeekend();
+            // Use employee's day schedule to determine rest day instead of hardcoded weekend
+            $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($currentDate) : $currentDate->isWeekend();
 
             $dayData = [
                 'date' => $currentDate->copy(),
                 'day' => $currentDate->format('d'),
                 'day_name' => $currentDate->format('l'),
-                'is_weekend' => $isWeekend,
+                'is_weekend' => $isRestDay, // Keep field name for compatibility but use dynamic logic
                 'is_holiday' => $holiday ? $holiday->name : null,
                 'time_log' => $timeLog,
                 'time_in' => $timeLog ? $timeLog->time_in : null,
@@ -863,7 +871,8 @@ class TimeLogController extends Controller
             $timeLog = $timeLogs->get($dateStr);
             $holiday = $holidays->get($dateStr);
 
-            $isWeekend = $currentDate->isWeekend();
+            // Use employee's day schedule to determine rest day instead of hardcoded weekend
+            $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($currentDate) : $currentDate->isWeekend();
 
             // Ensure time values are properly formatted
             $timeIn = null;
@@ -914,7 +923,7 @@ class TimeLogController extends Controller
                 'date' => $currentDate->copy(),
                 'day' => $currentDate->format('d'),
                 'day_name' => $currentDate->format('l'),
-                'is_weekend' => $isWeekend,
+                'is_weekend' => $isRestDay, // Keep field name for compatibility but use dynamic logic
                 'is_holiday' => $holiday ? $holiday->name : null,
                 'time_log' => $timeLog,
                 'time_in' => $timeIn,
@@ -1206,15 +1215,20 @@ class TimeLogController extends Controller
                 // If all time fields are blank, reset to default based on day type
                 if (!$timeIn && !$timeOut && !$breakIn && !$breakOut) {
                     $date = Carbon::parse($logData['log_date']);
-                    $isWeekend = $date->isWeekend();
+
+                    // Get employee for dynamic rest day determination
+                    $employee = Employee::with('daySchedule')->findOrFail($validated['employee_id']);
+
+                    // Use employee's day schedule to determine if it's a rest day
+                    $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($date) : $date->isWeekend();
                     $isHoliday = $logData['is_holiday'] ?? false;
 
                     // Reset to smart default based on actual day type
-                    if (!$isWeekend && !$isHoliday) {
+                    if (!$isRestDay && !$isHoliday) {
                         $logType = 'regular_workday'; // Regular Day
-                    } elseif ($isWeekend && !$isHoliday) {
+                    } elseif ($isRestDay && !$isHoliday) {
                         $logType = 'rest_day'; // Rest Day
-                    } elseif (!$isWeekend && $isHoliday) {
+                    } elseif (!$isRestDay && $isHoliday) {
                         // Query actual holiday type from database
                         $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
                             ->where('is_active', true)
@@ -1225,8 +1239,8 @@ class TimeLogController extends Controller
                         } else {
                             $logType = 'regular_holiday'; // RE Holiday (default)
                         }
-                    } elseif ($isWeekend && $isHoliday) {
-                        // Weekend + Holiday combination - query holiday type
+                    } elseif ($isRestDay && $isHoliday) {
+                        // Rest Day + Holiday combination - query holiday type
                         $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
                             ->where('is_active', true)
                             ->first();
@@ -1421,13 +1435,14 @@ class TimeLogController extends Controller
             $timeLog = $timeLogs->get($dateStr);
             $holiday = $holidays->get($dateStr);
 
-            $isWeekend = $currentDate->isWeekend();
+            // Use employee's day schedule to determine rest day instead of hardcoded weekend
+            $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($currentDate) : $currentDate->isWeekend();
 
             $dayData = [
                 'date' => $currentDate->copy(),
                 'day' => $currentDate->format('d'),
                 'day_name' => $currentDate->format('l'),
-                'is_weekend' => $isWeekend,
+                'is_weekend' => $isRestDay, // Keep field name for compatibility but use dynamic logic
                 'is_holiday' => $holiday ? $holiday->name : null,
                 'time_log' => $timeLog,
                 'time_in' => $timeLog ? $timeLog->time_in : null,

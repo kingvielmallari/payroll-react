@@ -89,4 +89,70 @@ class DaySchedule extends Model
             $this->sunday,
         ])->filter()->count();
     }
+
+    /**
+     * Check if a given day is a working day for this schedule
+     * @param string $dayName (monday, tuesday, wednesday, etc.) or Carbon instance
+     * @return bool
+     */
+    public function isWorkingDay($day)
+    {
+        if ($day instanceof \Carbon\Carbon) {
+            $dayName = strtolower($day->format('l')); // 'monday', 'tuesday', etc.
+        } else {
+            $dayName = strtolower($day);
+        }
+
+        return match ($dayName) {
+            'monday' => (bool) $this->monday,
+            'tuesday' => (bool) $this->tuesday,
+            'wednesday' => (bool) $this->wednesday,
+            'thursday' => (bool) $this->thursday,
+            'friday' => (bool) $this->friday,
+            'saturday' => (bool) $this->saturday,
+            'sunday' => (bool) $this->sunday,
+            default => false,
+        };
+    }
+
+    /**
+     * Check if a given day is a rest day for this schedule
+     * @param string $dayName or Carbon instance
+     * @return bool
+     */
+    public function isRestDay($day)
+    {
+        return !$this->isWorkingDay($day);
+    }
+
+    /**
+     * Get all working days as array of day names
+     * @return array
+     */
+    public function getWorkingDays()
+    {
+        $workingDays = [];
+
+        if ($this->monday) $workingDays[] = 'monday';
+        if ($this->tuesday) $workingDays[] = 'tuesday';
+        if ($this->wednesday) $workingDays[] = 'wednesday';
+        if ($this->thursday) $workingDays[] = 'thursday';
+        if ($this->friday) $workingDays[] = 'friday';
+        if ($this->saturday) $workingDays[] = 'saturday';
+        if ($this->sunday) $workingDays[] = 'sunday';
+
+        return $workingDays;
+    }
+
+    /**
+     * Get all rest days as array of day names
+     * @return array
+     */
+    public function getRestDays()
+    {
+        $allDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        $workingDays = $this->getWorkingDays();
+
+        return array_diff($allDays, $workingDays);
+    }
 }

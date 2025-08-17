@@ -78,24 +78,38 @@
                         <div class="mb-6 p-4 bg-blue-50 rounded-lg">
                             <h4 class="text-md font-medium text-blue-900 mb-3">Quick Fill Actions</h4>
                             <div class="flex flex-wrap gap-2">
-                                <button type="button" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600" onclick="fillRegularHours('08:00', '17:00')">
-                                    Fill Time & Break Fields (8:00 AM - 5:00 PM)
+                                @php
+                                    $scheduleStart = '08:00'; // Default fallback
+                                    $scheduleEnd = '17:00';   // Default fallback
+                                    $scheduleBreakStart = '12:00'; // Default break start
+                                    $scheduleBreakEnd = '13:00';   // Default break end
+                                    
+                                    if ($selectedEmployee->timeSchedule) {
+                                        $scheduleStart = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->time_in)->format('H:i');
+                                        $scheduleEnd = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->time_out)->format('H:i');
+                                        
+                                        // Use break times from schedule if available
+                                        if ($selectedEmployee->timeSchedule->break_start) {
+                                            $scheduleBreakStart = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_start)->format('H:i');
+                                        }
+                                        if ($selectedEmployee->timeSchedule->break_end) {
+                                            $scheduleBreakEnd = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_end)->format('H:i');
+                                        }
+                                    }
+                                    
+                                    $displayStart = \Carbon\Carbon::parse($scheduleStart)->format('g:i A');
+                                    $displayEnd = \Carbon\Carbon::parse($scheduleEnd)->format('g:i A');
+                                @endphp
+                                <button type="button" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600" onclick="fillRegularHours('{{ $scheduleStart }}', '{{ $scheduleEnd }}', '{{ $scheduleBreakStart }}', '{{ $scheduleBreakEnd }}')">
+                                    Fill Time & Break Fields ({{ $displayStart }} - {{ $displayEnd }})
                                 </button>
-                                {{-- <button type="button" class="px-3 py-1 bg-purple-500 text-white text-sm rounded hover:bg-purple-600" onclick="fillRegularHoursAll('08:00', '17:00')">
-                                    Fill All Fields (Overwrite)
-                                </button> --}}
-                                {{-- <button type="button" class="px-3 py-1 bg-orange-500 text-white text-sm rounded hover:bg-orange-600" onclick="clearAndSetRegular()">
-                                    Clear & Set Regular
-                                </button> --}}
                                 <button type="button" class="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600" onclick="resetAll()">
                                     Reset All
                                 </button>
                             </div>
                             <p class="text-xs text-blue-700 mt-2">
-                                <strong>Fill Empty Fields:</strong> Only fills blank time entries, preserves existing data.<br>
-                                <strong>Fill All Fields:</strong> Overwrites all time entries with standard schedule.<br>
-                                <strong>Clear & Set Regular:</strong> Clears only time logs (time in/out, break in/out), preserves types.<br>
-                                <strong>Reset All:</strong> Clears all fields and resets types to default based on day.
+                                <strong>Fill Time & Break:</strong> Fills empty fields with employee's scheduled work hours and break times.<br>
+                                <strong>Reset All:</strong> Clears all fields and resets types to default based on employee's day schedule.
                             </p>
                         </div>
 
@@ -174,23 +188,23 @@
                                                             }
                                                             // Priority 2: Smart default selection logic (only if no existing log_type)
                                                             elseif (!$day['log_type']) {
-                                                                if (!$day['is_weekend'] && !$isHoliday && $label === 'Regular Day') {
-                                                                    // 1. Regular Day (default for weekdays without holidays)
+                                                                if (!$day['is_weekend'] && !$isHoliday && $value === 'regular_workday') {
+                                                                    // 1. Regular Workday (default for work days)
                                                                     $selected = 'selected';
-                                                                } elseif ($day['is_weekend'] && !$isHoliday && $label === 'Rest Day') {
-                                                                    // 2. Rest Day (default for weekends without holidays) 
+                                                                } elseif ($day['is_weekend'] && !$isHoliday && $value === 'rest_day') {
+                                                                    // 2. Rest Day (default for rest days) 
                                                                     $selected = 'selected';
-                                                                } elseif ($isHoliday && $holidayType === 'regular' && !$day['is_weekend'] && $label === 'RE Holiday') {
-                                                                    // 3. RE Holiday (default for active regular holidays on weekdays)
+                                                                } elseif ($isHoliday && $holidayType === 'regular' && !$day['is_weekend'] && $value === 'regular_holiday') {
+                                                                    // 3. Regular Holiday (default for active regular holidays on work days)
                                                                     $selected = 'selected';
-                                                                } elseif ($isHoliday && $holidayType === 'special' && !$day['is_weekend'] && $label === 'SP Holiday') {
-                                                                    // 4. SP Holiday (default for active special holidays on weekdays)
+                                                                } elseif ($isHoliday && $holidayType === 'special' && !$day['is_weekend'] && $value === 'special_holiday') {
+                                                                    // 4. Special Holiday (default for active special holidays on work days)
                                                                     $selected = 'selected';
-                                                                } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'regular' && $label === 'Rest + RE Holiday') {
-                                                                    // Rest Day + RE Holiday (weekend + regular holiday)
+                                                                } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'regular' && $value === 'rest_day_regular_holiday') {
+                                                                    // Rest Day + Regular Holiday (rest day + regular holiday)
                                                                     $selected = 'selected';
-                                                                } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'special' && $label === 'Rest + SP Holiday') {
-                                                                    // Rest Day + SE Holiday (weekend + special holiday)
+                                                                } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'special' && $value === 'rest_day_special_holiday') {
+                                                                    // Rest Day + Special Holiday (rest day + special holiday)
                                                                     $selected = 'selected';
                                                                 }
                                                             }
@@ -273,7 +287,7 @@
     </div>
 
     <script>
-        function fillRegularHours(timeIn, timeOut) {
+        function fillRegularHours(timeIn, timeOut, breakIn, breakOut) {
             const rows = document.querySelectorAll('tbody tr');
             rows.forEach((row, index) => {
                 const isWeekend = row.classList.contains('bg-gray-100');
@@ -286,10 +300,10 @@
                     const breakOutInput = row.querySelector(`input[name="time_logs[${index}][break_out]"]`);
                     
                     // Only fill empty fields to avoid overwriting existing data
-                    if (timeInInput && !timeInInput.value) timeInInput.value = timeIn;       // 8:00 (8:00 AM)
-                    if (timeOutInput && !timeOutInput.value) timeOutInput.value = timeOut;    // 17:00 (5:00 PM)
-                    if (breakInInput && !breakInInput.value) breakInInput.value = '12:00';    // 12:00 PM
-                    if (breakOutInput && !breakOutInput.value) breakOutInput.value = '13:00';  // 1:00 PM
+                    if (timeInInput && !timeInInput.value) timeInInput.value = timeIn;
+                    if (timeOutInput && !timeOutInput.value) timeOutInput.value = timeOut;
+                    if (breakInInput && !breakInInput.value) breakInInput.value = breakIn;
+                    if (breakOutInput && !breakOutInput.value) breakOutInput.value = breakOut;
                 }
             });
         }
@@ -339,8 +353,8 @@
                     const isWeekend = row.classList.contains('bg-gray-100');
                     const isHoliday = row.classList.contains('bg-yellow-50');
                     
-                    // Determine appropriate default based on day type
-                    let defaultType = 'regular_workday'; // Default for weekdays
+                    // Determine appropriate default based on day type (using dynamic rest day logic)
+                    let defaultType = 'regular_workday'; // Default for work days
                     
                     if (isWeekend && !isHoliday) {
                         defaultType = 'rest_day';
@@ -371,17 +385,30 @@
         }
 
         function setRegularHours(rowIndex) {
-            // Set regular working hours for a specific row
+            @php
+                // Pass the employee schedule to JavaScript
+                $jsScheduleStart = $selectedEmployee->timeSchedule ? $selectedEmployee->timeSchedule->time_in : '08:00';
+                $jsScheduleEnd = $selectedEmployee->timeSchedule ? $selectedEmployee->timeSchedule->time_out : '17:00';
+                $jsBreakStart = ($selectedEmployee->timeSchedule && $selectedEmployee->timeSchedule->break_start) ? $selectedEmployee->timeSchedule->break_start : '12:00';
+                $jsBreakEnd = ($selectedEmployee->timeSchedule && $selectedEmployee->timeSchedule->break_end) ? $selectedEmployee->timeSchedule->break_end : '13:00';
+                
+                $jsScheduleStart = \Carbon\Carbon::parse($jsScheduleStart)->format('H:i');
+                $jsScheduleEnd = \Carbon\Carbon::parse($jsScheduleEnd)->format('H:i');
+                $jsBreakStart = \Carbon\Carbon::parse($jsBreakStart)->format('H:i');
+                $jsBreakEnd = \Carbon\Carbon::parse($jsBreakEnd)->format('H:i');
+            @endphp
+            
+            // Set employee's scheduled working hours for a specific row
             const timeInInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_in]"]`);
             const timeOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_out]"]`);
             const breakInInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_in]"]`);
             const breakOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_out]"]`);
             
-            // Only set times, do NOT change the day type
-            if (timeInInput) timeInInput.value = '08:00';       // 8:00 AM
-            if (timeOutInput) timeOutInput.value = '17:00';     // 5:00 PM  
-            if (breakInInput) breakInInput.value = '12:00';     // 12:00 PM
-            if (breakOutInput) breakOutInput.value = '13:00';   // 1:00 PM
+            // Use employee's actual schedule times
+            if (timeInInput) timeInInput.value = '{{ $jsScheduleStart }}';
+            if (timeOutInput) timeOutInput.value = '{{ $jsScheduleEnd }}';
+            if (breakInInput) breakInInput.value = '{{ $jsBreakStart }}';
+            if (breakOutInput) breakOutInput.value = '{{ $jsBreakEnd }}';
             
             // Do NOT change the log type - preserve the current selection
             // This allows users to set regular times on Rest Days, Holidays, etc. without changing the type

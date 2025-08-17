@@ -11,6 +11,10 @@ export default {
 
     theme: {
         extend: {
+             maxWidth: {
+                '8xl': '85rem', // 1408px (example, you can set your own value)
+                '9xl': '96rem', // optional future expansion
+            },
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
             },

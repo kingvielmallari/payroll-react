@@ -27,7 +27,7 @@
     </x-slot>
 
     <div class="py-6">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+        <div class="max-w-8xl mx-auto sm:px-6 lg:px-8 space-y-6">
                
             <!-- Payroll Summary -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
@@ -78,13 +78,14 @@
                         </div>
                         <div class="bg-green-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
                             @php
-                                // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances
+                                // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances + Bonuses
                                 $totalGrossPay = 0;
                                 foreach($payroll->payrollDetails as $detail) {
                                     $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
                                     $holidayPay = $detail->holiday_pay ?? 0;
                                     $overtimePay = $detail->overtime_pay ?? 0;
                                     $allowances = $detail->allowances ?? 0;
+                                    $bonuses = $detail->bonuses ?? 0;
                                     
                                     // Calculate rest pay for this employee
                                     $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
@@ -105,7 +106,7 @@
                                         }
                                     }
                                     
-                                    $detailGross = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances;
+                                    $detailGross = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses;
                                     $totalGrossPay += $detailGross;
                                 }
                             @endphp
@@ -400,6 +401,9 @@
                                         Allowances
                                     </th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Bonuses
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Gross Pay
                                     </th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -657,7 +661,11 @@
                                             @else
                                                 <div class="text-gray-400">₱0.00</div>
                                             @endif
-                                            
+                                        </div>
+                                    </td>
+                                    <!-- Bonuses Column -->
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
+                                        <div class="space-y-1">
                                             @if($detail->bonuses > 0)
                                                 <!-- Show Calculated Bonus Breakdown -->
                                                 @if($detail->earnings_breakdown)
@@ -674,19 +682,42 @@
                                                         @endforeach
                                                     @endif
                                                 @endif
-                                                <div class="text-xs border-t pt-1">
-                                                    <span class="text-blue-600 font-bold">₱{{ number_format($detail->bonuses, 2) }}</span>
+                                                
+                                                <div class="font-bold text-blue-600">
+                                                    ₱{{ number_format($detail->bonuses, 2) }}
                                                 </div>
+                                                @if(isset($isDynamic) && $isDynamic)
+                                                    <div class="text-xs text-blue-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                                            </svg>
+                                                            Current settings
+                                                        </span>
+                                                    </div>
+                                                @else
+                                                    <div class="text-xs text-gray-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                                            </svg>
+                                                            Locked snapshot
+                                                        </span>
+                                                    </div>
+                                                @endif
+                                            @else
+                                                <div class="text-gray-400">₱0.00</div>
                                             @endif
                                         </div>
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php
-                                            // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances
+                                            // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances + Bonuses
                                             $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
                                             $holidayPay = $detail->holiday_pay ?? 0;
                                             $overtimePay = $detail->overtime_pay ?? 0;
                                             $allowances = $detail->allowances ?? 0;
+                                            $bonuses = $detail->bonuses ?? 0;
                                             
                                             // Calculate rest pay for gross pay calculation
                                             $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
@@ -707,7 +738,7 @@
                                                 }
                                             }
                                             
-                                            $calculatedGrossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances;
+                                            $calculatedGrossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses;
                                         @endphp
                                         
                                         <!-- Show Gross Pay Breakdown -->
@@ -742,6 +773,12 @@
                                                         <div class="text-xs text-gray-500">
                                                             <span>Allow.:</span>
                                                             <span>₱{{ number_format($allowances, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                    @if($bonuses > 0)
+                                                        <div class="text-xs text-gray-500">
+                                                            <span>Bonus:</span>
+                                                            <span>₱{{ number_format($bonuses, 2) }}</span>
                                                         </div>
                                                     @endif
                                              
@@ -904,6 +941,7 @@
                                             $holidayPay = $detail->holiday_pay ?? 0;
                                             $overtimePay = $detail->overtime_pay ?? 0;
                                             $allowances = $detail->allowances ?? 0;
+                                            $bonuses = $detail->bonuses ?? 0;
                                             
                                             // Calculate rest pay for this employee
                                             $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
@@ -924,7 +962,7 @@
                                                 }
                                             }
                                             
-                                            $calculatedGrossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances;
+                                            $calculatedGrossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses;
                                             
                                             // For processing/approved payrolls with snapshots, use the snapshot deduction total
                                             if (!isset($isDynamic) || !$isDynamic) {
