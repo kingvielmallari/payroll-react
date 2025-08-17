@@ -448,19 +448,65 @@
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
                                             $holidayPay = $payBreakdown['holiday_pay'];
-                                            // Calculate total holiday hours from all holiday types
+                                            // Calculate holiday breakdown by type
                                             $holidayTypes = ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'];
+                                            $holidayBreakdown = [];
                                             $totalHolidayHours = 0;
                                             $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            
                                             foreach ($holidayTypes as $type) {
                                                 if (isset($employeeBreakdown[$type])) {
-                                                    $totalHolidayHours += $employeeBreakdown[$type]['regular_hours'] + $employeeBreakdown[$type]['overtime_hours'];
+                                                    $breakdown = $employeeBreakdown[$type];
+                                                    $rateConfig = $breakdown['rate_config'];
+                                                    $displayName = $rateConfig ? $rateConfig->display_name : 'Holiday';
+                                                    $totalHours = $breakdown['regular_hours'] + $breakdown['overtime_hours'];
+                                                    
+                                                    if ($totalHours > 0) {
+                                                        $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                        $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 2.0;
+                                                        $regularAmount = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                                        
+                                                        if (isset($holidayBreakdown[$displayName])) {
+                                                            $holidayBreakdown[$displayName]['hours'] += $totalHours;
+                                                            $holidayBreakdown[$displayName]['regular_hours'] += $breakdown['regular_hours'];
+                                                            $holidayBreakdown[$displayName]['amount'] += $regularAmount;
+                                                        } else {
+                                                            $holidayBreakdown[$displayName] = [
+                                                                'hours' => $totalHours,
+                                                                'regular_hours' => $breakdown['regular_hours'],
+                                                                'amount' => $regularAmount,
+                                                                'rate' => $hourlyRate * $regularMultiplier
+                                                            ];
+                                                        }
+                                                        $totalHolidayHours += $totalHours;
+                                                    }
                                                 }
                                             }
                                         @endphp
-                                        <div class="text-xs text-gray-500">{{ number_format($totalHolidayHours, 1) }} hrs</div>
-                                        <div class="font-bold text-purple-600">₱{{ number_format($holidayPay, 2) }}</div>
                                         
+                                        <div>
+                                            @if(!empty($holidayBreakdown))
+                                                <!-- Show individual holiday type breakdowns -->
+                                                @foreach($holidayBreakdown as $type => $data)
+                                                    <div class="text-xs text-gray-500 mb-1">
+                                                        <div class="flex justify-between">
+                                                            <span>{{ $type }}:</span>
+                                                            <span>{{ number_format($data['regular_hours'], 1) }}h</span>
+                                                        </div>
+                                                        <div class="text-xs text-gray-600">
+                                                            ₱{{ number_format($data['rate'], 2) }}/hr = ₱{{ number_format($data['amount'], 2) }}
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                                
+                                                <div class="text-xs border-t pt-1">
+                                                    <div class="text-gray-500">Total: {{ number_format($totalHolidayHours, 1) }} hrs</div>
+                                                    <div class="font-bold text-purple-600">₱{{ number_format($holidayPay, 2) }}</div>
+                                                </div>
+                                            @else
+                                                <div class="text-gray-400">₱0.00</div>
+                                            @endif
+                                        </div>
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
@@ -497,6 +543,7 @@
                                             $hourlyRate = $detail->employee->hourly_rate ?? 0;
                                             $totalOvertimePay = 0;
                                             $totalOvertimeHours = 0;
+                                            $overtimeBreakdown = [];
                                             
                                             foreach ($employeeBreakdown as $logType => $breakdown) {
                                                 $rateConfig = $breakdown['rate_config'];
@@ -505,12 +552,42 @@
                                                     $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
                                                     $totalOvertimePay += $overtimePay;
                                                     $totalOvertimeHours += $breakdown['overtime_hours'];
+                                                    
+                                                    // Store breakdown for display
+                                                    $displayName = $rateConfig->display_name ?? 'Regular Day';
+                                                    $overtimeBreakdown[] = [
+                                                        'name' => $displayName . ' OT',
+                                                        'hours' => $breakdown['overtime_hours'],
+                                                        'amount' => $overtimePay,
+                                                        'rate' => $hourlyRate * $overtimeMultiplier
+                                                    ];
                                                 }
                                             }
                                         @endphp
-                                          <div class="text-xs text-gray-500">{{ number_format($totalOvertimeHours, 1) }} hrs</div>
-                                        <div class="font-bold text-orange-600">₱{{ number_format($totalOvertimePay, 2) }}</div>
-                                      
+                                        
+                                        <div>
+                                            <!-- Show individual overtime breakdowns -->
+                                            @foreach($overtimeBreakdown as $ot)
+                                                <div class="text-xs text-gray-500 mb-1">
+                                                    <div class="flex justify-between">
+                                                        <span>{{ $ot['name'] }}:</span>
+                                                        <span>{{ number_format($ot['hours'], 1) }}h</span>
+                                                    </div>
+                                                    <div class="text-xs text-gray-600">
+                                                        ₱{{ number_format($ot['rate'], 2) }}/hr = ₱{{ number_format($ot['amount'], 2) }}
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                            
+                                            @if($totalOvertimeHours > 0)
+                                                <div class="text-xs border-t pt-1">
+                                                    <div class="text-gray-500">Total: {{ number_format($totalOvertimeHours, 1) }} hrs</div>
+                                                    <div class="font-bold text-orange-600">₱{{ number_format($totalOvertimePay, 2) }}</div>
+                                                </div>
+                                            @else
+                                                <div class="text-gray-400">₱0.00</div>
+                                            @endif
+                                        </div>
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
@@ -582,8 +659,23 @@
                                             @endif
                                             
                                             @if($detail->bonuses > 0)
+                                                <!-- Show Calculated Bonus Breakdown -->
+                                                @if($detail->earnings_breakdown)
+                                                    @php
+                                                        $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
+                                                        $bonusDetails = $earningsBreakdown['bonuses'] ?? [];
+                                                    @endphp
+                                                    @if(!empty($bonusDetails))
+                                                        @foreach($bonusDetails as $code => $bonusData)
+                                                            <div class="text-xs text-gray-500">
+                                                                <span>{{ $bonusData['name'] ?? $code }}:</span>
+                                                                <span>₱{{ number_format($bonusData['amount'] ?? $bonusData, 2) }}</span>
+                                                            </div>
+                                                        @endforeach
+                                                    @endif
+                                                @endif
                                                 <div class="text-xs border-t pt-1">
-                                                    <span class="text-blue-600">Bonus: ₱{{ number_format($detail->bonuses, 2) }}</span>
+                                                    <span class="text-blue-600 font-bold">₱{{ number_format($detail->bonuses, 2) }}</span>
                                                 </div>
                                             @endif
                                         </div>
@@ -932,12 +1024,12 @@
                         <div class="flex space-x-2">
                             @can('create time logs')
                                 @if($payroll->payrollDetails->isNotEmpty() && $payroll->status === 'draft')
-                                    <a href="{{ route('time-logs.create-bulk-employee', [
+                                    <a href="{{ route('time-logs.create-bulk-employee', array_merge([
                                         'employee_id' => $payroll->payrollDetails->first()->employee_id,
                                         'period_start' => $payroll->period_start->format('Y-m-d'),
                                         'period_end' => $payroll->period_end->format('Y-m-d'),
                                         'payroll_id' => $payroll->id
-                                    ]) }}" 
+                                    ], isset($schedule) ? ['schedule' => $schedule] : [])) }}" 
                                        class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded text-sm flex items-center">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -1019,13 +1111,30 @@
                                     @endphp
                                     @foreach($periodDates as $date)
                                     @php 
-                                        $timeLog = $dtrData[$detail->employee_id][$date] ?? null;
+                                        $timeLogData = $dtrData[$detail->employee_id][$date] ?? null;
+                                        
+                                        // Ensure we have a proper object
+                                        if ($timeLogData) {
+                                            if (is_array($timeLogData)) {
+                                                // Convert array to object
+                                                $timeLog = (object) $timeLogData;
+                                            } elseif (is_object($timeLogData)) {
+                                                $timeLog = $timeLogData;
+                                            } else {
+                                                $timeLog = null;
+                                            }
+                                        } else {
+                                            $timeLog = null;
+                                        }
                                         
                                         // Exclude incomplete records from hour calculation
-                                        $isIncompleteRecord = $timeLog && (isset($timeLog['remarks']) && $timeLog['remarks'] === 'Incomplete Time Record') || (!isset($timeLog['time_in']) || !$timeLog['time_in'] || !isset($timeLog['time_out']) || !$timeLog['time_out']);
+                                        $isIncompleteRecord = $timeLog && (
+                                            (isset($timeLog->remarks) && $timeLog->remarks === 'Incomplete Time Record') || 
+                                            (!isset($timeLog->time_in) || !isset($timeLog->time_out) || !$timeLog->time_in || !$timeLog->time_out)
+                                        );
                                         
-                                        $regularHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog['regular_hours'] ?? 0) : 0;
-                                        $overtimeHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog['overtime_hours'] ?? 0) : 0;
+                                        $regularHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->regular_hours ?? 0) : 0;
+                                        $overtimeHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->overtime_hours ?? 0) : 0;
                                         $totalEmployeeHours += $regularHours;
                                         $totalEmployeeOvertimeHours += $overtimeHours;
                                         $isWeekend = \Carbon\Carbon::parse($date)->isWeekend();
@@ -1034,38 +1143,44 @@
                                         $dayType = 'Regular Day';
                                         $dayTypeColor = 'bg-green-100 text-green-800';
                                         
-                                        if ($timeLog && isset($timeLog['log_type']) && $timeLog['log_type']) {
-                                            // Since we can't call getRateConfiguration() on array, use simple mapping
-                                            $logType = $timeLog['log_type'];
-                                            switch ($logType) {
-                                                case 'regular_workday':
-                                                    $dayType = 'Regular Day';
-                                                    $dayTypeColor = 'bg-green-100 text-green-800';
-                                                    break;
-                                                case 'rest_day':
-                                                    $dayType = 'Rest Day';
-                                                    $dayTypeColor = 'bg-blue-100 text-blue-800';
-                                                    break;
-                                                case 'regular_holiday':
-                                                    $dayType = 'RE Holiday';
-                                                    $dayTypeColor = 'bg-red-100 text-red-800';
-                                                    break;
-                                                case 'special_holiday':
-                                                    $dayType = 'SP Holiday';
-                                                    $dayTypeColor = 'bg-red-100 text-red-800';
-                                                    break;
-                                                case 'rest_day_regular_holiday':
-                                                    $dayType = 'Rest + RE Holiday';
-                                                    $dayTypeColor = 'bg-red-100 text-red-800';
-                                                    break;
-                                                case 'rest_day_special_holiday':
-                                                    $dayType = 'Rest + SP Holiday';
-                                                    $dayTypeColor = 'bg-red-100 text-red-800';
-                                                    break;
-                                                default:
-                                                    $dayType = 'Regular Day';
-                                                    $dayTypeColor = 'bg-green-100 text-green-800';
-                                                    break;
+                                        if ($timeLog) {
+                                            // First check if we have pre-loaded rate config data
+                                            if (isset($timeLog->rate_config_display_name)) {
+                                                $dayType = $timeLog->rate_config_display_name;
+                                            } elseif (((is_object($timeLog) && property_exists($timeLog, 'log_type')) || (is_array($timeLog) && isset($timeLog['log_type']))) && ($timeLog->log_type ?? $timeLog['log_type'] ?? null)) {
+                                                $logType = is_array($timeLog) ? ($timeLog['log_type'] ?? null) : ($timeLog->log_type ?? null);
+                                                
+                                                // Only call getRateConfiguration if this is a proper TimeLog model
+                                                if (is_object($timeLog) && method_exists($timeLog, 'getRateConfiguration')) {
+                                                    $rateConfig = $timeLog->getRateConfiguration();
+                                                    if ($rateConfig) {
+                                                        $dayType = $rateConfig->display_name;
+                                                    }
+                                                } else {
+                                                    // Fallback for converted objects or arrays without model methods
+                                                    if (str_contains($logType, 'special_holiday')) {
+                                                        $dayType = 'SPE Holiday';
+                                                    } elseif (str_contains($logType, 'regular_holiday')) {
+                                                        $dayType = 'REG Holiday';
+                                                    } elseif (str_contains($logType, 'rest_day_regular_holiday')) {
+                                                        $dayType = 'Rest + REG Holiday';
+                                                    } elseif (str_contains($logType, 'rest_day_special_holiday')) {
+                                                        $dayType = 'Rest + SPE Holiday';
+                                                    } elseif (str_contains($logType, 'rest_day')) {
+                                                        $dayType = 'Rest Day';
+                                                    } else {
+                                                        $dayType = 'Regular Day';
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Set color based on type
+                                            if (str_contains($dayType, 'Holiday')) {
+                                                $dayTypeColor = 'bg-red-100 text-red-800';
+                                            } elseif (str_contains($dayType, 'Rest')) {
+                                                $dayTypeColor = 'bg-blue-100 text-blue-800';
+                                            } else {
+                                                $dayTypeColor = 'bg-green-100 text-green-800';
                                             }
                                         } elseif ($isWeekend) {
                                             $dayType = 'Rest Day';
@@ -1081,7 +1196,7 @@
                                         </div>
                                         
                                         @if($timeLog)
-                                            @if((isset($timeLog['remarks']) && $timeLog['remarks'] === 'Incomplete Time Record') || (!isset($timeLog['time_in']) || !$timeLog['time_in'] || !isset($timeLog['time_out']) || !$timeLog['time_out']))
+                                            @if((isset($timeLog->remarks) && $timeLog->remarks === 'Incomplete Time Record') || (!isset($timeLog->time_in) || !isset($timeLog->time_out) || !$timeLog->time_in || !$timeLog->time_out))
                                                 {{-- Display INC for incomplete records --}}
                                                 <div class="text-red-600 font-bold">
                                                     INC
@@ -1089,9 +1204,9 @@
                                             @else
                                                 <div class="space-y-1">
                                                     {{-- Main work schedule with regular hours --}}
-                                                    @if((isset($timeLog['time_in']) && $timeLog['time_in']) || (isset($timeLog['time_out']) && $timeLog['time_out']))
+                                                    @if((isset($timeLog->time_in) && $timeLog->time_in) || (isset($timeLog->time_out) && $timeLog->time_out))
                                                     <div class="text-green-600 font-medium">
-                                                        {{ (isset($timeLog['time_in']) && $timeLog['time_in']) ? \Carbon\Carbon::parse($timeLog['time_in'])->format('g:i A') : 'N/A' }} - {{ (isset($timeLog['time_out']) && $timeLog['time_out']) ? \Carbon\Carbon::parse($timeLog['time_out'])->format('g:i A') : 'N/A' }}
+                                                        {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->time_out ? \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A') : 'N/A' }}
                                                     </div>
                                                     {{-- Always show hours, even if 0 --}}
                                                     <div class="text-blue-600">
@@ -1105,11 +1220,11 @@
                                                         $breakHours = 0;
                                                         $showBreakTime = false;
                                                         
-                                                        if (isset($timeLog['break_in']) && $timeLog['break_in'] && isset($timeLog['break_out']) && $timeLog['break_out'] && isset($timeLog['time_in']) && $timeLog['time_in'] && isset($timeLog['time_out']) && $timeLog['time_out']) {
-                                                            $breakStart = \Carbon\Carbon::parse($timeLog['break_in']);
-                                                            $breakEnd = \Carbon\Carbon::parse($timeLog['break_out']);
-                                                            $workStart = \Carbon\Carbon::parse($timeLog['time_in']);
-                                                            $workEnd = \Carbon\Carbon::parse($timeLog['time_out']);
+                                                        if ($timeLog->break_in && $timeLog->break_out && $timeLog->time_in && $timeLog->time_out) {
+                                                            $breakStart = \Carbon\Carbon::parse($timeLog->break_in);
+                                                            $breakEnd = \Carbon\Carbon::parse($timeLog->break_out);
+                                                            $workStart = \Carbon\Carbon::parse($timeLog->time_in);
+                                                            $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
                                                             
                                                             // Only show break time if employee was present during the break period
                                                             // Check if break period overlaps with work period
@@ -1138,7 +1253,7 @@
                                                     {{-- Commented out break time display as requested --}}
                                                     {{-- @if($showBreakTime)
                                                     <div class="text-gray-600 text-xs">
-                                                        {{ (isset($timeLog['break_in']) && $timeLog['break_in']) ? \Carbon\Carbon::parse($timeLog['break_in'])->format('g:i A') : 'N/A' }} - {{ (isset($timeLog['break_out']) && $timeLog['break_out']) ? \Carbon\Carbon::parse($timeLog['break_out'])->format('g:i A') : 'N/A' }}
+                                                        {{ $timeLog->break_in ? \Carbon\Carbon::parse($timeLog->break_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->break_out ? \Carbon\Carbon::parse($timeLog->break_out)->format('g:i A') : 'N/A' }}
                                                     </div>
                                                     @if($breakHours > 0)
                                                     <div class="text-gray-600 text-xs">
@@ -1153,9 +1268,9 @@
                                                         // Calculate overtime period (this is simplified - you may need more logic based on your system)
                                                         $overtimeStart = '';
                                                         $overtimeEnd = '';
-                                                        if (isset($timeLog['time_out']) && $timeLog['time_out']) {
-                                                            $workEnd = \Carbon\Carbon::parse($timeLog['time_out']);
-                                                            $workStart = \Carbon\Carbon::parse($timeLog['time_in']);
+                                                        if ($timeLog->time_out) {
+                                                            $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
+                                                            $workStart = \Carbon\Carbon::parse($timeLog->time_in);
                                                             
                                                             // If overtime exists, show a period extending beyond normal hours
                                                             $overtimeStart = $workEnd->copy()->subHours($overtimeHours)->format('g:i A');

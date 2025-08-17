@@ -579,6 +579,9 @@ class PayrollController extends Controller
                     // Calculate payroll details for this employee
                     $payrollCalculation = $this->calculateEmployeePayrollForPeriod($employee, $period['start'], $period['end']);
 
+                    // Log processing calculation for comparison with draft
+                    Log::info('Processing Payroll Calculation for Employee ' . $employee->id, $payrollCalculation);
+
                     // Create individual payroll for this employee
                     $payroll = Payroll::create([
                         'payroll_number' => $payrollNumber,
@@ -691,7 +694,8 @@ class PayrollController extends Controller
         }
 
         // Calculate gross pay using rate multipliers from time logs
-        $grossPay = $this->calculateGrossPayWithRateMultipliers($employee, $basicSalary, $timeLogs, $hoursWorked, $daysWorked, $periodStart, $periodEnd);
+        $grossPayData = $this->calculateGrossPayWithRateMultipliersDetailed($employee, $basicSalary, $timeLogs, $hoursWorked, $daysWorked, $periodStart, $periodEnd);
+        $grossPay = $grossPayData['total_gross'];
 
         // Calculate allowances using dynamic settings
         $allowancesData = $this->calculateAllowances($employee, $basicSalary, $daysWorked, $hoursWorked);
@@ -714,9 +718,9 @@ class PayrollController extends Controller
 
         return [
             'basic_salary' => $basicSalary,  // Employee's base salary
-            'regular_pay' => $grossPay,      // Calculated basic pay based on time worked
-            'overtime_pay' => $overtimePay,
-            'holiday_pay' => 0,              // TODO: Extract from rate multipliers calculation
+            'regular_pay' => $grossPayData['basic_pay'],      // Basic pay for regular work
+            'overtime_pay' => $grossPayData['overtime_pay'],
+            'holiday_pay' => $grossPayData['holiday_pay'],
             'allowances' => $allowancesTotal,
             'allowances_details' => $allowancesData['details'],
             'bonuses' => $bonusesTotal,
@@ -732,9 +736,9 @@ class PayrollController extends Controller
             'net_pay' => $netPay,
             'hours_worked' => $hoursWorked,
             'days_worked' => $daysWorked,
-            'regular_hours' => $hoursWorked, // TODO: Separate regular vs overtime hours
-            'overtime_hours' => 0,           // TODO: Calculate from time logs
-            'holiday_hours' => 0,            // TODO: Calculate from time logs
+            'regular_hours' => $grossPayData['regular_hours'],
+            'overtime_hours' => $grossPayData['overtime_hours'],
+            'holiday_hours' => $grossPayData['holiday_hours'],
             'late_deductions' => 0,          // TODO: Calculate from time logs  
             'undertime_deductions' => 0,     // TODO: Calculate from time logs
             'cash_advance_deductions' => 0,  // TODO: Get from cash advances
@@ -784,6 +788,142 @@ class PayrollController extends Controller
     /**
      * Calculate gross pay using rate multipliers from time logs
      */
+    /**
+     * Calculate gross pay with detailed breakdown by pay type
+     */
+    private function calculateGrossPayWithRateMultipliersDetailed($employee, $basicSalary, $timeLogs, $hoursWorked, $daysWorked, $periodStart, $periodEnd)
+    {
+        // If no time worked and no time logs, fallback to basic calculation
+        if ($timeLogs->isEmpty()) {
+            $basicPay = $this->calculateGrossPay($employee, $basicSalary, $hoursWorked, $daysWorked, $periodStart, $periodEnd);
+            return [
+                'total_gross' => $basicPay,
+                'basic_pay' => $basicPay,
+                'holiday_pay' => 0,
+                'overtime_pay' => 0,
+                'regular_hours' => $hoursWorked,
+                'overtime_hours' => 0,
+                'holiday_hours' => 0,
+                'pay_breakdown' => [],
+                'overtime_breakdown' => [],
+                'holiday_breakdown' => [],
+            ];
+        }
+
+        // Calculate hourly rate based on pay schedule
+        $hourlyRate = $this->calculateHourlyRate($employee, $basicSalary);
+
+        $totalGrossPay = 0;
+        $basicPay = 0;
+        $holidayPay = 0;
+        $overtimePay = 0;
+        $regularHours = 0;
+        $overtimeHours = 0;
+        $holidayHours = 0;
+
+        // Detailed breakdowns
+        $payBreakdown = [];
+        $overtimeBreakdown = [];
+        $holidayBreakdown = [];
+
+        // Process each time log with its rate multiplier (exclude incomplete records)
+        foreach ($timeLogs as $timeLog) {
+            // Skip incomplete records - those marked as incomplete or missing time in/out
+            if ($timeLog->remarks === 'Incomplete Time Record' || !$timeLog->time_in || !$timeLog->time_out) {
+                continue;
+            }
+
+            if ($timeLog->total_hours <= 0) {
+                continue;
+            }
+
+            // Calculate pay for this time log using rate configuration
+            $payAmounts = $timeLog->calculatePayAmount($hourlyRate);
+            $totalGrossPay += $payAmounts['total_amount'];
+
+            // Add to hour totals
+            $regularHours += $timeLog->regular_hours ?? 0;
+            $overtimeHours += $timeLog->overtime_hours ?? 0;
+
+            // Get rate configuration for breakdown display
+            $rateConfig = $timeLog->getRateConfiguration();
+            $displayName = $rateConfig ? $rateConfig->display_name : 'Regular Day';
+            
+            // Categorize pay by log type
+            $logType = $timeLog->log_type;
+            $regularAmount = $payAmounts['regular_amount'] ?? 0;
+            $overtimeAmount = $payAmounts['overtime_amount'] ?? 0;
+
+            // Track regular pay by category
+            if ($regularAmount > 0) {
+                if (!isset($payBreakdown[$displayName])) {
+                    $payBreakdown[$displayName] = [
+                        'hours' => 0,
+                        'amount' => 0,
+                        'rate' => $hourlyRate * ($rateConfig ? $rateConfig->regular_rate_multiplier : 1.0),
+                    ];
+                }
+                $payBreakdown[$displayName]['hours'] += $timeLog->regular_hours ?? 0;
+                $payBreakdown[$displayName]['amount'] += $regularAmount;
+            }
+
+            // Track overtime pay by category
+            if ($overtimeAmount > 0) {
+                $overtimeDisplayName = $displayName . ' OT';
+                if (!isset($overtimeBreakdown[$overtimeDisplayName])) {
+                    $overtimeBreakdown[$overtimeDisplayName] = [
+                        'hours' => 0,
+                        'amount' => 0,
+                        'rate' => $hourlyRate * ($rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25),
+                    ];
+                }
+                $overtimeBreakdown[$overtimeDisplayName]['hours'] += $timeLog->overtime_hours ?? 0;
+                $overtimeBreakdown[$overtimeDisplayName]['amount'] += $overtimeAmount;
+            }
+
+            // All overtime pay goes to overtime_pay regardless of day type
+            $overtimePay += $overtimeAmount;
+
+            // Categorize regular pay by day type
+            if (str_contains($logType, 'holiday')) {
+                $holidayPay += $regularAmount;
+                $holidayHours += $timeLog->regular_hours ?? 0;
+                
+                // Track holiday breakdown
+                if ($regularAmount > 0) {
+                    if (!isset($holidayBreakdown[$displayName])) {
+                        $holidayBreakdown[$displayName] = [
+                            'hours' => 0,
+                            'amount' => 0,
+                            'rate' => $hourlyRate * ($rateConfig ? $rateConfig->regular_rate_multiplier : 1.0),
+                        ];
+                    }
+                    $holidayBreakdown[$displayName]['hours'] += $timeLog->regular_hours ?? 0;
+                    $holidayBreakdown[$displayName]['amount'] += $regularAmount;
+                }
+            } elseif (str_contains($logType, 'rest_day')) {
+                // Rest day work is separate category but for now add to basic
+                $basicPay += $regularAmount;
+            } else {
+                // Regular workday and other types
+                $basicPay += $regularAmount;
+            }
+        }
+        
+        return [
+            'total_gross' => $totalGrossPay,
+            'basic_pay' => $basicPay,
+            'holiday_pay' => $holidayPay,
+            'overtime_pay' => $overtimePay,
+            'regular_hours' => $regularHours,
+            'overtime_hours' => $overtimeHours,
+            'holiday_hours' => $holidayHours,
+            'pay_breakdown' => $payBreakdown,
+            'overtime_breakdown' => $overtimeBreakdown,
+            'holiday_breakdown' => $holidayBreakdown,
+        ];
+    }
+
     private function calculateGrossPayWithRateMultipliers($employee, $basicSalary, $timeLogs, $hoursWorked, $daysWorked, $periodStart, $periodEnd)
     {
         // If no time worked and no time logs, fallback to basic calculation
@@ -4295,7 +4435,13 @@ class PayrollController extends Controller
                 return \Carbon\Carbon::parse($item->log_date)->format('Y-m-d');
             });
 
-        $dtrData = [$employee->id => $timeLogs->toArray()];
+        // Build DTR data structure matching working version
+        $employeeDtr = [];
+        foreach ($periodDates as $date) {
+            $timeLog = $timeLogs->get($date, collect())->first();
+            $employeeDtr[$date] = $timeLog;
+        }
+        $dtrData = [$employee->id => $employeeDtr];
 
         // Create time breakdowns similar to regular show method
         $timeBreakdowns = [$employee->id => []];
@@ -4590,9 +4736,17 @@ class PayrollController extends Controller
         $dtrData = [];
         foreach ($payroll->payrollDetails as $detail) {
             $employeeLogs = $timeLogs->get($detail->employee_id, collect());
-            $dtrData[$detail->employee_id] = $employeeLogs->groupBy(function ($item) {
+            $employeeLogsByDate = $employeeLogs->groupBy(function ($item) {
                 return \Carbon\Carbon::parse($item->log_date)->format('Y-m-d');
-            })->toArray();
+            });
+
+            // Build DTR data structure matching automation format
+            $employeeDtr = [];
+            foreach ($periodDates as $date) {
+                $timeLog = $employeeLogsByDate->get($date, collect())->first();
+                $employeeDtr[$date] = $timeLog;
+            }
+            $dtrData[$detail->employee_id] = $employeeDtr;
         }
 
         $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
@@ -5016,7 +5170,13 @@ class PayrollController extends Controller
                 return \Carbon\Carbon::parse($item->log_date)->format('Y-m-d');
             });
 
-        $dtrData = [$employee->id => $timeLogs->toArray()];
+        // Build DTR data structure matching working version
+        $employeeDtr = [];
+        foreach ($periodDates as $date) {
+            $timeLog = $timeLogs->get($date, collect())->first();
+            $employeeDtr[$date] = $timeLog;
+        }
+        $dtrData = [$employee->id => $employeeDtr];
 
         // Create time breakdowns similar to regular show method
         $timeBreakdowns = [$employee->id => []];

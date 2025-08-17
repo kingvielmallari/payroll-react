@@ -1401,8 +1401,17 @@ class TimeLogController extends Controller
                 // Refresh payroll calculations by recalculating the specific employee's payroll
                 $this->refreshPayrollCalculations($validated['employee_id'], $startDate, $endDate);
 
-                return redirect()->route('payrolls.show', $request->payroll_id)
-                    ->with('success', $message . ' Payroll calculations updated.');
+                // Check if we have schedule parameter for automation routes
+                if ($request->filled('schedule')) {
+                    return redirect()->route('payrolls.automation.show', [
+                        'schedule' => $request->schedule,
+                        'employee' => $validated['employee_id']
+                    ])->with('success', $message . ' Payroll calculations updated.');
+                } else {
+                    // Fallback to traditional payroll route
+                    return redirect()->route('payrolls.show', $request->payroll_id)
+                        ->with('success', $message . ' Payroll calculations updated.');
+                }
             }
 
             return redirect()->route('time-logs.index')

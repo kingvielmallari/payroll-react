@@ -94,21 +94,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('payrolls/automation', [PayrollController::class, 'automationIndex'])->name('payrolls.automation.index');
         Route::get('payrolls/automation/create', [PayrollController::class, 'automationCreate'])->name('payrolls.automation.create');
         Route::post('payrolls/automation/store', [PayrollController::class, 'automationStore'])->name('payrolls.automation.store');
+        Route::get('payrolls/automation/{schedule}', [PayrollController::class, 'automationList'])->name('payrolls.automation.list');
 
-        // Unified payroll view route (handles all statuses: draft, processing, approved)
+        // Unified Payroll Routes - for individual employee automation payrolls
         Route::get('payrolls/automation/{schedule}/{employee}', [PayrollController::class, 'showUnifiedPayroll'])->name('payrolls.automation.show');
         Route::post('payrolls/automation/{schedule}/{employee}/process', [PayrollController::class, 'processUnifiedPayroll'])->name('payrolls.automation.process');
+        Route::post('payrolls/automation/{schedule}/{employee}/approve', [PayrollController::class, 'approveUnifiedPayroll'])->name('payrolls.automation.approve')->middleware('can:approve payrolls');
         Route::post('payrolls/automation/{schedule}/{employee}/back-to-draft', [PayrollController::class, 'backToUnifiedDraft'])->name('payrolls.automation.back-to-draft');
-        Route::post('payrolls/automation/{schedule}/{employee}/approve', [PayrollController::class, 'approveUnifiedPayroll'])->name('payrolls.automation.approve');
-
-        // Legacy routes (keeping for backward compatibility temporarily)
-        Route::get('payrolls/automation/{schedule}/draft/{employee}', [PayrollController::class, 'showDraftPayroll'])->name('payrolls.automation.draft.show');
-        Route::post('payrolls/automation/{schedule}/draft/{employee}/process', [PayrollController::class, 'processDraftPayroll'])->name('payrolls.automation.draft.process');
-        Route::get('payrolls/automation/{schedule}/processing/{employee}', [PayrollController::class, 'showProcessingPayroll'])->name('payrolls.automation.processing.show');
-        Route::post('payrolls/automation/{schedule}/processing/{employee}/back-to-draft', [PayrollController::class, 'backToDraftSingle'])->name('payrolls.automation.processing.back-to-draft');
-
-        // Automation main routes
-        Route::get('payrolls/automation/{schedule}', [PayrollController::class, 'automationList'])->name('payrolls.automation.list');
 
         // Test Dynamic Payroll Settings
         Route::get('payrolls/test-dynamic', [PayrollController::class, 'testDynamic'])->name('payrolls.test-dynamic');
