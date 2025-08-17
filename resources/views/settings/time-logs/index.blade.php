@@ -98,7 +98,7 @@
                         <div>
                             <label for="late_grace_minutes" class="block text-sm font-medium text-gray-700">Late Grace Period (minutes)</label>
                             <input type="number" id="late_grace_minutes" name="late_grace_minutes" min="0" max="60" 
-                                   value="{{ $gracePeriodSettings['late_grace_minutes'] }}"
+                                   value="{{ $gracePeriodData['late_grace_minutes'] }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
                             <p class="text-xs text-gray-500 mt-1">Minutes before deducting from working hours</p>
                         </div>
@@ -106,7 +106,7 @@
                         <div>
                             <label for="undertime_grace_minutes" class="block text-sm font-medium text-gray-700">Undertime Grace Period (minutes)</label>
                             <input type="number" id="undertime_grace_minutes" name="undertime_grace_minutes" min="0" max="60" 
-                                   value="{{ $gracePeriodSettings['undertime_grace_minutes'] }}"
+                                   value="{{ $gracePeriodData['undertime_grace_minutes'] }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
                             <p class="text-xs text-gray-500 mt-1">Minutes before deducting for early time out</p>
                         </div>
@@ -114,7 +114,7 @@
                         <div>
                             <label for="overtime_threshold_minutes" class="block text-sm font-medium text-gray-700">Overtime Threshold (minutes)</label>
                             <input type="number" id="overtime_threshold_minutes" name="overtime_threshold_minutes" min="0" max="60" 
-                                   value="{{ $gracePeriodSettings['overtime_threshold_minutes'] }}"
+                                   value="{{ $gracePeriodData['overtime_threshold_minutes'] }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
                             <p class="text-xs text-gray-500 mt-1">Minutes before counting as overtime</p>
                         </div>
@@ -123,6 +123,9 @@
                             Update Grace Periods
                         </button>
                     </form>
+                    
+                    <!-- Information Section -->
+                   
                 </div>
             </div>
         </div>

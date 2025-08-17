@@ -7,6 +7,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use App\Models\DaySchedule;
 use App\Models\TimeSchedule;
+use App\Models\Employee;
 
 class TimeLogSettingController extends Controller
 {
@@ -25,17 +26,22 @@ class TimeLogSettingController extends Controller
         // Get all time schedules
         $timeSchedules = TimeSchedule::orderBy('name')->get();
 
-        // Get grace period settings - using config or database
-        $gracePeriodSettings = [
-            'late_grace_minutes' => config('company.late_grace_minutes', 0),
-            'undertime_grace_minutes' => config('company.undertime_grace_minutes', 0),
-            'overtime_threshold_minutes' => config('company.overtime_threshold_minutes', 0),
+        // Get all active employees
+        $employees = Employee::with('user')->active()->orderBy('employee_number')->get();
+
+        // Get grace period settings from database
+        $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
+        $gracePeriodData = [
+            'late_grace_minutes' => $gracePeriodSettings->late_grace_minutes,
+            'undertime_grace_minutes' => $gracePeriodSettings->undertime_grace_minutes,
+            'overtime_threshold_minutes' => $gracePeriodSettings->overtime_threshold_minutes,
         ];
 
         return view('settings.time-logs.index', compact(
             'daySchedules',
             'timeSchedules',
-            'gracePeriodSettings'
+            'employees',
+            'gracePeriodData'
         ));
     }
 }

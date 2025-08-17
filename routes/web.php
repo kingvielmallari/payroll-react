@@ -246,6 +246,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('time-logs/{employee}/dtr', [TimeLogController::class, 'showDTR'])->name('time-logs.show-dtr');
         Route::get('time-logs/{employee}/simple-dtr', [TimeLogController::class, 'simpleDTR'])->name('time-logs.simple-dtr');
         Route::post('time-logs/update-time-entry', [TimeLogController::class, 'updateTimeEntry'])->name('time-logs.update-time-entry');
+        Route::post('time-logs/recalculate-employee', [TimeLogController::class, 'recalculateTimeLogsForEmployee'])->name('time-logs.recalculate-employee');
+        Route::post('time-logs/{timeLog}/recalculate', [TimeLogController::class, 'recalculateTimeLog'])->name('time-logs.recalculate');
 
         // DTR Import routes
         Route::get('time-logs/import/form', [TimeLogController::class, 'importForm'])

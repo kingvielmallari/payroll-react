@@ -3,10 +3,9 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\GracePeriodSetting;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\File;
 
 class GracePeriodController extends Controller
 {
@@ -19,13 +18,13 @@ class GracePeriodController extends Controller
     {
         $this->authorize('edit settings');
 
-        $gracePeriodSettings = [
-            'late_grace_minutes' => config('company.late_grace_minutes', 0),
-            'undertime_grace_minutes' => config('company.undertime_grace_minutes', 0),
-            'overtime_threshold_minutes' => config('company.overtime_threshold_minutes', 0),
-        ];
+        $gracePeriodSettings = GracePeriodSetting::current();
 
-        return response()->json($gracePeriodSettings);
+        return response()->json([
+            'late_grace_minutes' => $gracePeriodSettings->late_grace_minutes,
+            'undertime_grace_minutes' => $gracePeriodSettings->undertime_grace_minutes,
+            'overtime_threshold_minutes' => $gracePeriodSettings->overtime_threshold_minutes,
+        ]);
     }
 
     /**
@@ -36,38 +35,24 @@ class GracePeriodController extends Controller
         $this->authorize('edit settings');
 
         $request->validate([
-            'late_grace_minutes' => 'required|integer|min:0|max:60',
-            'undertime_grace_minutes' => 'required|integer|min:0|max:60',
-            'overtime_threshold_minutes' => 'required|integer|min:0|max:60',
+            'late_grace_minutes' => 'required|integer|min:0|max:120',
+            'undertime_grace_minutes' => 'required|integer|min:0|max:120',
+            'overtime_threshold_minutes' => 'required|integer|min:0|max:120',
         ]);
 
-        // Update the company.php config file
-        $configPath = config_path('company.php');
-
-        if (File::exists($configPath)) {
-            $config = include $configPath;
-        } else {
-            $config = [];
-        }
-
-        // Update the config values
-        $config['late_grace_minutes'] = $request->late_grace_minutes;
-        $config['undertime_grace_minutes'] = $request->undertime_grace_minutes;
-        $config['overtime_threshold_minutes'] = $request->overtime_threshold_minutes;
-
-        // Write the updated config back to file
-        $configContent = "<?php\n\nreturn " . var_export($config, true) . ";\n";
-        File::put($configPath, $configContent);
-
-        // Clear the config cache
-        Cache::forget('config.company');
+        // Update grace period settings in database
+        $gracePeriodSetting = GracePeriodSetting::updateCurrent([
+            'late_grace_minutes' => $request->late_grace_minutes,
+            'undertime_grace_minutes' => $request->undertime_grace_minutes,
+            'overtime_threshold_minutes' => $request->overtime_threshold_minutes,
+        ]);
 
         return response()->json([
             'message' => 'Grace period settings updated successfully.',
             'data' => [
-                'late_grace_minutes' => $request->late_grace_minutes,
-                'undertime_grace_minutes' => $request->undertime_grace_minutes,
-                'overtime_threshold_minutes' => $request->overtime_threshold_minutes,
+                'late_grace_minutes' => $gracePeriodSetting->late_grace_minutes,
+                'undertime_grace_minutes' => $gracePeriodSetting->undertime_grace_minutes,
+                'overtime_threshold_minutes' => $gracePeriodSetting->overtime_threshold_minutes,
             ]
         ]);
     }

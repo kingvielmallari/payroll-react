@@ -1133,8 +1133,16 @@
                                             (!isset($timeLog->time_in) || !isset($timeLog->time_out) || !$timeLog->time_in || !$timeLog->time_out)
                                         );
                                         
-                                        $regularHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->regular_hours ?? 0) : 0;
-                                        $overtimeHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->overtime_hours ?? 0) : 0;
+                                        // For draft payrolls, use dynamic calculation; for approved payrolls, use stored values
+                                        if (!$isIncompleteRecord && $timeLog && $payroll->status === 'draft') {
+                                            // Use dynamic calculation for draft payrolls
+                                            $regularHours = $timeLog->dynamic_regular_hours ?? ($timeLog->regular_hours ?? 0);
+                                            $overtimeHours = $timeLog->dynamic_overtime_hours ?? ($timeLog->overtime_hours ?? 0);
+                                        } else {
+                                            // Use stored values for approved payrolls or incomplete records
+                                            $regularHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->regular_hours ?? 0) : 0;
+                                            $overtimeHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->overtime_hours ?? 0) : 0;
+                                        }
                                         $totalEmployeeHours += $regularHours;
                                         $totalEmployeeOvertimeHours += $overtimeHours;
                                         $isWeekend = \Carbon\Carbon::parse($date)->isWeekend();

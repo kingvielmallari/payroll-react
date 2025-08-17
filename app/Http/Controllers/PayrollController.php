@@ -684,12 +684,52 @@ class PayrollController extends Controller
 
         $hoursWorked = 0;
         $daysWorked = 0;
+        $regularHours = 0;
+        $overtimeHours = 0;
+        $holidayHours = 0;
+        $lateHours = 0;
+        $undertimeHours = 0;
+
+        // For draft payrolls, calculate dynamically using current grace periods
+        // For approved payrolls, use stored values (snapshots)
+        $isDraftMode = $payroll === null || $payroll->status === 'draft';
 
         // Calculate total hours and days worked
         foreach ($timeLogs as $timeLog) {
-            $hoursWorked += $timeLog->total_hours ?? 0;
-            if ($timeLog->total_hours > 0) {
-                $daysWorked++;
+            if ($isDraftMode && $timeLog->time_in && $timeLog->time_out) {
+                // Calculate dynamically using current grace periods and employee schedules
+                $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
+
+                $hoursWorked += $dynamicCalculation['total_hours'];
+                $regularHours += $dynamicCalculation['regular_hours'];
+                $overtimeHours += $dynamicCalculation['overtime_hours'];
+                $lateHours += $dynamicCalculation['late_hours'];
+                $undertimeHours += $dynamicCalculation['undertime_hours'];
+
+                if ($dynamicCalculation['total_hours'] > 0) {
+                    $daysWorked++;
+                }
+
+                // Handle holiday hours
+                if ($timeLog->is_holiday && $dynamicCalculation['total_hours'] > 0) {
+                    $holidayHours += $dynamicCalculation['total_hours'];
+                }
+            } else {
+                // Use stored values for approved payrolls (snapshot mode)
+                $hoursWorked += $timeLog->total_hours ?? 0;
+                $regularHours += $timeLog->regular_hours ?? 0;
+                $overtimeHours += $timeLog->overtime_hours ?? 0;
+                $lateHours += $timeLog->late_hours ?? 0;
+                $undertimeHours += $timeLog->undertime_hours ?? 0;
+
+                if (($timeLog->total_hours ?? 0) > 0) {
+                    $daysWorked++;
+                }
+
+                // Handle holiday hours from stored values
+                if ($timeLog->is_holiday && ($timeLog->total_hours ?? 0) > 0) {
+                    $holidayHours += $timeLog->total_hours ?? 0;
+                }
             }
         }
 
@@ -711,10 +751,14 @@ class PayrollController extends Controller
         // Total gross pay including allowances and bonuses
         $totalGrossPay = $grossPay + $allowancesTotal + $bonusesTotal + $overtimePay;
 
+        // Calculate late and undertime deductions based on dynamic calculations
+        $lateDeductions = $this->calculateLateDeductions($employee, $lateHours);
+        $undertimeDeductions = $this->calculateUndertimeDeductions($employee, $undertimeHours);
+
         // Calculate deductions using dynamic settings
         $deductions = $this->calculateDeductions($employee, $totalGrossPay, $basicSalary, $overtimePay, $allowancesTotal, $bonusesTotal);
 
-        $netPay = $totalGrossPay - $deductions['total'];
+        $netPay = $totalGrossPay - $deductions['total'] - $lateDeductions - $undertimeDeductions;
 
         return [
             'basic_salary' => $basicSalary,  // Employee's base salary
@@ -736,11 +780,13 @@ class PayrollController extends Controller
             'net_pay' => $netPay,
             'hours_worked' => $hoursWorked,
             'days_worked' => $daysWorked,
-            'regular_hours' => $grossPayData['regular_hours'],
-            'overtime_hours' => $grossPayData['overtime_hours'],
-            'holiday_hours' => $grossPayData['holiday_hours'],
-            'late_deductions' => 0,          // TODO: Calculate from time logs  
-            'undertime_deductions' => 0,     // TODO: Calculate from time logs
+            'regular_hours' => $regularHours,
+            'overtime_hours' => $overtimeHours,
+            'holiday_hours' => $holidayHours,
+            'late_hours' => $lateHours,
+            'undertime_hours' => $undertimeHours,
+            'late_deductions' => $lateDeductions,
+            'undertime_deductions' => $undertimeDeductions,
             'cash_advance_deductions' => 0,  // TODO: Get from cash advances
         ];
     }
@@ -1560,6 +1606,15 @@ class PayrollController extends Controller
 
             foreach ($periodDates as $date) {
                 $timeLog = $employeeTimeLogs->get($date, collect())->first();
+
+                // For draft payrolls, add dynamic calculation to time log object for DTR display
+                if ($timeLog && $payroll->status === 'draft' && $timeLog->time_in && $timeLog->time_out && $timeLog->remarks !== 'Incomplete Time Record') {
+                    $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
+                    $timeLog->dynamic_regular_hours = $dynamicCalculation['regular_hours'];
+                    $timeLog->dynamic_overtime_hours = $dynamicCalculation['overtime_hours'];
+                    $timeLog->dynamic_total_hours = $dynamicCalculation['total_hours'];
+                }
+
                 $employeeDtr[$date] = $timeLog;
 
                 // Track time breakdown by type (exclude incomplete records)
@@ -1576,9 +1631,22 @@ class PayrollController extends Controller
                         ];
                     }
 
-                    $employeeBreakdown[$logType]['regular_hours'] += $timeLog->regular_hours ?? 0;
-                    $employeeBreakdown[$logType]['overtime_hours'] += $timeLog->overtime_hours ?? 0;
-                    $employeeBreakdown[$logType]['total_hours'] += $timeLog->total_hours ?? 0;
+                    // For draft payrolls, calculate dynamically using current grace periods
+                    // For approved payrolls, use stored values (snapshots)
+                    if ($payroll->status === 'draft') {
+                        $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
+                        $regularHours = $dynamicCalculation['regular_hours'];
+                        $overtimeHours = $dynamicCalculation['overtime_hours'];
+                        $totalHours = $dynamicCalculation['total_hours'];
+                    } else {
+                        $regularHours = $timeLog->regular_hours ?? 0;
+                        $overtimeHours = $timeLog->overtime_hours ?? 0;
+                        $totalHours = $timeLog->total_hours ?? 0;
+                    }
+
+                    $employeeBreakdown[$logType]['regular_hours'] += $regularHours;
+                    $employeeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
+                    $employeeBreakdown[$logType]['total_hours'] += $totalHours;
                     $employeeBreakdown[$logType]['days_count']++;
 
                     // Get rate configuration for this type
@@ -5285,4 +5353,62 @@ class PayrollController extends Controller
     /**
      * Link existing time logs to a payroll based on period and employee
      */
+
+    /**
+     * Calculate time log hours dynamically using current grace periods and employee schedules
+     * This is used for draft payrolls to get real-time calculations
+     */
+    private function calculateTimeLogHoursDynamically(TimeLog $timeLog)
+    {
+        // Use the same dynamic calculation method from TimeLogController
+        $timeLogController = app(\App\Http\Controllers\TimeLogController::class);
+
+        // Use reflection to access the private method
+        $reflection = new \ReflectionClass($timeLogController);
+        $method = $reflection->getMethod('calculateDynamicWorkingHours');
+        $method->setAccessible(true);
+
+        try {
+            return $method->invoke($timeLogController, $timeLog);
+        } catch (\Exception $e) {
+            // Fallback to stored values if calculation fails
+            Log::error('Dynamic time log calculation failed: ' . $e->getMessage());
+
+            return [
+                'total_hours' => $timeLog->total_hours ?? 0,
+                'regular_hours' => $timeLog->regular_hours ?? 0,
+                'overtime_hours' => $timeLog->overtime_hours ?? 0,
+                'late_hours' => $timeLog->late_hours ?? 0,
+                'undertime_hours' => $timeLog->undertime_hours ?? 0,
+            ];
+        }
+    }
+
+    /**
+     * Calculate late deductions based on late hours
+     */
+    private function calculateLateDeductions($employee, $lateHours)
+    {
+        if ($lateHours <= 0) {
+            return 0;
+        }
+
+        // Calculate deduction based on hourly rate
+        $hourlyRate = $employee->hourly_rate ?? 0;
+        return $lateHours * $hourlyRate;
+    }
+
+    /**
+     * Calculate undertime deductions based on undertime hours
+     */
+    private function calculateUndertimeDeductions($employee, $undertimeHours)
+    {
+        if ($undertimeHours <= 0) {
+            return 0;
+        }
+
+        // Calculate deduction based on hourly rate
+        $hourlyRate = $employee->hourly_rate ?? 0;
+        return $undertimeHours * $hourlyRate;
+    }
 }
