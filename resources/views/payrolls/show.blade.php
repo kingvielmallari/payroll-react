@@ -932,21 +932,12 @@
                         <div class="flex space-x-2">
                             @can('create time logs')
                                 @if($payroll->payrollDetails->isNotEmpty() && $payroll->status === 'draft')
-                                    @php
-                                        // For automation draft payrolls, don't pass payroll_id since it's not a real payroll record
-                                        $routeParams = [
-                                            'employee_id' => $payroll->payrollDetails->first()->employee_id,
-                                            'period_start' => $payroll->period_start->format('Y-m-d'),
-                                            'period_end' => $payroll->period_end->format('Y-m-d'),
-                                            'schedule' => $schedule ?? null
-                                        ];
-                                        
-                                        // Only add payroll_id if this is a real payroll record (not automation draft)
-                                        if ($payroll->payroll_type !== 'automated' || $payroll->exists) {
-                                            $routeParams['payroll_id'] = $payroll->id;
-                                        }
-                                    @endphp
-                                    <a href="{{ route('time-logs.create-bulk-employee', $routeParams) }}" 
+                                    <a href="{{ route('time-logs.create-bulk-employee', [
+                                        'employee_id' => $payroll->payrollDetails->first()->employee_id,
+                                        'period_start' => $payroll->period_start->format('Y-m-d'),
+                                        'period_end' => $payroll->period_end->format('Y-m-d'),
+                                        'payroll_id' => $payroll->id
+                                    ]) }}" 
                                        class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded text-sm flex items-center">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -1031,10 +1022,10 @@
                                         $timeLog = $dtrData[$detail->employee_id][$date] ?? null;
                                         
                                         // Exclude incomplete records from hour calculation
-                                        $isIncompleteRecord = $timeLog && ($timeLog->remarks === 'Incomplete Time Record' || (!$timeLog->time_in || !$timeLog->time_out));
+                                        $isIncompleteRecord = $timeLog && (isset($timeLog['remarks']) && $timeLog['remarks'] === 'Incomplete Time Record') || (!isset($timeLog['time_in']) || !$timeLog['time_in'] || !isset($timeLog['time_out']) || !$timeLog['time_out']);
                                         
-                                        $regularHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->regular_hours ?? 0) : 0;
-                                        $overtimeHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->overtime_hours ?? 0) : 0;
+                                        $regularHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog['regular_hours'] ?? 0) : 0;
+                                        $overtimeHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog['overtime_hours'] ?? 0) : 0;
                                         $totalEmployeeHours += $regularHours;
                                         $totalEmployeeOvertimeHours += $overtimeHours;
                                         $isWeekend = \Carbon\Carbon::parse($date)->isWeekend();
@@ -1043,18 +1034,38 @@
                                         $dayType = 'Regular Day';
                                         $dayTypeColor = 'bg-green-100 text-green-800';
                                         
-                                        if ($timeLog && $timeLog->log_type) {
-                                            $rateConfig = $timeLog->getRateConfiguration();
-                                            if ($rateConfig) {
-                                                $dayType = $rateConfig->display_name;
-                                                // Set color based on type
-                                                if (str_contains($dayType, 'Holiday')) {
-                                                    $dayTypeColor = 'bg-red-100 text-red-800';
-                                                } elseif (str_contains($dayType, 'Rest')) {
-                                                    $dayTypeColor = 'bg-blue-100 text-blue-800';
-                                                } else {
+                                        if ($timeLog && isset($timeLog['log_type']) && $timeLog['log_type']) {
+                                            // Since we can't call getRateConfiguration() on array, use simple mapping
+                                            $logType = $timeLog['log_type'];
+                                            switch ($logType) {
+                                                case 'regular_workday':
+                                                    $dayType = 'Regular Day';
                                                     $dayTypeColor = 'bg-green-100 text-green-800';
-                                                }
+                                                    break;
+                                                case 'rest_day':
+                                                    $dayType = 'Rest Day';
+                                                    $dayTypeColor = 'bg-blue-100 text-blue-800';
+                                                    break;
+                                                case 'regular_holiday':
+                                                    $dayType = 'RE Holiday';
+                                                    $dayTypeColor = 'bg-red-100 text-red-800';
+                                                    break;
+                                                case 'special_holiday':
+                                                    $dayType = 'SP Holiday';
+                                                    $dayTypeColor = 'bg-red-100 text-red-800';
+                                                    break;
+                                                case 'rest_day_regular_holiday':
+                                                    $dayType = 'Rest + RE Holiday';
+                                                    $dayTypeColor = 'bg-red-100 text-red-800';
+                                                    break;
+                                                case 'rest_day_special_holiday':
+                                                    $dayType = 'Rest + SP Holiday';
+                                                    $dayTypeColor = 'bg-red-100 text-red-800';
+                                                    break;
+                                                default:
+                                                    $dayType = 'Regular Day';
+                                                    $dayTypeColor = 'bg-green-100 text-green-800';
+                                                    break;
                                             }
                                         } elseif ($isWeekend) {
                                             $dayType = 'Rest Day';
@@ -1070,7 +1081,7 @@
                                         </div>
                                         
                                         @if($timeLog)
-                                            @if($timeLog->remarks === 'Incomplete Time Record' || (!$timeLog->time_in || !$timeLog->time_out))
+                                            @if((isset($timeLog['remarks']) && $timeLog['remarks'] === 'Incomplete Time Record') || (!isset($timeLog['time_in']) || !$timeLog['time_in'] || !isset($timeLog['time_out']) || !$timeLog['time_out']))
                                                 {{-- Display INC for incomplete records --}}
                                                 <div class="text-red-600 font-bold">
                                                     INC
@@ -1078,9 +1089,9 @@
                                             @else
                                                 <div class="space-y-1">
                                                     {{-- Main work schedule with regular hours --}}
-                                                    @if($timeLog->time_in || $timeLog->time_out)
+                                                    @if((isset($timeLog['time_in']) && $timeLog['time_in']) || (isset($timeLog['time_out']) && $timeLog['time_out']))
                                                     <div class="text-green-600 font-medium">
-                                                        {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->time_out ? \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A') : 'N/A' }}
+                                                        {{ (isset($timeLog['time_in']) && $timeLog['time_in']) ? \Carbon\Carbon::parse($timeLog['time_in'])->format('g:i A') : 'N/A' }} - {{ (isset($timeLog['time_out']) && $timeLog['time_out']) ? \Carbon\Carbon::parse($timeLog['time_out'])->format('g:i A') : 'N/A' }}
                                                     </div>
                                                     {{-- Always show hours, even if 0 --}}
                                                     <div class="text-blue-600">
@@ -1094,11 +1105,11 @@
                                                         $breakHours = 0;
                                                         $showBreakTime = false;
                                                         
-                                                        if ($timeLog->break_in && $timeLog->break_out && $timeLog->time_in && $timeLog->time_out) {
-                                                            $breakStart = \Carbon\Carbon::parse($timeLog->break_in);
-                                                            $breakEnd = \Carbon\Carbon::parse($timeLog->break_out);
-                                                            $workStart = \Carbon\Carbon::parse($timeLog->time_in);
-                                                            $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
+                                                        if (isset($timeLog['break_in']) && $timeLog['break_in'] && isset($timeLog['break_out']) && $timeLog['break_out'] && isset($timeLog['time_in']) && $timeLog['time_in'] && isset($timeLog['time_out']) && $timeLog['time_out']) {
+                                                            $breakStart = \Carbon\Carbon::parse($timeLog['break_in']);
+                                                            $breakEnd = \Carbon\Carbon::parse($timeLog['break_out']);
+                                                            $workStart = \Carbon\Carbon::parse($timeLog['time_in']);
+                                                            $workEnd = \Carbon\Carbon::parse($timeLog['time_out']);
                                                             
                                                             // Only show break time if employee was present during the break period
                                                             // Check if break period overlaps with work period
@@ -1127,7 +1138,7 @@
                                                     {{-- Commented out break time display as requested --}}
                                                     {{-- @if($showBreakTime)
                                                     <div class="text-gray-600 text-xs">
-                                                        {{ $timeLog->break_in ? \Carbon\Carbon::parse($timeLog->break_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->break_out ? \Carbon\Carbon::parse($timeLog->break_out)->format('g:i A') : 'N/A' }}
+                                                        {{ (isset($timeLog['break_in']) && $timeLog['break_in']) ? \Carbon\Carbon::parse($timeLog['break_in'])->format('g:i A') : 'N/A' }} - {{ (isset($timeLog['break_out']) && $timeLog['break_out']) ? \Carbon\Carbon::parse($timeLog['break_out'])->format('g:i A') : 'N/A' }}
                                                     </div>
                                                     @if($breakHours > 0)
                                                     <div class="text-gray-600 text-xs">
@@ -1142,9 +1153,9 @@
                                                         // Calculate overtime period (this is simplified - you may need more logic based on your system)
                                                         $overtimeStart = '';
                                                         $overtimeEnd = '';
-                                                        if ($timeLog->time_out) {
-                                                            $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
-                                                            $workStart = \Carbon\Carbon::parse($timeLog->time_in);
+                                                        if (isset($timeLog['time_out']) && $timeLog['time_out']) {
+                                                            $workEnd = \Carbon\Carbon::parse($timeLog['time_out']);
+                                                            $workStart = \Carbon\Carbon::parse($timeLog['time_in']);
                                                             
                                                             // If overtime exists, show a period extending beyond normal hours
                                                             $overtimeStart = $workEnd->copy()->subHours($overtimeHours)->format('g:i A');
