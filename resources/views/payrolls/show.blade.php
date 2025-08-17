@@ -932,13 +932,21 @@
                         <div class="flex space-x-2">
                             @can('create time logs')
                                 @if($payroll->payrollDetails->isNotEmpty() && $payroll->status === 'draft')
-                                    <a href="{{ route('time-logs.create-bulk-employee', [
-                                        'employee_id' => $payroll->payrollDetails->first()->employee_id,
-                                        'period_start' => $payroll->period_start->format('Y-m-d'),
-                                        'period_end' => $payroll->period_end->format('Y-m-d'),
-                                        'payroll_id' => $payroll->id,
-                                        'schedule' => $schedule ?? null
-                                    ]) }}" 
+                                    @php
+                                        // For automation draft payrolls, don't pass payroll_id since it's not a real payroll record
+                                        $routeParams = [
+                                            'employee_id' => $payroll->payrollDetails->first()->employee_id,
+                                            'period_start' => $payroll->period_start->format('Y-m-d'),
+                                            'period_end' => $payroll->period_end->format('Y-m-d'),
+                                            'schedule' => $schedule ?? null
+                                        ];
+                                        
+                                        // Only add payroll_id if this is a real payroll record (not automation draft)
+                                        if ($payroll->payroll_type !== 'automated' || $payroll->exists) {
+                                            $routeParams['payroll_id'] = $payroll->id;
+                                        }
+                                    @endphp
+                                    <a href="{{ route('time-logs.create-bulk-employee', $routeParams) }}" 
                                        class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded text-sm flex items-center">
                                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>

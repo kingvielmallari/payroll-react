@@ -1001,6 +1001,7 @@ class TimeLogController extends Controller
                 'time_out' => $timeOut,
                 'break_in' => $breakIn,
                 'break_out' => $breakOut,
+                'log_type' => $timeLog ? $timeLog->log_type : null, // Add log_type field
                 'remarks' => $timeLog ? $timeLog->remarks : null,
                 'regular_hours' => $timeLog ? ($timeLog->regular_hours ?? 0) : 0,
                 'overtime_hours' => $timeLog ? ($timeLog->overtime_hours ?? 0) : 0,
