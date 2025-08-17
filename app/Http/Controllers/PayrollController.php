@@ -404,34 +404,14 @@ class PayrollController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // If no payrolls exist, show draft mode (like image 1)
-        if ($existingPayrolls->isEmpty()) {
-            return $this->showDraftMode($selectedSchedule, $currentPeriod, $schedule);
-        }
-
-        // If payrolls exist, show real payrolls with processing status
-        $payrolls = new \Illuminate\Pagination\LengthAwarePaginator(
-            $existingPayrolls,
-            $existingPayrolls->count(),
-            15,
-            1,
-            ['path' => request()->url()]
-        );
-
-        // Check if all payrolls are approved
-        $allApproved = $existingPayrolls->every(function ($payroll) {
-            return $payroll->status === 'approved';
+        // Filter to only show DRAFT payrolls
+        $draftPayrolls = $existingPayrolls->filter(function ($payroll) {
+            return $payroll->status === 'draft';
         });
 
-        $hasPayrolls = $existingPayrolls->count() > 0;
-
-        return view('payrolls.automation.list', compact(
-            'payrolls',
-            'selectedSchedule',
-            'currentPeriod',
-            'allApproved',
-            'hasPayrolls'
-        ) + ['scheduleCode' => $schedule, 'isDraft' => false]);
+        // Always show draft mode for employees without payroll records
+        // This will include dynamic draft payrolls for employees who don't have records yet
+        return $this->showDraftMode($selectedSchedule, $currentPeriod, $schedule);
     }
 
     /**
@@ -439,16 +419,66 @@ class PayrollController extends Controller
      */
     private function showDraftMode($selectedSchedule, $currentPeriod, $schedule)
     {
-        // Get active employees for this schedule
+        // Get employees who already have payroll records for this period
+        $employeesWithPayrolls = Payroll::whereHas('payrollDetails')
+            ->where('pay_schedule', $schedule)
+            ->where('period_start', $currentPeriod['start'])
+            ->where('period_end', $currentPeriod['end'])
+            ->where('payroll_type', 'automated')
+            ->with('payrollDetails')
+            ->get()
+            ->pluck('payrollDetails.*.employee_id')
+            ->flatten()
+            ->unique()
+            ->toArray();
+
+        // Get active employees for this schedule, excluding those who already have payrolls
         $employees = Employee::with(['user', 'department', 'position'])
             ->where('pay_schedule', $schedule)
             ->where('employment_status', 'active')
+            ->whereNotIn('id', $employeesWithPayrolls)
             ->orderBy('first_name')
             ->get();
 
         if ($employees->isEmpty()) {
-            return redirect()->route('payrolls.automation.index')
-                ->withErrors(['employees' => 'No active employees found for this pay schedule.']);
+            // If no employees are available for draft payrolls, show the automation page with a message
+            // This could mean all employees already have payrolls or no active employees exist
+            $allActiveEmployees = Employee::where('pay_schedule', $schedule)
+                ->where('employment_status', 'active')
+                ->count();
+
+            if ($allActiveEmployees == 0) {
+                return redirect()->route('payrolls.automation.index')
+                    ->withErrors(['employees' => 'No active employees found for this pay schedule.']);
+            }
+
+            // All active employees already have payrolls - show empty state with information
+            $mockPaginator = new \Illuminate\Pagination\LengthAwarePaginator(
+                collect(),
+                0,
+                15,
+                1,
+                ['path' => request()->url()]
+            );
+
+            return view('payrolls.automation.list', compact(
+                'selectedSchedule',
+                'currentPeriod'
+            ) + [
+                'scheduleCode' => $schedule,
+                'isDraft' => true,
+                'payrolls' => $mockPaginator,
+                'hasPayrolls' => false,
+                'allApproved' => false,
+                'allEmployeesHavePayrolls' => true,
+                'totalActiveEmployees' => $allActiveEmployees,
+                'draftTotals' => [
+                    'gross' => 0,
+                    'deductions' => 0,
+                    'net' => 0,
+                    'count' => 0
+                ]
+            ]);
         }
 
         // Calculate dynamic payroll data for each employee (not saved to DB)
@@ -1317,12 +1347,12 @@ class PayrollController extends Controller
     {
         $this->authorize('view payrolls');
 
-        // Handle direct employee ID access - redirect to draft mode
+        // Handle direct employee ID access - redirect to unified automation view
         if (is_numeric($payroll) && !Payroll::where('id', $payroll)->exists()) {
-            // This is likely an employee ID, redirect to draft mode
+            // This is likely an employee ID, redirect to unified automation view
             $employee = Employee::find($payroll);
             if ($employee) {
-                return redirect()->route('payrolls.automation.draft.show', [
+                return redirect()->route('payrolls.automation.show', [
                     'schedule' => $employee->pay_schedule,
                     'employee' => $payroll
                 ]);
@@ -1332,6 +1362,15 @@ class PayrollController extends Controller
         // Handle regular payroll
         if (!($payroll instanceof Payroll)) {
             $payroll = Payroll::findOrFail($payroll);
+        }
+
+        // For automated payrolls with single employee, redirect to new URL format
+        if ($payroll->payroll_type === 'automated' && $payroll->payrollDetails->count() === 1) {
+            $employeeId = $payroll->payrollDetails->first()->employee_id;
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $payroll->pay_schedule,
+                'employee' => $employeeId
+            ]);
         }
 
         // Auto-recalculate if needed (for draft payrolls)

@@ -48,7 +48,7 @@
                         </div>
                         <div class="text-sm text-gray-600">
                             <div class="text-xs text-blue-600">
-                                <strong>Tip:</strong> Right-click on any payroll row to access View, Edit, Process, and Delete actions.
+                                <strong>Tip:</strong> Right-click on any payroll row to access Manage, Process, and Approve actions.
                             </div>
                         </div>
                     </div>
@@ -69,7 +69,7 @@
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     @foreach($payrolls as $payroll)
                                         <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
-                                           oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ \Carbon\Carbon::parse($payroll->period_start)->format('M d') }} - {{ \Carbon\Carbon::parse($payroll->period_end)->format('M d, Y') }}', '{{ $payroll->status }}')"
+                                           oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ \Carbon\Carbon::parse($payroll->period_start)->format('M d') }} - {{ \Carbon\Carbon::parse($payroll->period_end)->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $scheduleCode }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : "" }}')"
                                            onclick="window.location.href='{{ $payroll->payrollDetails->count() == 1 ? route('payrolls.automation.show', ['schedule' => $scheduleCode, 'employee' => $payroll->payrollDetails->first()->employee_id]) : route('payrolls.show', $payroll) }}'"
                                            title="Right-click for actions">
                                             <td class="px-6 py-4 whitespace-nowrap">
@@ -128,23 +128,58 @@
                         </div>
                     @else
                         <div class="text-center py-8">
-                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                      d="M9 12h6m-6 4h6m2 5l7-7 7 7M9 20h6m-7 4h7m6-4V8a2 2 0 012-2h6a2 2 0 012 2v4m-3 4a2 2 0 01-2 2H9a2 2 0 01-2-2v-4z"/>
-                            </svg>
-                            <h3 class="mt-2 text-sm font-medium text-gray-900">No automated payrolls found</h3>
-                            <p class="mt-1 text-sm text-gray-500">
-                                No automated payrolls have been created for the {{ $selectedSchedule->name }} schedule yet.
-                            </p>
-                            <div class="mt-6">
-                                <a href="{{ route('payrolls.automation.create', ['schedule' => $scheduleCode, 'action' => 'create']) }}" 
-                                   class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
-                                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"></path>
-                                    </svg>
-                                    Generate Your First Automated Payroll
-                                </a>
-                            </div>
+                            @if(isset($allEmployeesHavePayrolls) && $allEmployeesHavePayrolls)
+                                <!-- All employees already have payrolls -->
+                                <svg class="mx-auto h-12 w-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <h3 class="mt-2 text-sm font-medium text-gray-900">All employees have payrolls for this period</h3>
+                                <p class="mt-1 text-sm text-gray-500">
+                                    All {{ $totalActiveEmployees }} active employees in the {{ $selectedSchedule->name }} schedule already have payroll records for the current period ({{ \Carbon\Carbon::parse($currentPeriod['start'])->format('M d') }} - {{ \Carbon\Carbon::parse($currentPeriod['end'])->format('M d, Y') }}).
+                                </p>
+                                <div class="mt-6 space-y-3">
+                                    <div class="flex justify-center space-x-4">
+                                        <a href="{{ route('payrolls.index') }}" 
+                                           class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                            View All Payrolls
+                                        </a>
+                                        <a href="{{ route('payrolls.automation.index') }}" 
+                                           class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd"></path>
+                                            </svg>
+                                            Back to Automation
+                                        </a>
+                                    </div>
+                                    <p class="text-xs text-gray-400">
+                                        To create payrolls for the next period, wait for the current period to end or create manual payrolls.
+                                    </p>
+                                </div>
+                            @else
+                                <!-- No automated payrolls created yet -->
+                                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M9 12h6m-6 4h6m2 5l7-7 7 7M9 20h6m-7 4h7m6-4V8a2 2 0 012-2h6a2 2 0 012 2v4m-3 4a2 2 0 01-2 2H9a2 2 0 01-2-2v-4z"/>
+                                </svg>
+                                <h3 class="mt-2 text-sm font-medium text-gray-900">No automated payrolls found</h3>
+                                <p class="mt-1 text-sm text-gray-500">
+                                    No automated payrolls have been created for the {{ $selectedSchedule->name }} schedule yet.
+                                </p>
+                                <div class="mt-6">
+                                    <a href="{{ route('payrolls.automation.create', ['schedule' => $scheduleCode, 'action' => 'create']) }}" 
+                                       class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                                        <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        Generate Your First Automated Payroll
+                                    </a>
+                                </div>
+                            @endif
                         </div>
                     @endif
                 </div>
@@ -198,13 +233,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                 </svg>
-                View Details
-            </a>
-            <a href="#" id="contextMenuEdit" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors duration-150" style="display: none;">
-                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                </svg>
-                Edit Payroll
+                Manage Payroll
             </a>
             <a href="#" id="contextMenuProcess" class="flex items-center px-3 py-2 text-sm text-green-600 hover:bg-green-50 hover:text-green-700 transition-colors duration-150" style="display: none;">
                 <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -217,13 +246,6 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
                 Approve Payroll
-            </a>
-            <div class="border-t border-gray-100 my-1"></div>
-            <a href="#" id="contextMenuDelete" class="flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors duration-150">
-                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
-                Delete Payroll
             </a>
         </div>
     </div>
@@ -240,7 +262,7 @@
             contextMenu.classList.add('opacity-0', 'scale-95');
         });
 
-        function showContextMenu(event, payrollId, payrollNumber, period, status) {
+        function showContextMenu(event, payrollId, payrollNumber, period, status, scheduleCode, employeeId) {
             event.preventDefault();
             event.stopPropagation();
             
@@ -254,8 +276,12 @@
             // Set up action URLs
             let baseUrl = '{{ url("/payrolls") }}';
             
-            document.getElementById('contextMenuView').href = baseUrl + '/' + payrollId;
-            document.getElementById('contextMenuEdit').href = baseUrl + '/' + payrollId + '/edit';
+            // Always use automation URL for automation list context menu
+            if (scheduleCode && employeeId) {
+                document.getElementById('contextMenuView').href = '{{ url("/payrolls/automation") }}/' + scheduleCode + '/' + employeeId;
+            } else {
+                document.getElementById('contextMenuView').href = baseUrl + '/' + payrollId;
+            }
             
             // Show/hide actions based on status and permissions
             showHideContextMenuItems(status);
@@ -289,17 +315,8 @@
         
         function showHideContextMenuItems(status) {
             // Reset all items to hidden
-            document.getElementById('contextMenuEdit').style.display = 'none';
             document.getElementById('contextMenuProcess').style.display = 'none';
             document.getElementById('contextMenuApprove').style.display = 'none';
-            document.getElementById('contextMenuDelete').style.display = 'none';
-            
-            // Show Edit if payroll can be edited and user has permission
-            @can('edit payrolls')
-            if (status === 'draft') {
-                document.getElementById('contextMenuEdit').style.display = 'flex';
-            }
-            @endcan
             
             // Show Process if payroll is draft and user has permission
             @can('process payrolls')
@@ -312,20 +329,6 @@
             @can('approve payrolls')
             if (status === 'processing') {
                 document.getElementById('contextMenuApprove').style.display = 'flex';
-            }
-            @endcan
-            
-            // Show Delete if user has permission
-            @can('delete payrolls')
-            if (status === 'draft' || status === 'processing') {
-                document.getElementById('contextMenuDelete').style.display = 'flex';
-            }
-            @endcan
-            
-            // Show Delete for approved payrolls if user has special permission
-            @can('delete approved payrolls')
-            if (status === 'approved') {
-                document.getElementById('contextMenuDelete').style.display = 'flex';
             }
             @endcan
         }
@@ -362,31 +365,6 @@
                 csrfToken.name = '_token';
                 csrfToken.value = '{{ csrf_token() }}';
                 form.appendChild(csrfToken);
-                
-                document.body.appendChild(form);
-                form.submit();
-            }
-        });
-        
-        // Handle delete action
-        document.getElementById('contextMenuDelete').addEventListener('click', function(e) {
-            e.preventDefault();
-            if (confirm('Are you sure you want to delete this payroll? This action cannot be undone.')) {
-                let form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '{{ url("/payrolls") }}/' + currentPayrollId;
-                
-                let csrfToken = document.createElement('input');
-                csrfToken.type = 'hidden';
-                csrfToken.name = '_token';
-                csrfToken.value = '{{ csrf_token() }}';
-                form.appendChild(csrfToken);
-                
-                let methodInput = document.createElement('input');
-                methodInput.type = 'hidden';
-                methodInput.name = '_method';
-                methodInput.value = 'DELETE';
-                form.appendChild(methodInput);
                 
                 document.body.appendChild(form);
                 form.submit();
