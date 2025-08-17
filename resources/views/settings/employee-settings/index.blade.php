@@ -136,7 +136,7 @@
                     </div>
                 </div>
 
-                <!-- Time Schedule Management -->
+                {{-- <!-- Time Schedule Management -->
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6">
                         <div class="flex justify-between items-center mb-4">
@@ -206,7 +206,7 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </div> --}}
 
                 <!-- Field Requirements -->
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">

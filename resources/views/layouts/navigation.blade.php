@@ -179,31 +179,9 @@
                              class="absolute top-full left-1/2 transform -translate-x-1/2 z-[60] mt-4 w-80 rounded-md bg-white shadow-xl ring-1 ring-black ring-opacity-5 focus:outline-none border border-gray-200 overflow-hidden"
                              style="display: none;">
                             <div class="py-2">
-                                <a href="{{ route('time-logs.index') }}" 
-                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150">
-                                    <svg class="mr-4 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                    </svg>
-                                    <div class="flex-1">
-                                        <div class="font-medium text-gray-900">View All DTR</div>
-                                        <div class="text-xs text-gray-500 mt-1">Manage daily time records</div>
-                                    </div>
-                                </a>
-                                @can('create time logs')
-                                <a href="{{ route('time-logs.create-bulk') }}" 
-                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-800 transition-colors duration-150 border-t border-gray-100">
-                                    <svg class="mr-4 h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                    </svg>
-                                    <div class="flex-1">
-                                        <div class="font-medium text-purple-700">Bulk Time Entry</div>
-                                        <div class="text-xs text-purple-600 mt-1">Create time logs for entire period</div>
-                                    </div>
-                                </a>
-                                @endcan
                                 @can('import time logs')
                                 <a href="{{ route('dtr.import-form') }}" 
-                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-800 transition-colors duration-150 border-t border-gray-100">
+                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-800 transition-colors duration-150">
                                     <svg class="mr-4 h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                                     </svg>
@@ -383,6 +361,17 @@
                                     <div class="flex-1">
                                         <div class="font-medium text-yellow-700">No Work / Suspended</div>
                                         <div class="text-xs text-yellow-600 mt-1">Weather, Emergency, Maintenance</div>
+                                    </div>
+                                </a>
+                                
+                                <a href="{{ route('settings.time-logs.index') }}" 
+                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-800 transition-colors duration-150">
+                                    <svg class="mr-4 h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <div class="flex-1">
+                                        <div class="font-medium text-blue-700">Time Logs</div>
+                                        <div class="text-xs text-blue-600 mt-1">Schedule, Break period, Grace period</div>
                                     </div>
                                 </a>
                             </div>

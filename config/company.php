@@ -18,36 +18,54 @@ return [
     'sss_employer_number' => env('SSS_EMPLOYER_NUMBER', 'XX-XXXXXXX-X'),
     'philhealth_pen' => env('PHILHEALTH_PEN', 'XX-XXXXXXXXX-X'),
     'pagibig_ern' => env('PAGIBIG_ERN', 'XXXXXXXXXXXX'),
-    
+
     /*
     |--------------------------------------------------------------------------
     | Contact Information
     |--------------------------------------------------------------------------
     */
-    
+
     'company_phone' => env('COMPANY_PHONE', ''),
     'company_email' => env('COMPANY_EMAIL', ''),
     'company_website' => env('COMPANY_WEBSITE', ''),
-    
+
     /*
     |--------------------------------------------------------------------------
     | Authorized Representatives
     |--------------------------------------------------------------------------
     */
-    
+
     'authorized_representative' => env('AUTHORIZED_REPRESENTATIVE', 'HR Manager'),
     'hr_manager' => env('HR_MANAGER', 'HR Manager Name'),
     'ceo_name' => env('CEO_NAME', 'CEO Name'),
-    
+
     /*
     |--------------------------------------------------------------------------
     | Government Forms Settings
     |--------------------------------------------------------------------------
     */
-    
+
     'bir_forms_enabled' => env('BIR_FORMS_ENABLED', true),
     'sss_forms_enabled' => env('SSS_FORMS_ENABLED', true),
     'philhealth_forms_enabled' => env('PHILHEALTH_FORMS_ENABLED', true),
     'pagibig_forms_enabled' => env('PAGIBIG_FORMS_ENABLED', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Grace Period Settings
+    |--------------------------------------------------------------------------
+    |
+    | These settings determine how tolerances are applied to time calculations.
+    |
+    */
+
+    // Minutes before deducting from working hours for late time-in
+    'late_grace_minutes' => 0,
+
+    // Minutes before deducting for early time-out (undertime)
+    'undertime_grace_minutes' => 0,
+
+    // Minutes before counting as overtime
+    'overtime_threshold_minutes' => 0,
 
 ];

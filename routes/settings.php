@@ -10,13 +10,13 @@ use App\Http\Controllers\Settings\NoWorkSuspendedSettingController;
 use App\Http\Controllers\Settings\EmployeeSettingController;
 
 Route::middleware(['auth', 'verified'])->prefix('settings')->name('settings.')->group(function () {
-    
+
     // Employee Settings
     Route::get('employee', [EmployeeSettingController::class, 'index'])->name('employee.index');
     Route::post('employee', [EmployeeSettingController::class, 'update'])->name('employee.update');
     Route::post('employee/reset', [EmployeeSettingController::class, 'reset'])->name('employee.reset');
     Route::get('employee/next-number', [EmployeeSettingController::class, 'getNextEmployeeNumber'])->name('employee.next-number');
-    
+
     // Pay Schedule Settings
     Route::get('pay-schedules', [PayScheduleSettingController::class, 'index'])->name('pay-schedules.index');
     Route::get('pay-schedules/{paySchedule}', [PayScheduleSettingController::class, 'show'])->name('pay-schedules.show');
@@ -65,4 +65,26 @@ Route::middleware(['auth', 'verified'])->prefix('settings')->name('settings.')->
         ->name('no-work.cancel');
     Route::get('no-work/{noWork}/affected-employees', [NoWorkSuspendedSettingController::class, 'getAffectedEmployees'])
         ->name('no-work.affected-employees');
+
+    // Time Logs Settings
+    Route::get('time-logs', [\App\Http\Controllers\Settings\TimeLogSettingController::class, 'index'])
+        ->name('time-logs.index');
+
+    // Day and Time Schedule Management
+    Route::resource('time-logs/day-schedules', \App\Http\Controllers\Settings\DayScheduleController::class, [
+        'as' => 'time-logs'
+    ]);
+    Route::resource('time-logs/time-schedules', \App\Http\Controllers\Settings\TimeScheduleController::class, [
+        'as' => 'time-logs'
+    ]);
+
+    // Break Period Management
+    Route::post('time-logs/time-schedules/{timeSchedule}/break-periods', [\App\Http\Controllers\Settings\TimeScheduleController::class, 'updateBreakPeriods'])
+        ->name('time-logs.time-schedules.break-periods.update');
+
+    // Grace Period Settings
+    Route::get('time-logs/grace-period', [\App\Http\Controllers\Settings\GracePeriodController::class, 'index'])
+        ->name('time-logs.grace-period.index');
+    Route::post('time-logs/grace-period', [\App\Http\Controllers\Settings\GracePeriodController::class, 'update'])
+        ->name('time-logs.grace-period.update');
 });

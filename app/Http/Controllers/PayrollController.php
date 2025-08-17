@@ -848,7 +848,7 @@ class PayrollController extends Controller
             // Get rate configuration for breakdown display
             $rateConfig = $timeLog->getRateConfiguration();
             $displayName = $rateConfig ? $rateConfig->display_name : 'Regular Day';
-            
+
             // Categorize pay by log type
             $logType = $timeLog->log_type;
             $regularAmount = $payAmounts['regular_amount'] ?? 0;
@@ -888,7 +888,7 @@ class PayrollController extends Controller
             if (str_contains($logType, 'holiday')) {
                 $holidayPay += $regularAmount;
                 $holidayHours += $timeLog->regular_hours ?? 0;
-                
+
                 // Track holiday breakdown
                 if ($regularAmount > 0) {
                     if (!isset($holidayBreakdown[$displayName])) {
@@ -909,7 +909,7 @@ class PayrollController extends Controller
                 $basicPay += $regularAmount;
             }
         }
-        
+
         return [
             'total_gross' => $totalGrossPay,
             'basic_pay' => $basicPay,
