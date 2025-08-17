@@ -1019,9 +1019,7 @@ class PayrollController extends Controller
         }
 
         // Store pay breakdown for later use (can be saved to payroll details)
-        if (property_exists($this, 'currentPayBreakdown')) {
-            $this->currentPayBreakdown = $payBreakdown;
-        }
+        // Removed currentPayBreakdown property assignment as it's not defined
 
         return $totalGrossPay;
     }
@@ -4043,8 +4041,16 @@ class PayrollController extends Controller
                 continue;
             }
 
-            // Recalculate hours using the current logic
-            $timeLogController->calculateHours($timeLog);
+            // Recalculate hours using the dynamic calculation method
+            $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
+            
+            // Update the stored values with the new calculations
+            $timeLog->regular_hours = $dynamicCalculation['regular_hours'];
+            $timeLog->overtime_hours = $dynamicCalculation['overtime_hours'];
+            $timeLog->total_hours = $dynamicCalculation['total_hours'];
+            $timeLog->late_hours = $dynamicCalculation['late_hours'];
+            $timeLog->undertime_hours = $dynamicCalculation['undertime_hours'];
+            $timeLog->save();
         }
 
         Log::info('Recalculated time logs for payroll', [
@@ -5242,6 +5248,15 @@ class PayrollController extends Controller
         $employeeDtr = [];
         foreach ($periodDates as $date) {
             $timeLog = $timeLogs->get($date, collect())->first();
+
+            // For draft payrolls, add dynamic calculation to time log object for DTR display
+            if ($timeLog && $timeLog->time_in && $timeLog->time_out && $timeLog->remarks !== 'Incomplete Time Record') {
+                $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
+                $timeLog->dynamic_regular_hours = $dynamicCalculation['regular_hours'];
+                $timeLog->dynamic_overtime_hours = $dynamicCalculation['overtime_hours'];
+                $timeLog->dynamic_total_hours = $dynamicCalculation['total_hours'];
+            }
+
             $employeeDtr[$date] = $timeLog;
         }
         $dtrData = [$employee->id => $employeeDtr];
@@ -5265,9 +5280,15 @@ class PayrollController extends Controller
                     ];
                 }
 
-                $employeeBreakdown[$logType]['regular_hours'] += $timeLog->regular_hours ?? 0;
-                $employeeBreakdown[$logType]['overtime_hours'] += $timeLog->overtime_hours ?? 0;
-                $employeeBreakdown[$logType]['total_hours'] += $timeLog->total_hours ?? 0;
+                // Use dynamic calculation for draft payroll
+                $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
+                $regularHours = $dynamicCalculation['regular_hours'];
+                $overtimeHours = $dynamicCalculation['overtime_hours'];
+                $totalHours = $dynamicCalculation['total_hours'];
+
+                $employeeBreakdown[$logType]['regular_hours'] += $regularHours;
+                $employeeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
+                $employeeBreakdown[$logType]['total_hours'] += $totalHours;
                 $employeeBreakdown[$logType]['days_count']++;
 
                 // Get rate configuration for this type

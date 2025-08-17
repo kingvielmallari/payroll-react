@@ -174,7 +174,7 @@ class TimeLogController extends Controller
                 'break_in' => $validated['break_in'],
                 'break_out' => $validated['break_out'],
             ]);
-            $tempTimeLog->employee = $employee;
+            $tempTimeLog->setRelation('employee', $employee);
 
             // Calculate using dynamic method
             $calculatedHours = $this->calculateDynamicWorkingHours($tempTimeLog);
@@ -374,7 +374,7 @@ class TimeLogController extends Controller
 
             // Get employee for schedule information
             $employee = Employee::find($validated['employee_id']);
-            $timeLog->employee = $employee;
+            $timeLog->setRelation('employee', $employee);
 
             // Calculate using dynamic method
             $calculatedHours = $this->calculateDynamicWorkingHours($timeLog);
@@ -1701,143 +1701,142 @@ class TimeLogController extends Controller
      */
     private function calculateDynamicWorkingHours(TimeLog $timeLog)
     {
-        $timeIn = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_in);
-        $timeOut = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_out);
+        // Parse times properly - handle both string and Carbon objects
+        $logDate = $timeLog->log_date instanceof Carbon ? $timeLog->log_date : Carbon::parse($timeLog->log_date);
+
+        if (is_string($timeLog->time_in)) {
+            $actualTimeIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->time_in);
+        } else {
+            $actualTimeIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->time_in->format('H:i:s'));
+        }
+
+        if (is_string($timeLog->time_out)) {
+            $actualTimeOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->time_out);
+        } else {
+            $actualTimeOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->time_out->format('H:i:s'));
+        }
 
         // Handle next day time out
-        if ($timeOut->lt($timeIn)) {
-            $timeOut->addDay();
+        if ($actualTimeOut->lt($actualTimeIn)) {
+            $actualTimeOut->addDay();
         }
 
         // Get employee's time schedule
         $employee = $timeLog->employee;
         $timeSchedule = $employee->timeSchedule ?? null;
 
-        // Default to 8-5 schedule if no time schedule is set
+        // Get scheduled times - use 8-5 as default if no schedule
         $scheduledStartTime = $timeSchedule ? $timeSchedule->time_in->format('H:i') : '08:00';
         $scheduledEndTime = $timeSchedule ? $timeSchedule->time_out->format('H:i') : '17:00';
 
-        // Calculate scheduled work hours
-        $schedStart = Carbon::parse($timeLog->log_date . ' ' . $scheduledStartTime);
-        $schedEnd = Carbon::parse($timeLog->log_date . ' ' . $scheduledEndTime);
+        $schedStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $scheduledStartTime);
+        $schedEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $scheduledEndTime);
 
         // Handle next day scheduled end time
         if ($schedEnd->lt($schedStart)) {
             $schedEnd->addDay();
         }
 
-        // Get grace period settings from database
+        // Get grace period settings
         $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
         $lateGracePeriodMinutes = $gracePeriodSettings->late_grace_minutes;
         $undertimeGracePeriodMinutes = $gracePeriodSettings->undertime_grace_minutes;
         $overtimeThresholdMinutes = $gracePeriodSettings->overtime_threshold_minutes;
 
-        // Apply late grace period logic
-        $lateMinutes = 0;
-        $adjustedTimeIn = $timeIn;
+        // STEP 1: Calculate work period based on employee schedule boundaries
+        // If employee comes in early, start counting from scheduled start time
+        $workStartTime = $actualTimeIn->gt($schedStart) ? $actualTimeIn : $schedStart;
 
-        if ($timeIn->gt($schedStart)) {
-            $actualLateMinutes = $timeIn->diffInMinutes($schedStart);
+        // Work end time is the actual time out
+        $workEndTime = $actualTimeOut;
 
-            if ($actualLateMinutes <= $lateGracePeriodMinutes) {
-                // Within grace period - treat as on time, use scheduled start for calculation
-                $adjustedTimeIn = $schedStart;
-                $lateMinutes = 0;
+        // STEP 2: Calculate working time with proper break handling
+        $breakMinutesToDeduct = 0;
+        $adjustedWorkEndTime = $workEndTime;
+
+        if ($timeLog->break_in && $timeLog->break_out) {
+            // If manual break times provided, use them
+            if (is_string($timeLog->break_in)) {
+                $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
             } else {
-                // Beyond grace period - use actual time in, count full late minutes
-                $adjustedTimeIn = $timeIn;
+                $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in->format('H:i:s'));
+            }
+
+            if (is_string($timeLog->break_out)) {
+                $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
+            } else {
+                $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out->format('H:i:s'));
+            }
+
+            if ($breakOut->gt($breakIn)) {
+                $breakMinutesToDeduct = $breakIn->diffInMinutes($breakOut);
+            }
+        } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+            // Handle scheduled break logic
+            $breakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
+            $breakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
+
+            // Case 1: Employee worked before break started AND after break ended - deduct full break
+            if ($workStartTime->lt($breakStart) && $workEndTime->gt($breakEnd)) {
+                $breakMinutesToDeduct = $breakStart->diffInMinutes($breakEnd);
+            }
+            // Case 2: Employee left at or during break period - only count time before break
+            else if ($workStartTime->lt($breakStart) && $workEndTime->lte($breakEnd)) {
+                // Only count work time before break started
+                $adjustedWorkEndTime = $breakStart;
+            }
+            // Case 3: Employee came during or after break period - only count time after break
+            else if ($workStartTime->gte($breakStart) && $workStartTime->lt($breakEnd)) {
+                // Start counting from break end
+                $workStartTime = $breakEnd;
+            }
+            // Case 4: Employee came after break ended - no adjustment needed
+        }
+
+        // STEP 3: Calculate total working hours
+        $rawWorkingMinutes = $workStartTime->diffInMinutes($adjustedWorkEndTime);
+        $totalWorkingMinutes = max(0, $rawWorkingMinutes - $breakMinutesToDeduct);
+        $totalHours = $totalWorkingMinutes / 60;
+
+        // STEP 4: Calculate late hours (with grace period)
+        $lateMinutes = 0;
+        if ($actualTimeIn->gt($schedStart)) {
+            $actualLateMinutes = $schedStart->diffInMinutes($actualTimeIn);
+
+            // Apply grace period
+            if ($actualLateMinutes > $lateGracePeriodMinutes) {
                 $lateMinutes = $actualLateMinutes;
             }
         }
 
-        // Calculate total minutes worked (this automatically accounts for late start if beyond grace period)
-        $totalMinutes = $timeOut->diffInMinutes($adjustedTimeIn);
-
-        // Subtract break time based on employee's time schedule
+        // STEP 5: Calculate standard work hours (scheduled hours minus break)
+        $standardWorkMinutes = $schedStart->diffInMinutes($schedEnd);
         if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            // Use dynamic break period from time schedule
-            $breakStart = Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_start->format('H:i'));
-            $breakEnd = Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_end->format('H:i'));
+            $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+            $standardWorkMinutes -= $scheduledBreakMinutes;
+        }
+        $standardHours = max(0, $standardWorkMinutes / 60);
 
-            // Only deduct break if employee was present during break period
-            if ($adjustedTimeIn->lte($breakStart) && $timeOut->gte($breakEnd)) {
-                $breakMinutes = $breakEnd->diffInMinutes($breakStart);
-                $totalMinutes -= $breakMinutes;
-            } elseif ($adjustedTimeIn->between($breakStart, $breakEnd) || $timeOut->between($breakStart, $breakEnd)) {
-                // Partial break period overlap
-                $actualBreakStart = max($breakStart, $adjustedTimeIn);
-                $actualBreakEnd = min($breakEnd, $timeOut);
-                if ($actualBreakEnd->gt($actualBreakStart)) {
-                    $partialBreakMinutes = $actualBreakEnd->diffInMinutes($actualBreakStart);
-                    $totalMinutes -= $partialBreakMinutes;
-                }
-            }
-        } elseif ($timeLog->break_in && $timeLog->break_out) {
-            // Fallback to manual break times if no schedule break is set
-            $breakIn = Carbon::parse($timeLog->log_date . ' ' . $timeLog->break_in);
-            $breakOut = Carbon::parse($timeLog->log_date . ' ' . $timeLog->break_out);
+        // STEP 6: Calculate overtime based on threshold
+        $overtimeHours = 0;
+        $overtimeThresholdHours = $overtimeThresholdMinutes / 60;
 
-            if ($breakOut->gt($breakIn)) {
-                $breakMinutes = $breakOut->diffInMinutes($breakIn);
-                $totalMinutes -= $breakMinutes;
-            }
+        if ($totalHours > $overtimeThresholdHours) {
+            // Everything over threshold is overtime
+            $overtimeHours = $totalHours - $overtimeThresholdHours;
         }
 
-        $totalHours = max(0, $totalMinutes / 60);
+        // STEP 7: Calculate regular hours (total - overtime, capped at standard)
+        $regularHours = $totalHours - $overtimeHours;
+        $regularHours = min($regularHours, $standardHours);
 
-        // Calculate scheduled work hours (including break deduction)
-        $scheduledWorkMinutes = $schedEnd->diffInMinutes($schedStart);
-        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            $scheduleBreakMinutes = $timeSchedule->break_end->diffInMinutes($timeSchedule->break_start);
-            $scheduledWorkMinutes -= $scheduleBreakMinutes;
-        }
-        $standardHours = max(0, $scheduledWorkMinutes / 60);
-
-        // Calculate regular hours
-        $regularHours = min($totalHours, $standardHours);
-
-        // Apply undertime grace period
+        // STEP 8: Calculate undertime (with grace period)
         $undertimeHours = 0;
         if ($totalHours < $standardHours) {
             $actualUndertimeMinutes = ($standardHours - $totalHours) * 60;
 
             if ($actualUndertimeMinutes > $undertimeGracePeriodMinutes) {
-                // Beyond grace period - count undertime minutes minus grace period
                 $undertimeHours = ($actualUndertimeMinutes - $undertimeGracePeriodMinutes) / 60;
-            }
-            // Within grace period - no undertime deduction
-        }
-
-        // Calculate overtime hours with threshold
-        $overtimeHours = 0;
-        $actualEndForOT = Carbon::parse($timeLog->log_date . ' ' . $timeLog->time_out);
-        if ($actualEndForOT->lt($timeIn)) {
-            $actualEndForOT->addDay();
-        }
-
-        if ($actualEndForOT->gt($schedEnd)) {
-            $overtimeMinutes = $actualEndForOT->diffInMinutes($schedEnd);
-
-            // Apply overtime threshold
-            if ($overtimeMinutes > $overtimeThresholdMinutes) {
-                $overtimeMinutes -= $overtimeThresholdMinutes;
-
-                // Subtract break time from OT if break extends into OT period
-                if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                    $breakStart = Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_start->format('H:i'));
-                    $breakEnd = Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_end->format('H:i'));
-
-                    if ($breakStart->lt($actualEndForOT) && $breakEnd->gt($schedEnd)) {
-                        $overlapStart = max($breakStart, $schedEnd);
-                        $overlapEnd = min($breakEnd, $actualEndForOT);
-                        if ($overlapEnd->gt($overlapStart)) {
-                            $overlapMinutes = $overlapEnd->diffInMinutes($overlapStart);
-                            $overtimeMinutes -= $overlapMinutes;
-                        }
-                    }
-                }
-
-                $overtimeHours = max(0, $overtimeMinutes / 60);
             }
         }
 
