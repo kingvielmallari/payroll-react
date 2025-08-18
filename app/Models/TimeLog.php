@@ -151,6 +151,7 @@ class TimeLog extends Model
     public static function getAvailableLogTypes()
     {
         $configurations = \App\Models\PayrollRateConfiguration::active()
+            ->where('type_name', 'NOT LIKE', '%night_differential%')  // Exclude night differential types
             ->orderBy('display_name')
             ->get();
 

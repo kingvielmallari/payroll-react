@@ -162,7 +162,7 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
 
     /**
      * Calculate working hours dynamically based on employee schedule and grace periods
-     * (Same logic as TimeLogController)
+     * (Updated to work with ALL day types - regular days, rest days, holidays)
      */
     private function calculateDynamicWorkingHours(\App\Models\TimeLog $timeLog)
     {
@@ -181,7 +181,13 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         $employee = $timeLog->employee;
         $timeSchedule = $employee->timeSchedule ?? null;
 
-        // Get scheduled times - use 8-5 as default if no schedule
+        // Determine day type for context (though we use same logic for all types)
+        $logType = $timeLog->log_type ?? 'regular_workday';
+        $isRestDay = in_array($logType, ['rest_day', 'rest_day_regular_holiday', 'rest_day_special_holiday']);
+        $isHoliday = in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday']);
+
+        // Get scheduled times - use employee schedule for ALL day types
+        // This ensures grace period works consistently across all day types
         $scheduledStartTime = $timeSchedule ? $timeSchedule->time_in->format('H:i') : '08:00';
         $scheduledEndTime = $timeSchedule ? $timeSchedule->time_out->format('H:i') : '17:00';
 
@@ -193,17 +199,17 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
             $schedEnd->addDay();
         }
 
-        // Get grace period settings
+        // Get grace period settings - apply to ALL day types
         $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
         $lateGracePeriodMinutes = $gracePeriodSettings->late_grace_minutes;
         $undertimeGracePeriodMinutes = $gracePeriodSettings->undertime_grace_minutes;
         $overtimeThresholdMinutes = $gracePeriodSettings->overtime_threshold_minutes;
 
         // STEP 1: Calculate work period based on employee schedule boundaries and grace period
-        // Apply late grace period: if employee is late but within grace period, 
+        // Apply late grace period for ALL day types: if employee is late but within grace period, 
         // treat as if they came in at scheduled time
         $workStartTime = $schedStart; // Default to scheduled start time
-        
+
         if ($actualTimeIn->gt($schedStart)) {
             $lateMinutes = $schedStart->diffInMinutes($actualTimeIn);
             if ($lateMinutes > $lateGracePeriodMinutes) {
@@ -216,8 +222,19 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
             $workStartTime = $schedStart;
         }
 
-        // Work end time is the actual time out
+        // Work end time - apply undertime grace period logic
         $workEndTime = $actualTimeOut;
+
+        // Apply undertime grace period: if employee left early but within grace period,
+        // treat as if they left at scheduled time
+        if ($actualTimeOut->lt($schedEnd)) {
+            $earlyMinutes = $actualTimeOut->diffInMinutes($schedEnd);
+            if ($earlyMinutes <= $undertimeGracePeriodMinutes) {
+                // Within grace period, use scheduled end time for calculation
+                $workEndTime = $schedEnd;
+            }
+            // If beyond grace period, use actual time out
+        }
 
         // STEP 2: Calculate working time with proper break handling
         $breakMinutesToDeduct = 0;
@@ -258,12 +275,13 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         $totalWorkingMinutes = max(0, $rawWorkingMinutes - $breakMinutesToDeduct);
         $totalHours = $totalWorkingMinutes / 60;
 
-        // STEP 5: Calculate late hours (consistent with grace period logic)
+        // STEP 5: Calculate late hours (consistent with grace period logic for ALL day types)
         $lateMinutes = 0;
         if ($actualTimeIn->gt($schedStart)) {
             $actualLateMinutes = $schedStart->diffInMinutes($actualTimeIn);
 
             // Only count late hours if beyond grace period (same logic as work start time)
+            // This applies to regular days, rest days, holidays, etc.
             if ($actualLateMinutes > $lateGracePeriodMinutes) {
                 // Only charge for the time beyond the grace period
                 $lateMinutes = $actualLateMinutes - $lateGracePeriodMinutes;
@@ -358,8 +376,26 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         $lateMinutes = max(0, $timeInCarbon->diffInMinutes($standardStartTime));
         $lateHours = $lateMinutes / 60;
 
-        // Calculate undertime hours
-        $undertimeHours = max(0, $standardHours - $totalHours);
+        // Calculate undertime hours with grace period
+        $undertimeHours = 0;
+        if ($timeSchedule) {
+            $schedEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->end_time->format('H:i'));
+            $actualTimeOut = $adjustedWorkEndTime ?? $workEndTime;
+
+            // Check if employee left early
+            if ($actualTimeOut->lt($schedEnd)) {
+                $earlyMinutes = $actualTimeOut->diffInMinutes($schedEnd);
+
+                // Apply undertime grace period
+                if ($earlyMinutes > $undertimeGracePeriodMinutes) {
+                    $shortfallMinutes = $earlyMinutes - $undertimeGracePeriodMinutes;
+                    $undertimeHours = $shortfallMinutes / 60;
+                }
+            }
+        } else {
+            // Fallback: calculate undertime based on standard hours
+            $undertimeHours = max(0, $standardHours - $totalHours);
+        }
 
         return [
             'total_hours' => round($totalHours, 2),

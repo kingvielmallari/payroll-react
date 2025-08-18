@@ -21,10 +21,12 @@ class PayrollDetail extends Model
         'regular_hours',
         'overtime_hours',
         'holiday_hours',
+        'rest_day_hours',
         'night_differential_hours',
         'regular_pay',
         'overtime_pay',
         'holiday_pay',
+        'rest_day_pay',
         'night_differential_pay',
         'allowances',
         'bonuses',
@@ -50,10 +52,12 @@ class PayrollDetail extends Model
         'regular_hours' => 'decimal:2',
         'overtime_hours' => 'decimal:2',
         'holiday_hours' => 'decimal:2',
+        'rest_day_hours' => 'decimal:2',
         'night_differential_hours' => 'decimal:2',
         'regular_pay' => 'decimal:2',
         'overtime_pay' => 'decimal:2',
         'holiday_pay' => 'decimal:2',
+        'rest_day_pay' => 'decimal:2',
         'night_differential_pay' => 'decimal:2',
         'allowances' => 'decimal:2',
         'bonuses' => 'decimal:2',
@@ -113,23 +117,23 @@ class PayrollDetail extends Model
     {
         $basicSalary = $this->basic_salary;
         $grossPay = $this->gross_pay;
-        
+
         // Reset contributions
         $this->sss_contribution = 0;
         $this->philhealth_contribution = 0;
         $this->pagibig_contribution = 0;
-        
+
         // Only calculate if employee has benefits
         if ($this->employee && $this->employee->benefits_status === 'with_benefits') {
             // Get active government deduction settings
             $deductionSettings = \App\Models\DeductionTaxSetting::active()
                 ->where('type', 'government')
                 ->get();
-            
+
             foreach ($deductionSettings as $setting) {
                 if ($setting->tax_table_type !== 'withholding_tax') {
                     $amount = $setting->calculateDeduction($basicSalary, $this->overtime_pay, $this->bonuses, $this->allowances, $grossPay);
-                    
+
                     // Map to appropriate field based on code
                     switch ($setting->code) {
                         case 'sss':
@@ -154,31 +158,31 @@ class PayrollDetail extends Model
     {
         $basicSalary = $this->basic_salary;
         $grossPay = $this->gross_pay;
-        
+
         // Reset contributions
         $this->sss_contribution = 0;
         $this->philhealth_contribution = 0;
         $this->pagibig_contribution = 0;
-        
+
         // Only calculate if employee has benefits
         if ($this->employee && $this->employee->benefits_status === 'with_benefits') {
             // Get active government deduction settings
             $deductionSettings = \App\Models\DeductionTaxSetting::active()
                 ->where('type', 'government')
                 ->get();
-            
+
             foreach ($deductionSettings as $setting) {
                 if ($setting->tax_table_type !== 'withholding_tax') {
                     // Calculate full contribution amount
                     $fullAmount = $setting->calculateDeduction($basicSalary, $this->overtime_pay, $this->bonuses, $this->allowances, $grossPay);
-                    
+
                     // Apply employer sharing if enabled
                     $employeeShare = $fullAmount;
                     if ($setting->share_with_employer && in_array($setting->tax_table_type, ['sss', 'philhealth', 'pagibig'])) {
                         // Employee pays only 50% when sharing is enabled
                         $employeeShare = $fullAmount * 0.5;
                     }
-                    
+
                     // Map to appropriate field based on code
                     switch ($setting->code) {
                         case 'sss':
@@ -202,25 +206,25 @@ class PayrollDetail extends Model
     public function calculateWithholdingTax()
     {
         $this->withholding_tax = 0;
-        
+
         // Only calculate if employee has benefits
         if ($this->employee && $this->employee->benefits_status === 'with_benefits') {
             // Calculate taxable income (gross pay minus government deductions)
             $taxableIncome = $this->gross_pay - $this->sss_contribution - $this->philhealth_contribution - $this->pagibig_contribution;
-            
+
             // Get active withholding tax settings
             $taxSettings = \App\Models\DeductionTaxSetting::active()
                 ->where('type', 'government')
                 ->where('tax_table_type', 'withholding_tax')
                 ->first();
-            
+
             if ($taxSettings) {
                 $this->withholding_tax = $taxSettings->calculateDeduction(
-                    $this->basic_salary, 
-                    $this->overtime_pay, 
-                    $this->bonuses, 
-                    $this->allowances, 
-                    $this->gross_pay, 
+                    $this->basic_salary,
+                    $this->overtime_pay,
+                    $this->bonuses,
+                    $this->allowances,
+                    $this->gross_pay,
                     $taxableIncome
                 );
             }
@@ -232,14 +236,14 @@ class PayrollDetail extends Model
      */
     public function calculateTotalDeductions()
     {
-        $this->total_deductions = $this->sss_contribution + 
-                                 $this->philhealth_contribution + 
-                                 $this->pagibig_contribution + 
-                                 $this->withholding_tax + 
-                                 $this->late_deductions + 
-                                 $this->undertime_deductions + 
-                                 $this->cash_advance_deductions +
-                                 $this->other_deductions;
+        $this->total_deductions = $this->sss_contribution +
+            $this->philhealth_contribution +
+            $this->pagibig_contribution +
+            $this->withholding_tax +
+            $this->late_deductions +
+            $this->undertime_deductions +
+            $this->cash_advance_deductions +
+            $this->other_deductions;
     }
 
     /**
@@ -256,27 +260,27 @@ class PayrollDetail extends Model
     public function calculateCashAdvanceDeductions()
     {
         $this->cash_advance_deductions = 0;
-        
+
         // Find approved cash advances for this employee with outstanding balance
         $activeCashAdvances = \App\Models\CashAdvance::where('employee_id', $this->employee_id)
             ->where('status', 'approved')
             ->where('outstanding_balance', '>', 0)
             ->get();
-            
+
         $totalDeduction = 0;
-        
+
         foreach ($activeCashAdvances as $cashAdvance) {
             // Calculate installment amount
             $installmentAmount = $cashAdvance->approved_amount / $cashAdvance->installments;
-            
+
             // Don't exceed the outstanding balance
             $deductionAmount = min($installmentAmount, $cashAdvance->outstanding_balance);
-            
+
             if ($deductionAmount > 0) {
                 $totalDeduction += $deductionAmount;
             }
         }
-        
+
         $this->cash_advance_deductions = $totalDeduction;
     }
 
@@ -288,20 +292,20 @@ class PayrollDetail extends Model
         if ($this->cash_advance_deductions <= 0) {
             return;
         }
-        
+
         // Find approved cash advances for this employee
         $activeCashAdvances = \App\Models\CashAdvance::where('employee_id', $this->employee_id)
             ->where('status', 'approved')
             ->where('outstanding_balance', '>', 0)
             ->get();
-            
+
         foreach ($activeCashAdvances as $cashAdvance) {
             // Calculate installment amount
             $installmentAmount = $cashAdvance->approved_amount / $cashAdvance->installments;
-            
+
             // Don't exceed the outstanding balance
             $deductionAmount = min($installmentAmount, $cashAdvance->outstanding_balance);
-            
+
             if ($deductionAmount > 0) {
                 // Record the payment
                 $cashAdvance->recordPayment($deductionAmount, $this->payroll_id, $this->id);
@@ -355,7 +359,7 @@ class PayrollDetail extends Model
         if ($taxableIncome <= 66667) return 1875 + (($taxableIncome - 33333) * 0.20);
         if ($taxableIncome <= 166667) return 8541.67 + (($taxableIncome - 66667) * 0.25);
         if ($taxableIncome <= 666667) return 33541.67 + (($taxableIncome - 166667) * 0.30);
-        
+
         return 183541.67 + (($taxableIncome - 666667) * 0.35);
     }
 }

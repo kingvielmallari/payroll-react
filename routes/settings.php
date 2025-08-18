@@ -87,4 +87,8 @@ Route::middleware(['auth', 'verified'])->prefix('settings')->name('settings.')->
         ->name('time-logs.grace-period.index');
     Route::post('time-logs/grace-period', [\App\Http\Controllers\Settings\GracePeriodController::class, 'update'])
         ->name('time-logs.grace-period.update');
+
+    // Night Differential Settings
+    Route::post('time-logs/night-differential', [\App\Http\Controllers\Settings\NightDifferentialController::class, 'update'])
+        ->name('time-logs.night-differential.update');
 });

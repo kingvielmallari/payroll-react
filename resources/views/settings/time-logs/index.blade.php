@@ -25,7 +25,7 @@
         </div>
 
         <!-- Main Content -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
             <!-- Day Schedules -->
             <div class="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -110,6 +110,14 @@
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
                             <p class="text-xs text-gray-500 mt-1">Minutes before counting as overtime</p>
                         </div>
+
+                        <div>
+                            <label for="undertime_grace_minutes" class="block text-sm font-medium text-gray-700">Undertime Grace Period (minutes)</label>
+                            <input type="number" id="undertime_grace_minutes" name="undertime_grace_minutes" min="0" max="120" 
+                                   value="{{ $gracePeriodData['undertime_grace_minutes'] }}"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                            <p class="text-xs text-gray-500 mt-1">Minutes before deducting for early time out</p>
+                        </div>
                         
                         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md font-medium">
                             Update Grace Periods
@@ -118,6 +126,83 @@
                     
                     <!-- Information Section -->
                    
+                </div>
+            </div>
+
+            <!-- Night Differential Settings -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold text-gray-900">Night Differential Settings</h2>
+                    <p class="text-gray-600 text-sm mt-1">Configure night shift premium rates</p>
+                </div>
+                <div class="p-6">
+                    <form id="nightDifferentialForm" class="space-y-4">
+                        @csrf
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="nd_start_time" class="block text-sm font-medium text-gray-700">Start Time</label>
+                                <input type="time" id="nd_start_time" name="start_time" 
+                                       value="{{ substr($nightDifferentialData['start_time'], 0, 5) }}"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="nd_end_time" class="block text-sm font-medium text-gray-700">End Time</label>
+                                <input type="time" id="nd_end_time" name="end_time" 
+                                       value="{{ substr($nightDifferentialData['end_time'], 0, 5) }}"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label for="nd_rate_percentage" class="block text-sm font-medium text-gray-700">Night Differential Rate (%)</label>
+                            <div class="mt-1 relative rounded-md shadow-sm">
+                                <input type="number" id="nd_rate_percentage" name="rate_percentage" 
+                                       value="{{ round(($nightDifferentialData['rate_multiplier'] - 1) * 100, 2) }}" 
+                                       min="0" max="100" step="0.01"
+                                       class="block w-full pr-8 rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm"
+                                       placeholder="10"
+                                       oninput="updateMultiplierPreview()">
+                                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-500 sm:text-sm">%</span>
+                                </div>
+                            </div>
+                            <input type="hidden" id="nd_rate_multiplier" name="rate_multiplier" 
+                                   value="{{ $nightDifferentialData['rate_multiplier'] }}">
+                            <p class="text-xs text-gray-500 mt-1">
+                                Enter percentage • Multiplier: <span id="multiplier_preview">{{ $nightDifferentialData['rate_multiplier'] }}</span>
+                            </p>
+                        </div>
+                        
+                        <div>
+                            <label for="nd_description" class="block text-sm font-medium text-gray-700">Description</label>
+                            <input type="text" id="nd_description" name="description" 
+                                   value="{{ $nightDifferentialData['description'] }}"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm"
+                                   placeholder="e.g., Standard night differential">
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <input type="checkbox" id="nd_is_active" name="is_active" value="1" 
+                                   {{ $nightDifferentialData['is_active'] ? 'checked' : '' }}
+                                   class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                            <label for="nd_is_active" class="ml-2 block text-sm text-gray-700">
+                                Enable Night Differential
+                            </label>
+                        </div>
+                        
+                        <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-md font-medium">
+                            Update Night Differential
+                        </button>
+                    </form>
+                    
+                    <div class="mt-4 p-3 bg-purple-50 rounded-md">
+                        <p class="text-sm text-purple-800">
+                            <strong>Example:</strong> 10 PM - 5 AM with 10% differential applies premium to all hours worked during night shift.
+                        </p>
+                        <p class="text-xs text-purple-600 mt-1">
+                            OT + ND: Regular OT (25%) + ND (10%) = Combined premium for overtime during night shift
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -692,7 +777,7 @@ document.getElementById('gracePeriodForm').addEventListener('submit', function(e
     
     const formData = new FormData(this);
     
-    fetch('/payroll-link/settings/time-logs/grace-period', {
+    fetch('{{ route('settings.time-logs.grace-period.update') }}', {
         method: 'POST',
         body: formData,
         headers: {
@@ -708,6 +793,50 @@ document.getElementById('gracePeriodForm').addEventListener('submit', function(e
     })
     .catch(error => {
         console.error('Error:', error);
+    });
+});
+
+// Function to update multiplier preview in real-time
+function updateMultiplierPreview() {
+    const percentageInput = document.getElementById('nd_rate_percentage');
+    const multiplierPreview = document.getElementById('multiplier_preview');
+    const percentage = parseFloat(percentageInput.value) || 0;
+    const multiplier = 1 + (percentage / 100);
+    multiplierPreview.textContent = multiplier.toFixed(4);
+}
+
+// Night Differential Form
+document.getElementById('nightDifferentialForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Convert percentage to multiplier before submitting
+    const percentageInput = document.getElementById('nd_rate_percentage');
+    const multiplierInput = document.getElementById('nd_rate_multiplier');
+    const percentage = parseFloat(percentageInput.value) || 0;
+    const multiplier = 1 + (percentage / 100);
+    multiplierInput.value = multiplier.toFixed(4);
+    
+    const formData = new FormData(this);
+    
+    fetch('{{ route("settings.time-logs.night-differential.update") }}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+        } else {
+            alert('Error updating night differential settings');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating night differential settings');
     });
 });
 </script>

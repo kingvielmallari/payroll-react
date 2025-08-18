@@ -611,9 +611,11 @@ class PayrollController extends Controller
                         'regular_hours' => $payrollCalculation['hours_worked'] ?? 0,
                         'overtime_hours' => $payrollCalculation['overtime_hours'] ?? 0,
                         'holiday_hours' => $payrollCalculation['holiday_hours'] ?? 0,
+                        'rest_day_hours' => $payrollCalculation['rest_day_hours'] ?? 0,
                         'regular_pay' => $payrollCalculation['regular_pay'] ?? 0, // Use the calculated basic pay
                         'overtime_pay' => $payrollCalculation['overtime_pay'] ?? 0,
                         'holiday_pay' => $payrollCalculation['holiday_pay'] ?? 0,
+                        'rest_day_pay' => $payrollCalculation['rest_day_pay'] ?? 0,
                         'allowances' => $payrollCalculation['allowances'] ?? 0,
                         'bonuses' => $payrollCalculation['bonuses'] ?? 0,
                         'gross_pay' => $payrollCalculation['gross_pay'] ?? 0,
@@ -765,6 +767,7 @@ class PayrollController extends Controller
             'regular_pay' => $grossPayData['basic_pay'],      // Basic pay for regular work
             'overtime_pay' => $grossPayData['overtime_pay'],
             'holiday_pay' => $grossPayData['holiday_pay'],
+            'rest_day_pay' => $grossPayData['rest_day_pay'] ?? 0,
             'allowances' => $allowancesTotal,
             'allowances_details' => $allowancesData['details'],
             'bonuses' => $bonusesTotal,
@@ -783,6 +786,7 @@ class PayrollController extends Controller
             'regular_hours' => $regularHours,
             'overtime_hours' => $overtimeHours,
             'holiday_hours' => $holidayHours,
+            'rest_day_hours' => $grossPayData['rest_day_hours'] ?? 0,
             'late_hours' => $lateHours,
             'undertime_hours' => $undertimeHours,
             'late_deductions' => $lateDeductions,
@@ -846,13 +850,16 @@ class PayrollController extends Controller
                 'total_gross' => $basicPay,
                 'basic_pay' => $basicPay,
                 'holiday_pay' => 0,
+                'rest_day_pay' => 0,
                 'overtime_pay' => 0,
                 'regular_hours' => $hoursWorked,
                 'overtime_hours' => 0,
                 'holiday_hours' => 0,
+                'rest_day_hours' => 0,
                 'pay_breakdown' => [],
                 'overtime_breakdown' => [],
                 'holiday_breakdown' => [],
+                'rest_day_breakdown' => [],
             ];
         }
 
@@ -862,15 +869,18 @@ class PayrollController extends Controller
         $totalGrossPay = 0;
         $basicPay = 0;
         $holidayPay = 0;
+        $restDayPay = 0;
         $overtimePay = 0;
         $regularHours = 0;
         $overtimeHours = 0;
         $holidayHours = 0;
+        $restDayHours = 0;
 
         // Detailed breakdowns
         $payBreakdown = [];
         $overtimeBreakdown = [];
         $holidayBreakdown = [];
+        $restDayBreakdown = [];
 
         // Process each time log with its rate multiplier (exclude incomplete records)
         foreach ($timeLogs as $timeLog) {
@@ -948,8 +958,22 @@ class PayrollController extends Controller
                     $holidayBreakdown[$displayName]['amount'] += $regularAmount;
                 }
             } elseif (str_contains($logType, 'rest_day')) {
-                // Rest day work is separate category but for now add to basic
-                $basicPay += $regularAmount;
+                // Rest day work is separate category
+                $restDayPay += $regularAmount;
+                $restDayHours += $timeLog->regular_hours ?? 0;
+
+                // Track rest day breakdown
+                if ($regularAmount > 0) {
+                    if (!isset($restDayBreakdown[$displayName])) {
+                        $restDayBreakdown[$displayName] = [
+                            'hours' => 0,
+                            'amount' => 0,
+                            'rate' => $hourlyRate * ($rateConfig ? $rateConfig->regular_rate_multiplier : 1.0),
+                        ];
+                    }
+                    $restDayBreakdown[$displayName]['hours'] += $timeLog->regular_hours ?? 0;
+                    $restDayBreakdown[$displayName]['amount'] += $regularAmount;
+                }
             } else {
                 // Regular workday and other types
                 $basicPay += $regularAmount;
@@ -960,13 +984,16 @@ class PayrollController extends Controller
             'total_gross' => $totalGrossPay,
             'basic_pay' => $basicPay,
             'holiday_pay' => $holidayPay,
+            'rest_day_pay' => $restDayPay,
             'overtime_pay' => $overtimePay,
             'regular_hours' => $regularHours,
             'overtime_hours' => $overtimeHours,
             'holiday_hours' => $holidayHours,
+            'rest_day_hours' => $restDayHours,
             'pay_breakdown' => $payBreakdown,
             'overtime_breakdown' => $overtimeBreakdown,
             'holiday_breakdown' => $holidayBreakdown,
+            'rest_day_breakdown' => $restDayBreakdown,
         ];
     }
 
@@ -5030,8 +5057,8 @@ class PayrollController extends Controller
                 $payBreakdownByEmployee[$detail->employee_id] = [
                     'basic_pay' => $detail->regular_pay ?? 0,
                     'holiday_pay' => $detail->holiday_pay ?? 0,
+                    'rest_day_pay' => $detail->rest_day_pay ?? 0,
                     'overtime_pay' => $detail->overtime_pay ?? 0,
-                    'rest_day_pay' => 0, // You may need to add this field to PayrollDetail if needed
                 ];
             } else {
                 // For draft payrolls, calculate dynamically from time logs
@@ -5040,6 +5067,8 @@ class PayrollController extends Controller
 
                 $basicPay = 0; // Regular workday pay only
                 $holidayPay = 0; // All holiday-related pay
+                $restDayPay = 0; // Rest day pay
+                $overtimePay = 0; // All overtime pay
 
                 foreach ($employeeBreakdown as $logType => $breakdown) {
                     $rateConfig = $breakdown['rate_config'];
@@ -5050,23 +5079,34 @@ class PayrollController extends Controller
                     $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
 
                     $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
-                    $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                    $overtimePayAmount = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+
+                    // All overtime goes to overtime column regardless of day type
+                    $overtimePay += $overtimePayAmount;
 
                     if ($logType === 'regular_workday') {
-                        $basicPay += $regularPay; // Only add regular pay to basic pay, not overtime
-                    } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
-                        $holidayPay += ($regularPay + $overtimePay); // Holiday pay can include both regular and OT
+                        $basicPay += $regularPay; // Only regular hours pay to basic pay
+                    } elseif (in_array($logType, ['special_holiday', 'regular_holiday'])) {
+                        $holidayPay += $regularPay; // Only regular hours pay to holiday pay
+                    } elseif (in_array($logType, ['rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                        $holidayPay += $regularPay; // Rest day holidays count as holiday pay
+                    } elseif ($logType === 'rest_day') {
+                        $restDayPay += $regularPay; // Only regular hours pay to rest day pay
                     }
                 }
 
                 $payBreakdownByEmployee[$detail->employee_id] = [
                     'basic_pay' => $basicPay,
                     'holiday_pay' => $holidayPay,
+                    'rest_day_pay' => $restDayPay,
+                    'overtime_pay' => $overtimePay,
                 ];
             }
         }
 
         $totalHolidayPay = array_sum(array_column($payBreakdownByEmployee, 'holiday_pay'));
+        $totalRestDayPay = array_sum(array_column($payBreakdownByEmployee, 'rest_day_pay'));
+        $totalOvertimePay = array_sum(array_column($payBreakdownByEmployee, 'overtime_pay'));
 
         // Check if payroll has snapshots (processing/approved status)
         $snapshots = $payroll->snapshots()->get();
@@ -5104,7 +5144,9 @@ class PayrollController extends Controller
             'deductionSettings',
             'timeBreakdowns',
             'payBreakdownByEmployee',
-            'totalHolidayPay'
+            'totalHolidayPay',
+            'totalRestDayPay',
+            'totalOvertimePay'
         ) + [
             'isDynamic' => false
         ] + $additionalData);
@@ -5355,9 +5397,11 @@ class PayrollController extends Controller
         $draftPayrollDetail->regular_hours = $payrollCalculation['regular_hours'] ?? 0;
         $draftPayrollDetail->overtime_hours = $payrollCalculation['overtime_hours'] ?? 0;
         $draftPayrollDetail->holiday_hours = $payrollCalculation['holiday_hours'] ?? 0;
+        $draftPayrollDetail->rest_day_hours = $payrollCalculation['rest_day_hours'] ?? 0;
         $draftPayrollDetail->regular_pay = $payrollCalculation['regular_pay'] ?? 0;
         $draftPayrollDetail->overtime_pay = $payrollCalculation['overtime_pay'] ?? 0;
         $draftPayrollDetail->holiday_pay = $payrollCalculation['holiday_pay'] ?? 0;
+        $draftPayrollDetail->rest_day_pay = $payrollCalculation['rest_day_pay'] ?? 0;
         $draftPayrollDetail->allowances = $payrollCalculation['allowances'] ?? 0;
         $draftPayrollDetail->bonuses = $payrollCalculation['bonuses'] ?? 0;
         $draftPayrollDetail->gross_pay = $payrollCalculation['gross_pay'] ?? 0;
@@ -5467,6 +5511,8 @@ class PayrollController extends Controller
         $hourlyRate = $employee->hourly_rate ?? 0;
         $basicPay = 0;
         $holidayPay = 0;
+        $restDayPay = 0;
+        $overtimePay = 0;
 
         foreach ($employeeBreakdown as $logType => $breakdown) {
             $rateConfig = $breakdown['rate_config'];
@@ -5476,12 +5522,19 @@ class PayrollController extends Controller
             $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
 
             $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
-            $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+            $overtimePayAmount = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+
+            // All overtime goes to overtime column regardless of day type
+            $overtimePay += $overtimePayAmount;
 
             if ($logType === 'regular_workday') {
-                $basicPay += $regularPay;
-            } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
-                $holidayPay += ($regularPay + $overtimePay);
+                $basicPay += $regularPay; // Only regular hours pay to basic pay
+            } elseif (in_array($logType, ['special_holiday', 'regular_holiday'])) {
+                $holidayPay += $regularPay; // Only regular hours pay to holiday pay
+            } elseif (in_array($logType, ['rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                $holidayPay += $regularPay; // Rest day holidays count as holiday pay
+            } elseif ($logType === 'rest_day') {
+                $restDayPay += $regularPay; // Only regular hours pay to rest day pay
             }
         }
 
@@ -5489,6 +5542,8 @@ class PayrollController extends Controller
             $employee->id => [
                 'basic_pay' => $basicPay,
                 'holiday_pay' => $holidayPay,
+                'rest_day_pay' => $restDayPay,
+                'overtime_pay' => $overtimePay,
             ]
         ];
 
@@ -5502,6 +5557,8 @@ class PayrollController extends Controller
             ->get();
 
         $totalHolidayPay = $holidayPay;
+        $totalRestDayPay = $restDayPay;
+        $totalOvertimePay = $overtimePay;
 
         return view('payrolls.show', compact(
             'draftPayroll',
@@ -5511,7 +5568,9 @@ class PayrollController extends Controller
             'deductionSettings',
             'timeBreakdowns',
             'payBreakdownByEmployee',
-            'totalHolidayPay'
+            'totalHolidayPay',
+            'totalRestDayPay',
+            'totalOvertimePay'
         ) + [
             'payroll' => $draftPayroll,
             'isDraft' => true,
