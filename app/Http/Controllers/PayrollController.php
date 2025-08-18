@@ -1660,14 +1660,59 @@ class PayrollController extends Controller
             $timeBreakdowns[$detail->employee_id] = $employeeBreakdown;
         }
 
+        // Determine if payroll uses dynamic calculations (needed for breakdown logic)
+        $isDynamic = $payroll->isDynamic();
+
         // Calculate separate basic pay and holiday pay for each employee
         $payBreakdownByEmployee = [];
         foreach ($payroll->payrollDetails as $detail) {
+            if (!$isDynamic) {
+                // For processing/approved payrolls, use snapshot data if available
+                $snapshot = $payroll->snapshots()->where('employee_id', $detail->employee_id)->first();
+                if ($snapshot) {
+                    // Check if detailed pay breakdown is available in settings_snapshot
+                    $settingsSnapshot = is_string($snapshot->settings_snapshot)
+                        ? json_decode($snapshot->settings_snapshot, true)
+                        : $snapshot->settings_snapshot;
+
+                    if (isset($settingsSnapshot['pay_breakdown'])) {
+                        // Use detailed pay breakdown from snapshot
+                        $payBreakdown = $settingsSnapshot['pay_breakdown'];
+                        $payBreakdownByEmployee[$detail->employee_id] = [
+                            'basic_pay' => $payBreakdown['basic_pay'] ?? 0,
+                            'holiday_pay' => $payBreakdown['holiday_pay'] ?? 0,
+                            'rest_pay' => $payBreakdown['rest_pay'] ?? 0,
+                            'overtime_pay' => $payBreakdown['overtime_pay'] ?? 0,
+                        ];
+                    } else {
+                        // Fallback to individual snapshot fields
+                        $payBreakdownByEmployee[$detail->employee_id] = [
+                            'basic_pay' => $snapshot->regular_pay ?? 0,
+                            'holiday_pay' => $snapshot->holiday_pay ?? 0,
+                            'rest_pay' => 0, // Not available in old snapshots
+                            'overtime_pay' => $snapshot->overtime_pay ?? 0,
+                        ];
+                    }
+
+                    // Log for debugging
+                    Log::info("Using snapshot pay breakdown for employee {$detail->employee_id}", [
+                        'basic_pay' => $payBreakdownByEmployee[$detail->employee_id]['basic_pay'],
+                        'holiday_pay' => $payBreakdownByEmployee[$detail->employee_id]['holiday_pay'],
+                        'rest_pay' => $payBreakdownByEmployee[$detail->employee_id]['rest_pay'],
+                        'overtime_pay' => $payBreakdownByEmployee[$detail->employee_id]['overtime_pay']
+                    ]);
+                    continue;
+                }
+            }
+
+            // For draft payrolls or when no snapshot available, calculate dynamically
             $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
             $hourlyRate = $detail->employee->hourly_rate ?? 0;
 
             $basicPay = 0; // Regular workday pay only
             $holidayPay = 0; // All holiday-related pay
+            $restPay = 0; // Rest day pay
+            $overtimePay = 0; // Overtime pay
 
             foreach ($employeeBreakdown as $logType => $breakdown) {
                 $rateConfig = $breakdown['rate_config'];
@@ -1677,29 +1722,33 @@ class PayrollController extends Controller
                 $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
                 $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
 
-                $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
-                $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                $regularPayAmount = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                $overtimePayAmount = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
 
                 if ($logType === 'regular_workday') {
-                    $basicPay += $regularPay; // Only add regular pay to basic pay, not overtime
+                    $basicPay += $regularPayAmount; // Only regular pay to basic pay
+                    $overtimePay += $overtimePayAmount; // Overtime pay separate
+                } elseif ($logType === 'rest_day') {
+                    $restPay += ($regularPayAmount + $overtimePayAmount); // Rest day pay includes both
                 } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
-                    $holidayPay += ($regularPay + $overtimePay); // Holiday pay can include both regular and OT
+                    $holidayPay += ($regularPayAmount + $overtimePayAmount); // Holiday pay includes both
                 }
             }
 
             $payBreakdownByEmployee[$detail->employee_id] = [
                 'basic_pay' => $basicPay,
                 'holiday_pay' => $holidayPay,
+                'rest_pay' => $restPay,
+                'overtime_pay' => $overtimePay,
             ];
         }
 
-        // Load current dynamic settings for display (if draft status)
-        $isDynamic = $payroll->isDynamic();
+        // Load current dynamic settings for display
         $allowanceSettings = collect();
         $deductionSettings = collect();
 
         if ($isDynamic) {
-            // Get current active settings
+            // Get current active settings for draft payrolls
             $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
                 ->where('type', 'allowance')
                 ->orderBy('sort_order')
@@ -1708,14 +1757,15 @@ class PayrollController extends Controller
                 ->orderBy('sort_order')
                 ->get();
         } else {
-            // For processing/approved payrolls, use snapshot data
+            // For processing/approved payrolls, load and use snapshot data
             $snapshots = $payroll->snapshots()->get();
+
             if ($snapshots->isNotEmpty()) {
                 // Update payroll details with snapshot values to ensure consistency
                 foreach ($payroll->payrollDetails as $detail) {
                     $snapshot = $snapshots->where('employee_id', $detail->employee_id)->first();
                     if ($snapshot) {
-                        // Override detail values with snapshot values
+                        // Override detail values with snapshot values for display consistency
                         $detail->basic_salary = $snapshot->basic_salary;
                         $detail->daily_rate = $snapshot->daily_rate;
                         $detail->hourly_rate = $snapshot->hourly_rate;
@@ -1740,7 +1790,7 @@ class PayrollController extends Controller
                         $detail->total_deductions = $snapshot->total_deductions;
                         $detail->net_pay = $snapshot->net_pay;
 
-                        // Set breakdown data from snapshots
+                        // CRITICAL: Set breakdown data from snapshots for display consistency
                         if ($snapshot->allowances_breakdown) {
                             $detail->earnings_breakdown = json_encode([
                                 'allowances' => is_string($snapshot->allowances_breakdown)
@@ -1749,18 +1799,30 @@ class PayrollController extends Controller
                             ]);
                         }
 
+                        // CRITICAL: Ensure deduction breakdown is properly set from snapshot
                         if ($snapshot->deductions_breakdown) {
-                            $detail->deduction_breakdown = is_string($snapshot->deductions_breakdown)
+                            $deductionBreakdown = is_string($snapshot->deductions_breakdown)
                                 ? json_decode($snapshot->deductions_breakdown, true)
                                 : $snapshot->deductions_breakdown;
+
+                            // Set as a property that can be accessed in the view
+                            $detail->deduction_breakdown = $deductionBreakdown;
+
+                            // Log for debugging
+                            Log::info("Setting deduction breakdown for employee {$detail->employee_id}", [
+                                'payroll_id' => $payroll->id,
+                                'breakdown' => $deductionBreakdown
+                            ]);
                         }
                     }
                 }
 
-                // Get settings from snapshot
+                // Get settings from snapshot for display
                 $firstSnapshot = $snapshots->first();
                 if ($firstSnapshot && $firstSnapshot->settings_snapshot) {
-                    $settingsSnapshot = $firstSnapshot->settings_snapshot;
+                    $settingsSnapshot = is_string($firstSnapshot->settings_snapshot)
+                        ? json_decode($firstSnapshot->settings_snapshot, true)
+                        : $firstSnapshot->settings_snapshot;
 
                     if (isset($settingsSnapshot['allowance_settings'])) {
                         $allowanceSettings = collect($settingsSnapshot['allowance_settings']);
@@ -1769,6 +1831,12 @@ class PayrollController extends Controller
                         $deductionSettings = collect($settingsSnapshot['deduction_settings']);
                     }
                 }
+            } else {
+                // No snapshots found - this shouldn't happen for processing/approved payrolls
+                Log::warning("No snapshots found for non-dynamic payroll", [
+                    'payroll_id' => $payroll->id,
+                    'status' => $payroll->status
+                ]);
             }
         }
 
@@ -2060,7 +2128,13 @@ class PayrollController extends Controller
 
         DB::beginTransaction();
         try {
-            // Create snapshots for all payroll details
+            Log::info("Starting payroll processing", [
+                'payroll_id' => $payroll->id,
+                'payroll_number' => $payroll->payroll_number,
+                'employee_count' => $payroll->payrollDetails->count()
+            ]);
+
+            // Create snapshots for all payroll details (capture exact draft state)
             $this->createPayrollSnapshots($payroll);
 
             // Update payroll status
@@ -2072,13 +2146,19 @@ class PayrollController extends Controller
 
             DB::commit();
 
+            Log::info("Successfully processed payroll", [
+                'payroll_id' => $payroll->id,
+                'snapshot_count' => $payroll->snapshots()->count()
+            ]);
+
             return redirect()->route('payrolls.show', $payroll)
-                ->with('success', 'Payroll submitted for processing! Data has been locked as snapshots.');
+                ->with('success', 'Payroll submitted for processing! Data has been locked as snapshots and will display the same calculations as when it was in draft mode.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to process payroll', [
                 'payroll_id' => $payroll->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return redirect()->route('payrolls.show', $payroll)
@@ -4043,7 +4123,7 @@ class PayrollController extends Controller
 
             // Recalculate hours using the dynamic calculation method
             $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
-            
+
             // Update the stored values with the new calculations
             $timeLog->regular_hours = $dynamicCalculation['regular_hours'];
             $timeLog->overtime_hours = $dynamicCalculation['overtime_hours'];
@@ -4102,6 +4182,11 @@ class PayrollController extends Controller
      */
     private function createPayrollSnapshots(Payroll $payroll)
     {
+        Log::info("Creating snapshots for payroll {$payroll->id}");
+
+        // Delete existing snapshots first
+        $payroll->snapshots()->delete();
+
         // Get all payroll details
         $payrollDetails = $payroll->payrollDetails()->with('employee')->get();
 
@@ -4112,75 +4197,140 @@ class PayrollController extends Controller
         foreach ($payrollDetails as $detail) {
             $employee = $detail->employee;
 
-            // Get breakdown data for allowances and bonuses
+            // For automated payrolls, we need to calculate the earnings exactly as in draft mode
+            // Get the exact calculation used in draft mode
+            $payrollCalculation = $this->calculateEmployeePayrollForPeriod(
+                $employee,
+                $payroll->period_start,
+                $payroll->period_end,
+                $payroll
+            );
+
+            // Use the calculated values from the same method used in draft mode
+            $basicPay = $payrollCalculation['basic_salary'] ?? 0;
+            $holidayPay = $payrollCalculation['holiday_pay'] ?? 0;
+            $overtimePay = $payrollCalculation['overtime_pay'] ?? 0;
+            $restPay = $payrollCalculation['rest_pay'] ?? 0; // If available in calculation
+
+            // Get breakdown data for allowances and bonuses (exactly as they are in draft mode)
             $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
             $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
             $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail);
 
+            // Log the calculated values for debugging
+            Log::info("Snapshot calculation for employee {$employee->id}", [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+                'overtime_pay' => $overtimePay,
+                'rest_pay' => $restPay,
+                'gross_pay' => $payrollCalculation['gross_pay'] ?? 0,
+            ]);
+
             // Get current settings snapshot
             $settingsSnapshot = $this->getCurrentSettingsSnapshot($employee);
 
-            // Calculate corrected total deductions using dynamic calculation
-            $correctedTotalDeductions = 0;
+            // Calculate total deductions exactly as they would be in draft mode
+            // Use the calculated total deductions from the payroll calculation
+            $totalDeductions = $payrollCalculation['total_deductions'] ?? 0;
 
-            // Check if we have active deduction settings for dynamic calculation
-            $activeDeductionSettings = \App\Models\DeductionTaxSetting::active()
-                ->forBenefitStatus($employee->benefits_status)
-                ->get();
+            // Calculate net pay exactly as it would be in draft mode
+            $grossPay = $payrollCalculation['gross_pay'] ?? 0;
+            $netPay = $grossPay - $totalDeductions;
 
-            if ($activeDeductionSettings->isNotEmpty()) {
-                // Use dynamic calculation - sum up the breakdown amounts
-                foreach ($deductionsBreakdown as $deduction) {
-                    $correctedTotalDeductions += $deduction['amount'] ?? 0;
-                }
-            } else {
-                // Fallback to stored values for non-dynamic payrolls (excluding late/undertime as they're already accounted for in hours)
-                $correctedTotalDeductions = $detail->sss_contribution + $detail->philhealth_contribution + $detail->pagibig_contribution + $detail->withholding_tax + $detail->cash_advance_deductions + $detail->other_deductions;
-            }
+            // Create pay breakdown for snapshot
+            $payBreakdown = [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+                'rest_pay' => $restPay,
+                'overtime_pay' => $overtimePay,
+                'total_calculated' => $basicPay + $holidayPay + $restPay + $overtimePay
+            ];
 
-            $correctedNetPay = $detail->gross_pay - $correctedTotalDeductions;
-
-            // Create snapshot
-            \App\Models\PayrollSnapshot::create([
+            // Create snapshot with exact draft mode calculations
+            $snapshot = \App\Models\PayrollSnapshot::create([
                 'payroll_id' => $payroll->id,
                 'employee_id' => $employee->id,
                 'employee_number' => $employee->employee_number,
                 'employee_name' => $employee->first_name . ' ' . $employee->last_name,
                 'department' => $employee->department->name ?? 'N/A',
                 'position' => $employee->position->title ?? 'N/A',
-                'basic_salary' => $detail->basic_salary,
-                'daily_rate' => $detail->daily_rate,
-                'hourly_rate' => $detail->hourly_rate,
-                'days_worked' => $detail->days_worked,
-                'regular_hours' => $detail->regular_hours,
-                'overtime_hours' => $detail->overtime_hours,
-                'holiday_hours' => $detail->holiday_hours,
-                'night_differential_hours' => $detail->night_differential_hours,
-                'regular_pay' => $detail->regular_pay,
-                'overtime_pay' => $detail->overtime_pay,
-                'holiday_pay' => $detail->holiday_pay,
-                'night_differential_pay' => $detail->night_differential_pay,
+                'basic_salary' => $employee->basic_salary ?? 0,
+                'daily_rate' => $employee->daily_rate ?? 0,
+                'hourly_rate' => $employee->hourly_rate ?? 0,
+                'days_worked' => $payrollCalculation['days_worked'] ?? 0,
+                'regular_hours' => $payrollCalculation['regular_hours'] ?? 0,
+                'overtime_hours' => $payrollCalculation['overtime_hours'] ?? 0,
+                'holiday_hours' => $payrollCalculation['holiday_hours'] ?? 0,
+                'night_differential_hours' => $payrollCalculation['night_differential_hours'] ?? 0,
+                'regular_pay' => $basicPay, // Use calculated basic pay
+                'overtime_pay' => $overtimePay, // Use calculated overtime pay
+                'holiday_pay' => $holidayPay, // Use calculated holiday pay
+                'night_differential_pay' => $payrollCalculation['night_differential_pay'] ?? 0,
                 'allowances_breakdown' => $allowancesBreakdown,
-                'allowances_total' => $detail->allowances,
+                'allowances_total' => $payrollCalculation['allowances'] ?? 0,
                 'bonuses_breakdown' => $bonusesBreakdown,
-                'bonuses_total' => $detail->bonuses,
-                'other_earnings' => $detail->other_earnings,
-                'gross_pay' => $detail->gross_pay,
+                'bonuses_total' => $payrollCalculation['bonuses'] ?? 0,
+                'other_earnings' => $payrollCalculation['other_earnings'] ?? 0,
+                'gross_pay' => $grossPay, // Use calculated gross pay
                 'deductions_breakdown' => $deductionsBreakdown,
-                'sss_contribution' => $detail->sss_contribution,
-                'philhealth_contribution' => $detail->philhealth_contribution,
-                'pagibig_contribution' => $detail->pagibig_contribution,
-                'withholding_tax' => $detail->withholding_tax,
+                'sss_contribution' => $payrollCalculation['sss_contribution'] ?? 0,
+                'philhealth_contribution' => $payrollCalculation['philhealth_contribution'] ?? 0,
+                'pagibig_contribution' => $payrollCalculation['pagibig_contribution'] ?? 0,
+                'withholding_tax' => $payrollCalculation['withholding_tax'] ?? 0,
                 'late_deductions' => 0, // Set to 0 as late/undertime are already accounted for in hours
                 'undertime_deductions' => 0, // Set to 0 as late/undertime are already accounted for in hours
-                'cash_advance_deductions' => $detail->cash_advance_deductions,
-                'other_deductions' => $detail->other_deductions,
-                'total_deductions' => $correctedTotalDeductions,
-                'net_pay' => $correctedNetPay,
-                'settings_snapshot' => $settingsSnapshot,
-                'remarks' => 'Snapshot created at ' . now()->format('Y-m-d H:i:s'),
+                'cash_advance_deductions' => $payrollCalculation['cash_advance_deductions'] ?? 0,
+                'other_deductions' => $payrollCalculation['other_deductions'] ?? 0,
+                'total_deductions' => $totalDeductions, // Use calculated total
+                'net_pay' => $netPay, // Use calculated net pay
+                'settings_snapshot' => array_merge($settingsSnapshot, ['pay_breakdown' => $payBreakdown]),
+                'remarks' => 'Snapshot created at ' . now()->format('Y-m-d H:i:s') . ' - Captures exact draft calculations',
+            ]);
+
+            Log::info("Created snapshot for employee {$employee->id} with calculated values", [
+                'payroll_id' => $payroll->id,
+                'employee_id' => $employee->id,
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+                'overtime_pay' => $overtimePay,
+                'rest_pay' => $restPay,
+                'gross_pay' => $grossPay,
+                'total_deductions' => $totalDeductions,
+                'net_pay' => $netPay,
+                'deductions_count' => count($deductionsBreakdown),
             ]);
         }
+
+        Log::info("Successfully created " . count($payrollDetails) . " snapshots for payroll {$payroll->id}");
+    }
+
+    /**
+     * Debug method to view payroll snapshots (for testing/troubleshooting)
+     */
+    public function debugSnapshots(Payroll $payroll)
+    {
+        $this->authorize('view payrolls');
+
+        $snapshots = $payroll->snapshots()->get();
+
+        return response()->json([
+            'payroll_id' => $payroll->id,
+            'payroll_status' => $payroll->status,
+            'payroll_number' => $payroll->payroll_number,
+            'snapshot_count' => $snapshots->count(),
+            'snapshots' => $snapshots->map(function ($snapshot) {
+                return [
+                    'employee_id' => $snapshot->employee_id,
+                    'employee_name' => $snapshot->employee_name,
+                    'gross_pay' => $snapshot->gross_pay,
+                    'total_deductions' => $snapshot->total_deductions,
+                    'net_pay' => $snapshot->net_pay,
+                    'deductions_breakdown' => $snapshot->deductions_breakdown,
+                    'deductions_breakdown_count' => is_array($snapshot->deductions_breakdown) ? count($snapshot->deductions_breakdown) : 0,
+                    'created_at' => $snapshot->created_at,
+                ];
+            })
+        ], 200, [], JSON_PRETTY_PRINT);
     }
 
     /**
@@ -4875,34 +5025,45 @@ class PayrollController extends Controller
         // Calculate separate basic pay and holiday pay for each employee
         $payBreakdownByEmployee = [];
         foreach ($payroll->payrollDetails as $detail) {
-            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+            // For processing/approved payrolls, use stored values from PayrollDetail
+            if ($payroll->status !== 'draft') {
+                $payBreakdownByEmployee[$detail->employee_id] = [
+                    'basic_pay' => $detail->regular_pay ?? 0,
+                    'holiday_pay' => $detail->holiday_pay ?? 0,
+                    'overtime_pay' => $detail->overtime_pay ?? 0,
+                    'rest_day_pay' => 0, // You may need to add this field to PayrollDetail if needed
+                ];
+            } else {
+                // For draft payrolls, calculate dynamically from time logs
+                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                $hourlyRate = $detail->employee->hourly_rate ?? 0;
 
-            $basicPay = 0; // Regular workday pay only
-            $holidayPay = 0; // All holiday-related pay
+                $basicPay = 0; // Regular workday pay only
+                $holidayPay = 0; // All holiday-related pay
 
-            foreach ($employeeBreakdown as $logType => $breakdown) {
-                $rateConfig = $breakdown['rate_config'];
-                if (!$rateConfig) continue;
+                foreach ($employeeBreakdown as $logType => $breakdown) {
+                    $rateConfig = $breakdown['rate_config'];
+                    if (!$rateConfig) continue;
 
-                // Calculate pay amounts using rate multipliers
-                $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
-                $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+                    // Calculate pay amounts using rate multipliers
+                    $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
 
-                $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
-                $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                    $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                    $overtimePay = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
 
-                if ($logType === 'regular_workday') {
-                    $basicPay += $regularPay; // Only add regular pay to basic pay, not overtime
-                } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
-                    $holidayPay += ($regularPay + $overtimePay); // Holiday pay can include both regular and OT
+                    if ($logType === 'regular_workday') {
+                        $basicPay += $regularPay; // Only add regular pay to basic pay, not overtime
+                    } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                        $holidayPay += ($regularPay + $overtimePay); // Holiday pay can include both regular and OT
+                    }
                 }
-            }
 
-            $payBreakdownByEmployee[$detail->employee_id] = [
-                'basic_pay' => $basicPay,
-                'holiday_pay' => $holidayPay,
-            ];
+                $payBreakdownByEmployee[$detail->employee_id] = [
+                    'basic_pay' => $basicPay,
+                    'holiday_pay' => $holidayPay,
+                ];
+            }
         }
 
         $totalHolidayPay = array_sum(array_column($payBreakdownByEmployee, 'holiday_pay'));

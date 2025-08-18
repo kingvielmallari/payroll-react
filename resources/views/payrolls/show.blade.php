@@ -1251,11 +1251,25 @@
                                         </div>
                                         
                                         @if($timeLog)
-                                            @if((isset($timeLog->remarks) && $timeLog->remarks === 'Incomplete Time Record') || (!isset($timeLog->time_in) || !isset($timeLog->time_out) || !$timeLog->time_in || !$timeLog->time_out))
-                                                {{-- Display INC for incomplete records --}}
-                                                <div class="text-red-600 font-bold">
-                                                    INC
-                                                </div>
+                                            @php
+                                                // Check different time log conditions
+                                                $hasTimeIn = isset($timeLog->time_in) && $timeLog->time_in;
+                                                $hasTimeOut = isset($timeLog->time_out) && $timeLog->time_out;
+                                                $isMarkedIncomplete = isset($timeLog->remarks) && $timeLog->remarks === 'Incomplete Time Record';
+                                                
+                                                // Determine display logic:
+                                                // N/A: Both time_in and time_out are missing/null
+                                                // INC: Either time_in OR time_out is missing (but not both) OR explicitly marked as incomplete
+                                                $showNA = !$hasTimeIn && !$hasTimeOut;
+                                                $showINC = $isMarkedIncomplete || ($hasTimeIn && !$hasTimeOut) || (!$hasTimeIn && $hasTimeOut);
+                                            @endphp
+                                            
+                                            @if($showNA)
+                                                {{-- Display N/A when both time_in and time_out are missing --}}
+                                                <div class="text-gray-600 font-bold">N/A</div>
+                                            @elseif($showINC)
+                                                {{-- Display INC for incomplete records (only one time missing or explicitly marked incomplete) --}}
+                                                <div class="text-red-600 font-bold">INC</div>
                                             @else
                                                 <div class="space-y-1">
                                                     {{-- Main work schedule with regular hours --}}

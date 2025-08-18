@@ -134,6 +134,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('payrolls/{payroll}/back-to-draft', [PayrollController::class, 'backToDraft'])
             ->name('payrolls.back-to-draft')
             ->middleware('can:edit payrolls');
+
+        // Debug route for snapshots (can be removed in production)
+        Route::get('payrolls/{payroll}/debug-snapshots', [PayrollController::class, 'debugSnapshots'])
+            ->name('payrolls.debug-snapshots')
+            ->middleware('can:view payrolls');
     });
 
     // Payslip Management
