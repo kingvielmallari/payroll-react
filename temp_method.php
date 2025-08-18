@@ -159,7 +159,34 @@
     $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
 
     $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+
+    // Calculate overtime pay with night differential breakdown
+    $overtimePayAmount = 0;
+    $regularOvertimeHours = $breakdown['regular_overtime_hours'] ?? 0;
+    $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
+
+    if ($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) {
+    // Use breakdown calculation
+
+    // Regular overtime pay
+    if ($regularOvertimeHours > 0) {
+    $overtimePayAmount += $regularOvertimeHours * $hourlyRate * $overtimeMultiplier;
+    }
+
+    // Night differential overtime pay (overtime rate + night differential bonus)
+    if ($nightDiffOvertimeHours > 0) {
+    // Get night differential setting
+    $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+    $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+
+    // Combined rate: base overtime rate + night differential bonus
+    $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+    $overtimePayAmount += $nightDiffOvertimeHours * $hourlyRate * $combinedMultiplier;
+    }
+    } else {
+    // Fallback to simple calculation if no breakdown available
     $overtimePayAmount = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+    }
 
     // All overtime goes to overtime column regardless of day type
     $overtimePay += $overtimePayAmount;

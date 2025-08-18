@@ -1855,18 +1855,21 @@ class TimeLogController extends Controller
         }
         $standardHours = max(0, $standardWorkMinutes / 60);
 
-        // STEP 6: Calculate overtime based on threshold
+        // STEP 6: Calculate overtime based on EMPLOYEE SCHEDULE, not fixed threshold
         $overtimeHours = 0;
         $regularOvertimeHours = 0;
         $nightDifferentialOvertimeHours = 0;
-        $overtimeThresholdHours = $overtimeThresholdMinutes / 60;
 
-        if ($totalHours > $overtimeThresholdHours) {
-            // Everything over threshold is overtime
-            $overtimeHours = $totalHours - $overtimeThresholdHours;
+        // Use employee's actual scheduled working hours as overtime threshold
+        // This ensures overtime calculation is based on their specific schedule
+        $employeeOvertimeThreshold = $standardHours; // Use calculated standard hours as threshold
+
+        if ($totalHours > $employeeOvertimeThreshold) {
+            // Everything over employee's scheduled hours is overtime
+            $overtimeHours = $totalHours - $employeeOvertimeThreshold;
 
             // Calculate night differential period for overtime hours only
-            $nightDiffBreakdown = $this->calculateNightDifferentialHours($workStartTime, $adjustedWorkEndTime, $overtimeThresholdHours);
+            $nightDiffBreakdown = $this->calculateNightDifferentialHours($workStartTime, $adjustedWorkEndTime, $employeeOvertimeThreshold);
             $regularOvertimeHours = $nightDiffBreakdown['regular_overtime'];
             $nightDifferentialOvertimeHours = $nightDiffBreakdown['night_diff_overtime'];
         }
@@ -1907,13 +1910,13 @@ class TimeLogController extends Controller
     /**
      * Calculate night differential hours breakdown for overtime
      */
-    private function calculateNightDifferentialHours($workStartTime, $workEndTime, $overtimeThresholdHours)
+    private function calculateNightDifferentialHours($workStartTime, $workEndTime, $employeeOvertimeThreshold)
     {
         $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
 
         if (!$nightDiffSetting || !$nightDiffSetting->is_active) {
             // No night differential configured, all overtime is regular
-            $totalOvertimeHours = $workStartTime->copy()->addHours($overtimeThresholdHours)->diffInHours($workEndTime, true);
+            $totalOvertimeHours = $workStartTime->copy()->addHours($employeeOvertimeThreshold)->diffInHours($workEndTime, true);
             return [
                 'regular_overtime' => $totalOvertimeHours,
                 'night_diff_overtime' => 0
@@ -1929,8 +1932,8 @@ class TimeLogController extends Controller
             $nightEnd->addDay();
         }
 
-        // Calculate overtime period start (threshold hours after work start)
-        $overtimeStart = $workStartTime->copy()->addHours($overtimeThresholdHours);
+        // Calculate overtime period start (employee's scheduled hours after work start)
+        $overtimeStart = $workStartTime->copy()->addHours($employeeOvertimeThreshold);
 
         // If overtime starts after work ends, no overtime
         if ($overtimeStart->gte($workEndTime)) {

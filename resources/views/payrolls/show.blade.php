@@ -520,9 +520,9 @@
                                                 <!-- Show individual holiday type breakdowns -->
                                                 @foreach($holidayBreakdown as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <div class="flex justify-between">
+                                                        
                                                             <span>{{ $type }}: {{ number_format($data['hours'], 1) }}h</span>
-                                                        </div>
+                                                    
                                                         <div class="text-xs text-gray-600">
                                                             {{ $data['percentage'] }} = ₱{{ number_format($data['amount'], 2) }}
                                                         </div>
@@ -591,9 +591,9 @@
                                                 <!-- Show individual rest day type breakdowns -->
                                                 @foreach($restDayBreakdown as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <div class="flex justify-between">
+                                                       
                                                             <span>{{ $type }}: {{ number_format($data['hours'], 1) }}h</span>
-                                                        </div>
+                                                     
                                                         <div class="text-xs text-gray-600">
                                                             {{ $data['percentage'] }} = ₱{{ number_format($data['amount'], 2) }}
                                                         </div>
@@ -689,9 +689,9 @@
                                             @if(!empty($overtimeBreakdown))
                                                 @foreach($overtimeBreakdown as $ot)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <div class="flex justify-between">
+                                                     
                                                             <span>{{ $ot['name'] }}: {{ number_format($ot['hours'], 1) }}h</span>
-                                                        </div>
+                                                  
                                                         <div class="text-xs text-gray-600">
                                                             {{ $ot['percentage'] }} = ₱{{ number_format($ot['amount'], 2) }}
                                                         </div>
@@ -1448,6 +1448,9 @@
                                                     {{-- Additional overtime schedule if needed --}}
                                                     @if($overtimeHours > 0)
                                                     @php
+                                                        // Get detailed time period breakdown
+                                                        $timePeriodBreakdown = $timeLog->getTimePeriodBreakdown();
+                                                        
                                                         // Get night differential breakdown for DTR display
                                                         $regularOvertimeHours = 0;
                                                         $nightDiffOvertimeHours = 0;
@@ -1464,35 +1467,68 @@
                                                         if ($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0) {
                                                             $regularOvertimeHours = $overtimeHours;
                                                         }
-                                                        
-                                                        // Calculate overtime period (simplified display logic)
-                                                        $overtimeStart = '';
-                                                        $overtimeEnd = '';
-                                                        if ($timeLog->time_out) {
-                                                            $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
-                                                            $workStart = \Carbon\Carbon::parse($timeLog->time_in);
-                                                            
-                                                            // If overtime exists, show a period extending beyond normal hours
-                                                            $overtimeStart = $workEnd->copy()->subHours($overtimeHours)->format('g:i A');
-                                                            $overtimeEnd = $workEnd->format('g:i A');
-                                                        }
                                                     @endphp
-                                                    @if($overtimeStart && $overtimeEnd)
-                                                    <div class="text-orange-600 text-xs">
-                                                        {{ $overtimeStart }} - {{ $overtimeEnd }}
-                                                    </div>
-                                                    @endif
                                                     
-                                                    @if($regularOvertimeHours > 0)
-                                                    <div class="text-orange-600 text-xs">
-                                                        OT: {{ number_format($regularOvertimeHours, 1) }}h
-                                                    </div>
-                                                    @endif
+                                                    {{-- Display detailed time periods --}}
+                                                    @foreach($timePeriodBreakdown as $period)
+                                                        @if($period['type'] !== 'regular') {{-- Skip regular hours, they're shown above --}}
+                                                        <div class="{{ $period['color_class'] }} text-xs">
+                                                            {{ $period['start_time'] }} - {{ $period['end_time'] }}
+                                                            @if($period['type'] === 'night_diff_overtime')
+                                                                (Night Diff: {{ number_format(($period['night_diff_rate'] - 1) * 100, 0) }}%)
+                                                            @endif
+                                                        </div>
+                                                        <div class="{{ $period['color_class'] }} text-xs">
+                                                            @if($period['type'] === 'regular_overtime')
+                                                                OT: {{ number_format($period['hours'], 1) }}h
+                                                            @elseif($period['type'] === 'night_diff_overtime')
+                                                                OT+ND: {{ number_format($period['hours'], 1) }}h
+                                                            @else
+                                                                OT: {{ number_format($period['hours'], 1) }}h
+                                                            @endif
+                                                        </div>
+                                                        @endif
+                                                    @endforeach
                                                     
-                                                    @if($nightDiffOvertimeHours > 0)
-                                                    <div class="text-purple-600 text-xs">
-                                                        OT+ND: {{ number_format($nightDiffOvertimeHours, 1) }}h
-                                                    </div>
+                                                    {{-- Fallback to old display if no breakdown available --}}
+                                                    @if(empty($timePeriodBreakdown) || count($timePeriodBreakdown) <= 1)
+                                                        {{-- Always show the breakdown if we have the data --}}
+                                                        @if($regularOvertimeHours > 0)
+                                                        <div class="text-orange-600 text-xs">
+                                                            OT: {{ number_format($regularOvertimeHours, 1) }}h
+                                                        </div>
+                                                        @endif
+                                                        
+                                                        @if($nightDiffOvertimeHours > 0)
+                                                        <div class="text-purple-600 text-xs">
+                                                            OT+ND: {{ number_format($nightDiffOvertimeHours, 1) }}h
+                                                        </div>
+                                                        @endif
+                                                        
+                                                        {{-- If we have total overtime but no breakdown, show total --}}
+                                                        @if($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0 && $overtimeHours > 0)
+                                                        @php
+                                                            // Calculate overtime period (simplified display logic)
+                                                            $overtimeStart = '';
+                                                            $overtimeEnd = '';
+                                                            if ($timeLog->time_out) {
+                                                                $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
+                                                                $workStart = \Carbon\Carbon::parse($timeLog->time_in);
+                                                                
+                                                                // If overtime exists, show a period extending beyond normal hours
+                                                                $overtimeStart = $workEnd->copy()->subHours($overtimeHours)->format('g:i A');
+                                                                $overtimeEnd = $workEnd->format('g:i A');
+                                                            }
+                                                        @endphp
+                                                        @if($overtimeStart && $overtimeEnd)
+                                                        <div class="text-orange-600 text-xs">
+                                                            {{ $overtimeStart }} - {{ $overtimeEnd }}
+                                                        </div>
+                                                        @endif
+                                                        <div class="text-orange-600 text-xs">
+                                                            OT: {{ number_format($overtimeHours, 1) }}h
+                                                        </div>
+                                                        @endif
                                                     @endif
                                                     @endif
                                                 </div>
