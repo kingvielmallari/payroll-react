@@ -21,9 +21,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Force HTTPS URLs when behind proxy (like Cloudflare)
-        if (config('app.env') === 'production' || env('FORCE_HTTPS', false)) {
-            URL::forceScheme('https');
-        }
+        // if (config('app.env') === 'production' || env('FORCE_HTTPS', false)) {
+        //     URL::forceScheme('https');
+        // }
 
         // Trust proxies (for Cloudflare)
         // if (isset($_SERVER['HTTP_CF_CONNECTING_IP'])) {

@@ -1190,43 +1190,52 @@
                                         $dayTypeColor = 'bg-green-100 text-green-800';
                                         
                                         if ($timeLog) {
-                                            // First check if we have pre-loaded rate config data
-                                            if (isset($timeLog->rate_config_display_name)) {
-                                                $dayType = $timeLog->rate_config_display_name;
-                                            } elseif (((is_object($timeLog) && property_exists($timeLog, 'log_type')) || (is_array($timeLog) && isset($timeLog['log_type']))) && ($timeLog->log_type ?? $timeLog['log_type'] ?? null)) {
-                                                $logType = is_array($timeLog) ? ($timeLog['log_type'] ?? null) : ($timeLog->log_type ?? null);
-                                                
-                                                // Only call getRateConfiguration if this is a proper TimeLog model
+                                            // Get the log_type to determine day type
+                                            $logType = is_array($timeLog) ? ($timeLog['log_type'] ?? null) : ($timeLog->log_type ?? null);
+                                            
+                                            if ($logType) {
+                                                // Map log_type to display names
+                                                switch ($logType) {
+                                                    case 'special_holiday':
+                                                        $dayType = 'Special Holiday';
+                                                        $dayTypeColor = 'bg-red-100 text-red-800';
+                                                        break;
+                                                    case 'regular_holiday':
+                                                        $dayType = 'Regular Holiday';
+                                                        $dayTypeColor = 'bg-red-100 text-red-800';
+                                                        break;
+                                                    case 'rest_day_regular_holiday':
+                                                        $dayType = 'Rest + REG Holiday';
+                                                        $dayTypeColor = 'bg-red-100 text-red-800';
+                                                        break;
+                                                    case 'rest_day_special_holiday':
+                                                        $dayType = 'Rest + SPE Holiday';
+                                                        $dayTypeColor = 'bg-red-100 text-red-800';
+                                                        break;
+                                                    case 'rest_day':
+                                                        $dayType = 'Rest Day';
+                                                        $dayTypeColor = 'bg-blue-100 text-blue-800';
+                                                        break;
+                                                    case 'regular_workday':
+                                                    default:
+                                                        $dayType = 'Regular Day';
+                                                        $dayTypeColor = 'bg-green-100 text-green-800';
+                                                        break;
+                                                }
+                                            } else {
+                                                // Fallback: try to get rate configuration if log_type is null
                                                 if (is_object($timeLog) && method_exists($timeLog, 'getRateConfiguration')) {
                                                     $rateConfig = $timeLog->getRateConfiguration();
                                                     if ($rateConfig) {
                                                         $dayType = $rateConfig->display_name;
-                                                    }
-                                                } else {
-                                                    // Fallback for converted objects or arrays without model methods
-                                                    if (str_contains($logType, 'special_holiday')) {
-                                                        $dayType = 'SPE Holiday';
-                                                    } elseif (str_contains($logType, 'regular_holiday')) {
-                                                        $dayType = 'REG Holiday';
-                                                    } elseif (str_contains($logType, 'rest_day_regular_holiday')) {
-                                                        $dayType = 'Rest + REG Holiday';
-                                                    } elseif (str_contains($logType, 'rest_day_special_holiday')) {
-                                                        $dayType = 'Rest + SPE Holiday';
-                                                    } elseif (str_contains($logType, 'rest_day')) {
-                                                        $dayType = 'Rest Day';
-                                                    } else {
-                                                        $dayType = 'Regular Day';
+                                                        // Set color based on type
+                                                        if (str_contains($dayType, 'Holiday')) {
+                                                            $dayTypeColor = 'bg-red-100 text-red-800';
+                                                        } elseif (str_contains($dayType, 'Rest')) {
+                                                            $dayTypeColor = 'bg-blue-100 text-blue-800';
+                                                        }
                                                     }
                                                 }
-                                            }
-                                            
-                                            // Set color based on type
-                                            if (str_contains($dayType, 'Holiday')) {
-                                                $dayTypeColor = 'bg-red-100 text-red-800';
-                                            } elseif (str_contains($dayType, 'Rest')) {
-                                                $dayTypeColor = 'bg-blue-100 text-blue-800';
-                                            } else {
-                                                $dayTypeColor = 'bg-green-100 text-green-800';
                                             }
                                         } elseif ($isWeekend) {
                                             $dayType = 'Rest Day';
