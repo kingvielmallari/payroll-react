@@ -627,22 +627,60 @@
                                                     $rateConfig = $breakdown['rate_config'];
                                                     $displayName = $rateConfig ? $rateConfig->display_name : 'Regular Day';
                                                     $overtimeHours = $breakdown['overtime_hours'];
+                                                    $regularOvertimeHours = $breakdown['regular_overtime_hours'] ?? 0;
+                                                    $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
                                                     $totalOvertimeHours += $overtimeHours;
                                                     
-                                                    // Calculate overtime amount and percentage
                                                     $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                                    $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
-                                                    $overtimeAmount = $overtimeHours * $hourlyRate * $overtimeMultiplier;
                                                     
-                                                    // Calculate percentage for display - show actual multiplier percentage
-                                                    $percentageDisplay = number_format($overtimeMultiplier * 100, 0) . '%';
+                                                    // Regular overtime breakdown
+                                                    if ($regularOvertimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
+                                                        $overtimeAmount = $regularOvertimeHours * $hourlyRate * $overtimeMultiplier;
+                                                        $percentageDisplay = number_format($overtimeMultiplier * 100, 0) . '%';
+                                                        
+                                                        $overtimeBreakdown[] = [
+                                                            'name' => $displayName . ' OT',
+                                                            'hours' => $regularOvertimeHours,
+                                                            'amount' => $overtimeAmount,
+                                                            'percentage' => $percentageDisplay
+                                                        ];
+                                                    }
                                                     
-                                                    $overtimeBreakdown[] = [
-                                                        'name' => $displayName . ' OT',
-                                                        'hours' => $overtimeHours,
-                                                        'amount' => $overtimeAmount,
-                                                        'percentage' => $percentageDisplay
-                                                    ];
+                                                    // Night differential overtime breakdown
+                                                    if ($nightDiffOvertimeHours > 0) {
+                                                        // Get night differential rate
+                                                        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                                                        $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+                                                        
+                                                        // Base overtime rate + night differential
+                                                        $baseOvertimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
+                                                        $combinedMultiplier = $baseOvertimeMultiplier + ($nightDiffMultiplier - 1); // e.g., 1.25 + 0.10 = 1.35
+                                                        
+                                                        $nightDiffOvertimeAmount = $nightDiffOvertimeHours * $hourlyRate * $combinedMultiplier;
+                                                        $percentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
+                                                        
+                                                        $overtimeBreakdown[] = [
+                                                            'name' => $displayName . ' OT+ND',
+                                                            'hours' => $nightDiffOvertimeHours,
+                                                            'amount' => $nightDiffOvertimeAmount,
+                                                            'percentage' => $percentageDisplay
+                                                        ];
+                                                    }
+                                                    
+                                                    // Fallback: if no breakdown available, show total overtime
+                                                    if ($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0 && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
+                                                        $overtimeAmount = $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                        $percentageDisplay = number_format($overtimeMultiplier * 100, 0) . '%';
+                                                        
+                                                        $overtimeBreakdown[] = [
+                                                            'name' => $displayName . ' OT',
+                                                            'hours' => $overtimeHours,
+                                                            'amount' => $overtimeAmount,
+                                                            'percentage' => $percentageDisplay
+                                                        ];
+                                                    }
                                                 }
                                             }
                                         @endphp
@@ -1354,7 +1392,7 @@
                                                         {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->time_out ? \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A') : 'N/A' }}
                                                     </div>
                                                     {{-- Always show hours, even if 0 --}}
-                                                    <div class="text-blue-600">
+                                                    <div class="text-green-600">
                                                         {{ number_format($regularHours, 1) }}h
                                                     </div>
                                                     @endif
@@ -1410,7 +1448,24 @@
                                                     {{-- Additional overtime schedule if needed --}}
                                                     @if($overtimeHours > 0)
                                                     @php
-                                                        // Calculate overtime period (this is simplified - you may need more logic based on your system)
+                                                        // Get night differential breakdown for DTR display
+                                                        $regularOvertimeHours = 0;
+                                                        $nightDiffOvertimeHours = 0;
+                                                        
+                                                        if ($payroll->status === 'draft') {
+                                                            $regularOvertimeHours = $timeLog->dynamic_regular_overtime_hours ?? 0;
+                                                            $nightDiffOvertimeHours = $timeLog->dynamic_night_diff_overtime_hours ?? 0;
+                                                        } else {
+                                                            $regularOvertimeHours = $timeLog->regular_overtime_hours ?? 0;
+                                                            $nightDiffOvertimeHours = $timeLog->night_diff_overtime_hours ?? 0;
+                                                        }
+                                                        
+                                                        // If breakdown not available, show total
+                                                        if ($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0) {
+                                                            $regularOvertimeHours = $overtimeHours;
+                                                        }
+                                                        
+                                                        // Calculate overtime period (simplified display logic)
                                                         $overtimeStart = '';
                                                         $overtimeEnd = '';
                                                         if ($timeLog->time_out) {
@@ -1427,9 +1482,18 @@
                                                         {{ $overtimeStart }} - {{ $overtimeEnd }}
                                                     </div>
                                                     @endif
+                                                    
+                                                    @if($regularOvertimeHours > 0)
                                                     <div class="text-orange-600 text-xs">
-                                                        OT: {{ number_format($overtimeHours, 1) }}h
+                                                        OT: {{ number_format($regularOvertimeHours, 1) }}h
                                                     </div>
+                                                    @endif
+                                                    
+                                                    @if($nightDiffOvertimeHours > 0)
+                                                    <div class="text-purple-600 text-xs">
+                                                        OT+ND: {{ number_format($nightDiffOvertimeHours, 1) }}h
+                                                    </div>
+                                                    @endif
                                                     @endif
                                                 </div>
                                             @endif

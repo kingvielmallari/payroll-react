@@ -254,9 +254,9 @@
                                             {{ $schedule->name }} ({{ $schedule->time_range_display }})
                                         </option>
                                     @endforeach
-                                    <option value="custom" {{ old('time_schedule_id') == 'custom' ? 'selected' : '' }}>
+                                    {{-- <option value="custom" {{ old('time_schedule_id') == 'custom' ? 'selected' : '' }}>
                                         Custom Time Schedule
-                                    </option>
+                                    </option> --}}
                                 </select>
                                 @error('time_schedule_id')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>

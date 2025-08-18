@@ -1637,6 +1637,8 @@ class PayrollController extends Controller
                     $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
                     $timeLog->dynamic_regular_hours = $dynamicCalculation['regular_hours'];
                     $timeLog->dynamic_overtime_hours = $dynamicCalculation['overtime_hours'];
+                    $timeLog->dynamic_regular_overtime_hours = $dynamicCalculation['regular_overtime_hours'] ?? 0;
+                    $timeLog->dynamic_night_diff_overtime_hours = $dynamicCalculation['night_diff_overtime_hours'] ?? 0;
                     $timeLog->dynamic_total_hours = $dynamicCalculation['total_hours'];
                 }
 
@@ -1649,6 +1651,8 @@ class PayrollController extends Controller
                         $employeeBreakdown[$logType] = [
                             'regular_hours' => 0,
                             'overtime_hours' => 0,
+                            'regular_overtime_hours' => 0,
+                            'night_diff_overtime_hours' => 0,
                             'total_hours' => 0,
                             'days_count' => 0,
                             'display_name' => '',
@@ -1662,15 +1666,21 @@ class PayrollController extends Controller
                         $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
                         $regularHours = $dynamicCalculation['regular_hours'];
                         $overtimeHours = $dynamicCalculation['overtime_hours'];
+                        $regularOvertimeHours = $dynamicCalculation['regular_overtime_hours'] ?? 0;
+                        $nightDiffOvertimeHours = $dynamicCalculation['night_diff_overtime_hours'] ?? 0;
                         $totalHours = $dynamicCalculation['total_hours'];
                     } else {
                         $regularHours = $timeLog->regular_hours ?? 0;
                         $overtimeHours = $timeLog->overtime_hours ?? 0;
+                        $regularOvertimeHours = $timeLog->regular_overtime_hours ?? 0;
+                        $nightDiffOvertimeHours = $timeLog->night_diff_overtime_hours ?? 0;
                         $totalHours = $timeLog->total_hours ?? 0;
                     }
 
                     $employeeBreakdown[$logType]['regular_hours'] += $regularHours;
                     $employeeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
+                    $employeeBreakdown[$logType]['regular_overtime_hours'] += $regularOvertimeHours;
+                    $employeeBreakdown[$logType]['night_diff_overtime_hours'] += $nightDiffOvertimeHours;
                     $employeeBreakdown[$logType]['total_hours'] += $totalHours;
                     $employeeBreakdown[$logType]['days_count']++;
 

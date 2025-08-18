@@ -21,6 +21,8 @@ class TimeLog extends Model
         'total_hours',
         'regular_hours',
         'overtime_hours',
+        'regular_overtime_hours',
+        'night_diff_overtime_hours',
         'late_hours',
         'undertime_hours',
         'log_type', // Now dynamic based on PayrollRateConfiguration
