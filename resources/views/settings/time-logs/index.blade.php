@@ -9,7 +9,14 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Header -->
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
-            <div class="px-6 py-4 border-b border-gray-200">
+            <div class="px-6 py-4 border-b bord// Context Menu Functions
+function showContextMenu(event, element) {
+    event.preventDefault();
+    
+    console.log('showContextMenu called', event, element); // Debug log
+    
+    const contextMenu = document.getElementById('contextMenu');
+    const contextMenuItems = document.getElementById('contextMenuItems');00">
                 <div class="flex items-center justify-between">
                     <div>
                         <h1 class="text-2xl font-bold text-gray-900">Time Log Settings</h1>
@@ -407,11 +414,19 @@ let currentEditingType = null;
 function showContextMenu(event, element) {
     event.preventDefault();
     
+    console.log('showContextMenu called', event, element); // Debug log
+    // alert('Context menu function called!'); // Temporary alert for testing
+    
     const contextMenu = document.getElementById('contextMenu');
     const contextMenuItems = document.getElementById('contextMenuItems');
     
+    console.log('contextMenu element:', contextMenu); // Debug log
+    console.log('contextMenuItems element:', contextMenuItems); // Debug log
+    
     const scheduleId = element.getAttribute('data-schedule-id');
     const scheduleType = element.getAttribute('data-schedule-type');
+    
+    console.log('scheduleId:', scheduleId, 'scheduleType:', scheduleType); // Debug log
     
     // Clear existing items
     contextMenuItems.innerHTML = '';
@@ -508,6 +523,8 @@ function showContextMenu(event, element) {
     contextMenu.style.left = x + 'px';
     contextMenu.style.top = y + 'px';
     contextMenu.classList.remove('hidden');
+    
+    console.log('Context menu should now be visible at:', x, y); // Debug log
 }
 
 function hideContextMenu() {
@@ -546,7 +563,7 @@ function editDaySchedule(id) {
     console.log('editDaySchedule called with ID:', id);
     
     // Fetch the schedule data and populate the form
-    fetch(`/payroll-link/settings/time-logs/day-schedules/${id}/edit`)
+    fetch(`{{ url('settings/time-logs/day-schedules') }}/${id}/edit`)
         .then(response => {
             console.log('Fetch response:', response);
             return response.json();
@@ -582,7 +599,7 @@ function editDaySchedule(id) {
 
 function deleteDaySchedule(id) {
     if (confirm('Are you sure you want to delete this day schedule?')) {
-        fetch(`/payroll-link/settings/time-logs/day-schedules/${id}`, {
+        fetch(`{{ url('settings/time-logs/day-schedules') }}/${id}`, {
             method: 'DELETE',
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
@@ -618,7 +635,7 @@ function closeTimeScheduleModal() {
 function editTimeSchedule(id) {
     console.log('editTimeSchedule called with ID:', id);
     
-    fetch(`/payroll-link/settings/time-logs/time-schedules/${id}`)
+    fetch(`{{ url('settings/time-logs/time-schedules') }}/${id}`)
         .then(response => {
             console.log('Fetch response:', response);
             return response.json();
@@ -645,7 +662,7 @@ function editTimeSchedule(id) {
 
 function deleteTimeSchedule(id) {
     if (confirm('Are you sure you want to delete this time schedule?')) {
-        fetch(`/payroll-link/settings/time-logs/time-schedules/${id}`, {
+        fetch(`{{ url('settings/time-logs/time-schedules') }}/${id}`, {
             method: 'DELETE',
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
@@ -666,7 +683,7 @@ function deleteTimeSchedule(id) {
 
 // Break Period Functions
 function editBreakPeriod(id) {
-    fetch(`/payroll-link/settings/time-logs/time-schedules/${id}`)
+    fetch(`{{ url('settings/time-logs/time-schedules') }}/${id}`)
         .then(response => response.json())
         .then(schedule => {
             document.getElementById('break_duration_edit').value = schedule.break_duration_minutes || '';
@@ -687,7 +704,7 @@ document.getElementById('dayScheduleForm').addEventListener('submit', function(e
     e.preventDefault();
     
     const formData = new FormData(this);
-    const url = currentEditingId ? `/payroll-link/settings/time-logs/day-schedules/${currentEditingId}` : '/payroll-link/settings/time-logs/day-schedules';
+    const url = currentEditingId ? `{{ url('settings/time-logs/day-schedules') }}/${currentEditingId}` : '{{ url('settings/time-logs/day-schedules') }}';
     const method = currentEditingId ? 'PUT' : 'POST';
     
     if (currentEditingId) {
@@ -719,7 +736,7 @@ document.getElementById('timeScheduleForm').addEventListener('submit', function(
     e.preventDefault();
     
     const formData = new FormData(this);
-    const url = currentEditingId ? `/payroll-link/settings/time-logs/time-schedules/${currentEditingId}` : '/payroll-link/settings/time-logs/time-schedules';
+    const url = currentEditingId ? `{{ url('settings/time-logs/time-schedules') }}/${currentEditingId}` : '{{ url('settings/time-logs/time-schedules') }}';
     
     if (currentEditingId) {
         formData.append('_method', 'PUT');
@@ -751,7 +768,7 @@ document.getElementById('breakPeriodForm').addEventListener('submit', function(e
     
     const formData = new FormData(this);
     
-    fetch(`/payroll-link/settings/time-logs/time-schedules/${currentEditingId}/break-periods`, {
+    fetch(`{{ url('settings/time-logs/time-schedules') }}/${currentEditingId}/break-periods`, {
         method: 'POST',
         body: formData,
         headers: {
