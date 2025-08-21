@@ -622,70 +622,54 @@
                                             $totalOvertimeHours = 0;
                                             $overtimeBreakdown = [];
                                             
-                                            foreach ($employeeBreakdown as $logType => $breakdown) {
-                                                if ($breakdown['overtime_hours'] > 0) {
+                                            // FIXED: Calculate overtime hours from actual time logs, not aggregated breakdown data
+                                            // The breakdown data has incorrect aggregated values
+                                            $actualOvertimeHours = 0;
+                                            
+                                            // Sum up overtime from individual time logs for accuracy
+                                            foreach ($dtrData[$detail->employee_id] ?? [] as $date => $timeLogData) {
+                                                if ($timeLogData) {
+                                                    $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
+                                                    $logOvertimeHours = $timeLog->overtime_hours ?? 0;
+                                                    $actualOvertimeHours += $logOvertimeHours;
+                                                }
+                                            }
+                                            
+                                            // Use the correct total overtime hours from individual logs
+                                            if ($actualOvertimeHours > 0) {
+                                                $totalOvertimeHours = $actualOvertimeHours;
+                                                
+                                                // Create breakdown by summing from each day type
+                                                foreach ($employeeBreakdown as $logType => $breakdown) {
                                                     $rateConfig = $breakdown['rate_config'];
                                                     $displayName = $rateConfig ? $rateConfig->display_name : 'Regular Day';
-                                                    $overtimeHours = $breakdown['overtime_hours'];
-                                                    $regularOvertimeHours = $breakdown['regular_overtime_hours'] ?? 0;
-                                                    $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
-                                                    // Don't add to total here - we'll calculate it from the breakdown items
-                                                    
                                                     $hourlyRate = $detail->employee->hourly_rate ?? 0;
                                                     
-                                                    // Regular overtime breakdown
-                                                    if ($regularOvertimeHours > 0) {
+                                                    // Calculate actual overtime hours for this day type from individual logs
+                                                    $dayTypeOvertimeHours = 0;
+                                                    foreach ($dtrData[$detail->employee_id] ?? [] as $date => $timeLogData) {
+                                                        if ($timeLogData) {
+                                                            $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
+                                                            $timeLogType = $timeLog->log_type ?? null;
+                                                            
+                                                            // Match the log type and sum overtime
+                                                            if ($timeLogType === $logType) {
+                                                                $dayTypeOvertimeHours += $timeLog->overtime_hours ?? 0;
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    if ($dayTypeOvertimeHours > 0) {
                                                         $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
-                                                        $overtimeAmount = $regularOvertimeHours * $hourlyRate * $overtimeMultiplier;
+                                                        $overtimeAmount = $dayTypeOvertimeHours * $hourlyRate * $overtimeMultiplier;
                                                         $percentageDisplay = number_format($overtimeMultiplier * 100, 0) . '%';
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => $displayName . ' OT',
-                                                            'hours' => $regularOvertimeHours,
+                                                            'hours' => $dayTypeOvertimeHours,
                                                             'amount' => $overtimeAmount,
                                                             'percentage' => $percentageDisplay
                                                         ];
-                                                        // Add to total from the actual breakdown items
-                                                        $totalOvertimeHours += $regularOvertimeHours;
-                                                    }
-                                                    
-                                                    // Night differential overtime breakdown
-                                                    if ($nightDiffOvertimeHours > 0) {
-                                                        // Get night differential rate
-                                                        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
-                                                        $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
-                                                        
-                                                        // Base overtime rate + night differential
-                                                        $baseOvertimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
-                                                        $combinedMultiplier = $baseOvertimeMultiplier + ($nightDiffMultiplier - 1); // e.g., 1.25 + 0.10 = 1.35
-                                                        
-                                                        $nightDiffOvertimeAmount = $nightDiffOvertimeHours * $hourlyRate * $combinedMultiplier;
-                                                        $percentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
-                                                        
-                                                        $overtimeBreakdown[] = [
-                                                            'name' => $displayName . ' OT+ND',
-                                                            'hours' => $nightDiffOvertimeHours,
-                                                            'amount' => $nightDiffOvertimeAmount,
-                                                            'percentage' => $percentageDisplay
-                                                        ];
-                                                        // Add to total from the actual breakdown items
-                                                        $totalOvertimeHours += $nightDiffOvertimeHours;
-                                                    }
-                                                    
-                                                    // Fallback: if no breakdown available, show total overtime
-                                                    if ($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0 && $overtimeHours > 0) {
-                                                        $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
-                                                        $overtimeAmount = $overtimeHours * $hourlyRate * $overtimeMultiplier;
-                                                        $percentageDisplay = number_format($overtimeMultiplier * 100, 0) . '%';
-                                                        
-                                                        $overtimeBreakdown[] = [
-                                                            'name' => $displayName . ' OT',
-                                                            'hours' => $overtimeHours,
-                                                            'amount' => $overtimeAmount,
-                                                            'percentage' => $percentageDisplay
-                                                        ];
-                                                        // Add to total from the actual breakdown items (fallback case)
-                                                        $totalOvertimeHours += $overtimeHours;
                                                     }
                                                 }
                                             }
@@ -1317,16 +1301,10 @@
                                                 $isWeekend = \Carbon\Carbon::parse($date)->isWeekend();
                                                 $logType = $timeLog->log_type ?? ($isWeekend ? 'rest_day' : 'regular_workday');
                                                 
-                                                // Use the aggregate breakdown for this day type
-                                                if (isset($employeeBreakdown[$logType])) {
-                                                    $aggregate = $employeeBreakdown[$logType];
-                                                    // Calculate daily average if this is aggregate data
-                                                    $regularHours = ($aggregate['regular_hours'] ?? 0);
-                                                    $overtimeHours = ($aggregate['overtime_hours'] ?? 0);
-                                                } else {
-                                                    $regularHours = 0;
-                                                    $overtimeHours = 0;
-                                                }
+                                                // For DTR Summary, only show overtime if there's ACTUAL overtime for this specific day
+                                                // Don't use aggregate data as it shows total overtime across all days of this type
+                                                $regularHours = $timeLog->regular_hours ?? 0;
+                                                $overtimeHours = $timeLog->overtime_hours ?? 0;
                                             } else if ($dayBreakdown) {
                                                 // Use the daily breakdown
                                                 $regularHours = $dayBreakdown['regular_hours'] ?? 0;
@@ -1358,7 +1336,7 @@
                                                 switch ($logType) {
                                                     case 'special_holiday':
                                                         $dayType = 'Special Holiday';
-                                                        $dayTypeColor = 'bg-red-100 text-red-800';
+                                                        $dayTypeColor = 'bg-orange-100 text-orange-800';
                                                         break;
                                                     case 'regular_holiday':
                                                         $dayType = 'Regular Holiday';
@@ -1370,7 +1348,7 @@
                                                         break;
                                                     case 'rest_day_special_holiday':
                                                         $dayType = 'Rest + SPE Holiday';
-                                                        $dayTypeColor = 'bg-red-100 text-red-800';
+                                                        $dayTypeColor = 'bg-orange-100 text-orange-800';
                                                         break;
                                                     case 'rest_day':
                                                         $dayType = 'Rest Day';
@@ -1449,13 +1427,17 @@
                                                             $actualTimeIn = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
                                                                 $timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->time_in)->format('H:i:s'));
                                                             
-                                                            // Calculate overtime threshold (clock hours including break)
-                                                            $clockHoursForRegular = 8; // default working hours
+                                                            // Calculate overtime threshold dynamically from grace period settings
+                                                            $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
+                                                            $overtimeThresholdMinutes = $gracePeriodSettings ? $gracePeriodSettings->overtime_threshold_minutes : 480; // default 8 hours = 480 minutes
+                                                            $baseWorkingHours = $overtimeThresholdMinutes / 60; // Convert to hours (e.g., 500 minutes = 8.33 hours)
+                                                            
+                                                            $clockHoursForRegular = $baseWorkingHours; // Use dynamic overtime threshold
                                                             
                                                             if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
                                                                 // Add break duration to working hours to get total clock hours
                                                                 $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                                                                $clockHoursForRegular = 8 + $breakDuration; // 8 working hours + break time
+                                                                $clockHoursForRegular = $baseWorkingHours + $breakDuration; // dynamic working hours + break time
                                                             }
                                                             
                                                             // Check if employee is within grace period by comparing actual time_in with scheduled time
@@ -1499,9 +1481,11 @@
                                                         // Calculate ACTUAL regular hours based on our display periods to ensure consistency
                                                         // This ensures the hour value matches the time period exactly
                                                         if($overtimeHours > 0 && $timeLog->time_in && $timeLog->time_out) {
-                                                            // When there's overtime, regular hours should always be 8.0 working hours
+                                                            // When there's overtime, regular hours should use the dynamic overtime threshold
                                                             // regardless of grace period (the grace period affects the TIME PERIOD, not the HOURS)
-                                                            $displayRegularHours = 8.0;
+                                                            $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
+                                                            $overtimeThresholdMinutes = $gracePeriodSettings ? $gracePeriodSettings->overtime_threshold_minutes : 480;
+                                                            $displayRegularHours = $overtimeThresholdMinutes / 60; // Convert to hours (e.g., 500 minutes = 8.33 hours)
                                                         } else {
                                                             // When there's no overtime, use the stored regular hours value
                                                             $displayRegularHours = $regularHours;
@@ -1511,7 +1495,7 @@
                                                     <div class="text-green-600 font-medium">
                                                         {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $regularPeriodEnd }}
                                                         @if($displayRegularHours > 0)
-                                                            (regular hours period)
+                                                            {{-- (regular hours period) --}}
                                                         @endif
                                                         ({{ number_format($displayRegularHours, 1) }}h)
                                                     </div>
@@ -1584,7 +1568,7 @@
                                                         <div class="{{ $period['color_class'] }} text-xs">
                                                             {{ $period['start_time'] }} - {{ $period['end_time'] }}
                                                             @if($period['type'] === 'regular_overtime')
-                                                                (regular ot period)
+                                                                {{-- (regular ot period) --}}
                                                             @elseif($period['type'] === 'night_diff_overtime')
                                                                 (ot + nd period)
                                                             @endif
@@ -1616,11 +1600,15 @@
                                                                 $employee = $detail->employee;
                                                                 $timeSchedule = $employee->timeSchedule;
                                                                 
-                                                                // Calculate clock hours for regular work
-                                                                $clockHoursForRegular = 8;
+                                                                // Calculate clock hours for regular work using dynamic overtime threshold
+                                                                $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
+                                                                $overtimeThresholdMinutes = $gracePeriodSettings ? $gracePeriodSettings->overtime_threshold_minutes : 480;
+                                                                $baseWorkingHours = $overtimeThresholdMinutes / 60;
+                                                                
+                                                                $clockHoursForRegular = $baseWorkingHours;
                                                                 if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
                                                                     $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                                                                    $clockHoursForRegular = 8 + $breakDuration;
+                                                                    $clockHoursForRegular = $baseWorkingHours + $breakDuration;
                                                                 }
                                                                 
                                                                 // Use same logic as regular hours period calculation
@@ -1664,11 +1652,9 @@
                                                             $displayRegularOTHours = $overtimeHours; // Use the unified calculation, not stored DB values
                                                         @endphp
                                                         <div class="text-orange-600 text-xs">
-                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} (regular ot period)
+                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($displayRegularOTHours, 1) }}h)
                                                         </div>
-                                                        <div class="text-orange-600 text-xs">
-                                                            OT: {{ number_format($displayRegularOTHours, 1) }}h
-                                                        </div>
+                                                   
                                                         @endif
                                                      
                                                         @endif
@@ -1682,14 +1668,18 @@
                                                                 $workStart = \Carbon\Carbon::parse($timeLog->time_in);
                                                                 $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
                                                                 
-                                                                // Calculate where regular hours + regular OT end
-                                                                $clockHoursForRegular = 8;
+                                                                // Calculate where regular hours + regular OT end using dynamic threshold
+                                                                $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
+                                                                $overtimeThresholdMinutes = $gracePeriodSettings ? $gracePeriodSettings->overtime_threshold_minutes : 480;
+                                                                $baseWorkingHours = $overtimeThresholdMinutes / 60;
+                                                                
+                                                                $clockHoursForRegular = $baseWorkingHours;
                                                                 $employee = $detail->employee;
                                                                 $timeSchedule = $employee->timeSchedule;
                                                                 
                                                                 if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
                                                                     $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                                                                    $clockHoursForRegular = 8 + $breakDuration;
+                                                                    $clockHoursForRegular = $baseWorkingHours + $breakDuration;
                                                                 }
                                                                 
                                                                 // Night diff OT starts after regular hours + regular OT
@@ -1723,11 +1713,15 @@
                                                                 $employee = $detail->employee;
                                                                 $timeSchedule = $employee->timeSchedule;
                                                                 
-                                                                // Calculate where regular hours end
-                                                                $clockHoursForRegular = 8;
+                                                                // Calculate where regular hours end using dynamic overtime threshold
+                                                                $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
+                                                                $overtimeThresholdMinutes = $gracePeriodSettings ? $gracePeriodSettings->overtime_threshold_minutes : 480;
+                                                                $baseWorkingHours = $overtimeThresholdMinutes / 60;
+                                                                
+                                                                $clockHoursForRegular = $baseWorkingHours;
                                                                 if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
                                                                     $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                                                                    $clockHoursForRegular = 8 + $breakDuration;
+                                                                    $clockHoursForRegular = $baseWorkingHours + $breakDuration;
                                                                 }
                                                                 
                                                                 // Use same logic as regular hours period calculation
@@ -1760,7 +1754,7 @@
                                                         @endphp
                                                         @if($overtimeStart && $overtimeEnd)
                                                         <div class="text-orange-600 text-xs">
-                                                            {{ $overtimeStart }} - {{ $overtimeEnd }} (regular ot period)
+                                                            {{ $overtimeStart }} - {{ $overtimeEnd }} 
                                                         </div>
                                                         @endif
                                                         <div class="text-orange-600 text-xs">
