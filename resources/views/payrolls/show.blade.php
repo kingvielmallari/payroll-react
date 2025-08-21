@@ -1393,12 +1393,11 @@
                                                     <div class="text-green-600 font-medium">
                                                         {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->time_out ? \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A') : 'N/A' }}
                                                         @if($regularHours > 0)
-                                                            (regular hours period)
+                                                    
                                                         @endif
+                                                        ({{ number_format($regularHours, 1) }}h)
                                                     </div>
-                                                    <div class="text-green-600">
-                                                        {{ number_format($regularHours, 1) }}h
-                                                    </div>
+                                               
                                                     @endif
                                                     
                                                     {{-- Break schedule with break hours --}}
@@ -1500,12 +1499,10 @@
                                                         @endphp
                                                         @if($regularOTStart && $regularOTEnd)
                                                         <div class="text-orange-600 text-xs">
-                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} (regular ot period)
+                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($regularOvertimeHours, 1) }}h)
                                                         </div>
                                                         @endif
-                                                        <div class="text-orange-600 text-xs">
-                                                            OT: {{ number_format($regularOvertimeHours, 1) }}h
-                                                        </div>
+                                                     
                                                         @endif
                                                         
                                                         @if($nightDiffOvertimeHours > 0)
@@ -1522,12 +1519,10 @@
                                                         @endphp
                                                         @if($nightOTStart && $nightOTEnd)
                                                         <div class="text-purple-600 text-xs">
-                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} (ot + nd period)
+                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} ({{ number_format($nightDiffOvertimeHours, 1) }}h)
                                                         </div>
                                                         @endif
-                                                        <div class="text-purple-600 text-xs">
-                                                            OT+ND: {{ number_format($nightDiffOvertimeHours, 1) }}h
-                                                        </div>
+                                                     
                                                         @endif
                                                         
                                                         {{-- If we have total overtime but no breakdown, show total --}}
