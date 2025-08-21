@@ -622,54 +622,71 @@
                                             $totalOvertimeHours = 0;
                                             $overtimeBreakdown = [];
                                             
-                                            // FIXED: Calculate overtime hours from actual time logs, not aggregated breakdown data
-                                            // The breakdown data has incorrect aggregated values
-                                            $actualOvertimeHours = 0;
-                                            
-                                            // Sum up overtime from individual time logs for accuracy
-                                            foreach ($dtrData[$detail->employee_id] ?? [] as $date => $timeLogData) {
-                                                if ($timeLogData) {
-                                                    $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
-                                                    $logOvertimeHours = $timeLog->overtime_hours ?? 0;
-                                                    $actualOvertimeHours += $logOvertimeHours;
-                                                }
-                                            }
-                                            
-                                            // Use the correct total overtime hours from individual logs
-                                            if ($actualOvertimeHours > 0) {
-                                                $totalOvertimeHours = $actualOvertimeHours;
-                                                
-                                                // Create breakdown by summing from each day type
-                                                foreach ($employeeBreakdown as $logType => $breakdown) {
+                                            foreach ($employeeBreakdown as $logType => $breakdown) {
+                                                if ($breakdown['overtime_hours'] > 0) {
                                                     $rateConfig = $breakdown['rate_config'];
                                                     $displayName = $rateConfig ? $rateConfig->display_name : 'Regular Day';
+                                                    $overtimeHours = $breakdown['overtime_hours'];
+                                                    
+                                                    // Include ALL overtime from ALL day types (regular, holiday, rest day)
+                                                    $regularOvertimeHours = $breakdown['overtime_hours'] ?? 0;
+                                                    $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
+                                                    
                                                     $hourlyRate = $detail->employee->hourly_rate ?? 0;
                                                     
-                                                    // Calculate actual overtime hours for this day type from individual logs
-                                                    $dayTypeOvertimeHours = 0;
-                                                    foreach ($dtrData[$detail->employee_id] ?? [] as $date => $timeLogData) {
-                                                        if ($timeLogData) {
-                                                            $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
-                                                            $timeLogType = $timeLog->log_type ?? null;
-                                                            
-                                                            // Match the log type and sum overtime
-                                                            if ($timeLogType === $logType) {
-                                                                $dayTypeOvertimeHours += $timeLog->overtime_hours ?? 0;
-                                                            }
-                                                        }
-                                                    }
-                                                    
-                                                    if ($dayTypeOvertimeHours > 0) {
+                                                    // Regular overtime breakdown
+                                                    if ($regularOvertimeHours > 0) {
                                                         $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
-                                                        $overtimeAmount = $dayTypeOvertimeHours * $hourlyRate * $overtimeMultiplier;
+                                                        $overtimeAmount = $regularOvertimeHours * $hourlyRate * $overtimeMultiplier;
                                                         $percentageDisplay = number_format($overtimeMultiplier * 100, 0) . '%';
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => $displayName . ' OT',
-                                                            'hours' => $dayTypeOvertimeHours,
+                                                            'hours' => $regularOvertimeHours,
                                                             'amount' => $overtimeAmount,
                                                             'percentage' => $percentageDisplay
                                                         ];
+                                                        // Add to total from the actual breakdown items
+                                                        $totalOvertimeHours += $regularOvertimeHours;
+                                                    }
+                                                    
+                                                    // Night differential overtime breakdown
+                                                    if ($nightDiffOvertimeHours > 0) {
+                                                        // Get night differential rate
+                                                        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                                                        $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+                                                        
+                                                        // Base overtime rate + night differential
+                                                        $baseOvertimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
+                                                        $combinedMultiplier = $baseOvertimeMultiplier + ($nightDiffMultiplier - 1); // e.g., 1.25 + 0.10 = 1.35
+                                                        
+                                                        $nightDiffOvertimeAmount = $nightDiffOvertimeHours * $hourlyRate * $combinedMultiplier;
+                                                        $percentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
+                                                        
+                                                        $overtimeBreakdown[] = [
+                                                            'name' => $displayName . ' OT+ND',
+                                                            'hours' => $nightDiffOvertimeHours,
+                                                            'amount' => $nightDiffOvertimeAmount,
+                                                            'percentage' => $percentageDisplay
+                                                        ];
+                                                        // Add to total from the actual breakdown items
+                                                        $totalOvertimeHours += $nightDiffOvertimeHours;
+                                                    }
+                                                    
+                                                    // Fallback: if no breakdown available, show total overtime
+                                                    if ($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0 && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
+                                                        $overtimeAmount = $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                        $percentageDisplay = number_format($overtimeMultiplier * 100, 0) . '%';
+                                                        
+                                                        $overtimeBreakdown[] = [
+                                                            'name' => $displayName . ' OT',
+                                                            'hours' => $overtimeHours,
+                                                            'amount' => $overtimeAmount,
+                                                            'percentage' => $percentageDisplay
+                                                        ];
+                                                        // Add to total from the actual breakdown items (fallback case)
+                                                        $totalOvertimeHours += $overtimeHours;
                                                     }
                                                 }
                                             }
@@ -1644,12 +1661,28 @@
                                                         @php
                                                             // Calculate the ACTUAL overtime hours based on our display periods
                                                             // This ensures display time periods match the hour values exactly
-                                                            $displayOTStart = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $regularOTStart);
-                                                            $displayOTEnd = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $regularOTEnd);
-                                                            $calculatedRegularOT = $displayOTEnd->diffInMinutes($displayOTStart) / 60;
+                                                            try {
+                                                                $displayOTStart = \Carbon\Carbon::createFromFormat('Y-m-d g:i A', 
+                                                                    $timeLog->log_date->format('Y-m-d') . ' ' . $regularOTStart);
+                                                                $displayOTEnd = \Carbon\Carbon::createFromFormat('Y-m-d g:i A', 
+                                                                    $timeLog->log_date->format('Y-m-d') . ' ' . $regularOTEnd);
+                                                                
+                                                                // Handle overnight shifts (if end time is before start time, add a day)
+                                                                if ($displayOTEnd < $displayOTStart) {
+                                                                    $displayOTEnd->addDay();
+                                                                }
+                                                                
+                                                                $calculatedRegularOT = $displayOTStart->diffInMinutes($displayOTEnd) / 60;
+                                                                
+                                                                // Ensure positive hours
+                                                                $calculatedRegularOT = abs($calculatedRegularOT);
+                                                            } catch (\Exception $e) {
+                                                                // Fallback to database value if parsing fails
+                                                                $calculatedRegularOT = $overtimeHours;
+                                                            }
                                                             
-                                                            // Use UNIFIED CALCULATION - the overtimeHours from our unified calculation above
-                                                            $displayRegularOTHours = $overtimeHours; // Use the unified calculation, not stored DB values
+                                                            // Use the CALCULATED hours based on time period, not stored DB values
+                                                            $displayRegularOTHours = $calculatedRegularOT; // Use calculated time period, not DB values
                                                         @endphp
                                                         <div class="text-orange-600 text-xs">
                                                             {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($displayRegularOTHours, 1) }}h)
@@ -1753,13 +1786,36 @@
                                                             }
                                                         @endphp
                                                         @if($overtimeStart && $overtimeEnd)
+                                                        @php
+                                                            // Calculate actual overtime hours from the time period
+                                                            try {
+                                                                $displayOTStart = \Carbon\Carbon::createFromFormat('Y-m-d g:i A', 
+                                                                    $timeLog->log_date->format('Y-m-d') . ' ' . $overtimeStart);
+                                                                $displayOTEnd = \Carbon\Carbon::createFromFormat('Y-m-d g:i A', 
+                                                                    $timeLog->log_date->format('Y-m-d') . ' ' . $overtimeEnd);
+                                                                
+                                                                // Handle overnight shifts
+                                                                if ($displayOTEnd < $displayOTStart) {
+                                                                    $displayOTEnd->addDay();
+                                                                }
+                                                                
+                                                                $calculatedOTHours = $displayOTStart->diffInMinutes($displayOTEnd) / 60;
+                                                                $calculatedOTHours = abs($calculatedOTHours);
+                                                            } catch (\Exception $e) {
+                                                                $calculatedOTHours = $overtimeHours;
+                                                            }
+                                                        @endphp
                                                         <div class="text-orange-600 text-xs">
                                                             {{ $overtimeStart }} - {{ $overtimeEnd }} 
                                                         </div>
-                                                        @endif
+                                                        <div class="text-orange-600 text-xs">
+                                                            OT: {{ number_format($calculatedOTHours, 1) }}h
+                                                        </div>
+                                                        @else
                                                         <div class="text-orange-600 text-xs">
                                                             OT: {{ number_format($overtimeHours, 1) }}h
                                                         </div>
+                                                        @endif
                                                         @endif
                                                     @endif
                                                     @endif
