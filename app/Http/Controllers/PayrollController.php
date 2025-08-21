@@ -4260,6 +4260,64 @@ class PayrollController extends Controller
             throw new \Exception('No payroll details found to create snapshots.');
         }
 
+        // Get employee IDs from payroll details
+        $employeeIds = $payrollDetails->pluck('employee_id');
+
+        // Create array of all dates in the payroll period
+        $startDate = \Carbon\Carbon::parse($payroll->period_start);
+        $endDate = \Carbon\Carbon::parse($payroll->period_end);
+        $periodDates = [];
+
+        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
+            $periodDates[] = $date->format('Y-m-d');
+        }
+
+        // Get all time logs for this payroll period
+        $timeLogs = TimeLog::whereIn('employee_id', $employeeIds)
+            ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+            ->orderBy('log_date')
+            ->get()
+            ->groupBy(['employee_id', function ($item) {
+                return \Carbon\Carbon::parse($item->log_date)->format('Y-m-d');
+            }]);
+
+        // Calculate time breakdowns for all employees (to get only regular workday hours)
+        $timeBreakdownsByEmployee = [];
+        foreach ($employeeIds as $employeeId) {
+            $employeeTimeLogs = $timeLogs->get($employeeId, collect());
+            $employeeBreakdown = [];
+
+            foreach ($periodDates as $date) {
+                $timeLog = $employeeTimeLogs->get($date, collect())->first();
+
+                // Track time breakdown by type (exclude incomplete records)
+                if ($timeLog && !($timeLog->remarks === 'Incomplete Time Record' || (!$timeLog->time_in || !$timeLog->time_out))) {
+                    $logType = $timeLog->log_type;
+                    if (!isset($employeeBreakdown[$logType])) {
+                        $employeeBreakdown[$logType] = [
+                            'regular_hours' => 0,
+                            'overtime_hours' => 0,
+                            'total_hours' => 0,
+                            'days_count' => 0,
+                        ];
+                    }
+
+                    // Calculate dynamically using current grace periods
+                    $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
+                    $regularHours = $dynamicCalculation['regular_hours'];
+                    $overtimeHours = $dynamicCalculation['overtime_hours'];
+                    $totalHours = $dynamicCalculation['total_hours'];
+
+                    $employeeBreakdown[$logType]['regular_hours'] += $regularHours;
+                    $employeeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
+                    $employeeBreakdown[$logType]['total_hours'] += $totalHours;
+                    $employeeBreakdown[$logType]['days_count']++;
+                }
+            }
+
+            $timeBreakdownsByEmployee[$employeeId] = $employeeBreakdown;
+        }
+
         foreach ($payrollDetails as $detail) {
             $employee = $detail->employee;
 
@@ -4271,6 +4329,26 @@ class PayrollController extends Controller
                 $payroll->period_end,
                 $payroll
             );
+
+            // Get the time breakdown for this employee to extract ONLY regular workday hours
+            $employeeTimeBreakdown = $timeBreakdownsByEmployee[$employee->id] ?? [];
+
+            // Extract only regular workday hours for basic pay calculation
+            $regularWorkdayHours = $employeeTimeBreakdown['regular_workday']['regular_hours'] ?? 0;
+            $regularWorkdayOvertimeHours = $employeeTimeBreakdown['regular_workday']['overtime_hours'] ?? 0;
+
+            // Calculate total hours for all day types (for verification)
+            $totalRegularHours = 0;
+            $totalOvertimeHours = 0;
+            $totalHolidayHours = 0;
+
+            foreach ($employeeTimeBreakdown as $logType => $breakdown) {
+                $totalRegularHours += $breakdown['regular_hours'];
+                $totalOvertimeHours += $breakdown['overtime_hours'];
+                if (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                    $totalHolidayHours += $breakdown['regular_hours'] + $breakdown['overtime_hours'];
+                }
+            }
 
             // Use the calculated values from the same method used in draft mode
             $basicPay = $payrollCalculation['basic_salary'] ?? 0;
@@ -4289,6 +4367,11 @@ class PayrollController extends Controller
                 'holiday_pay' => $holidayPay,
                 'overtime_pay' => $overtimePay,
                 'rest_pay' => $restPay,
+                'regular_workday_hours' => $regularWorkdayHours,
+                'regular_workday_overtime_hours' => $regularWorkdayOvertimeHours,
+                'total_regular_hours_all_types' => $totalRegularHours,
+                'total_overtime_hours_all_types' => $totalOvertimeHours,
+                'total_holiday_hours' => $totalHolidayHours,
                 'gross_pay' => $payrollCalculation['gross_pay'] ?? 0,
             ]);
 
@@ -4324,9 +4407,9 @@ class PayrollController extends Controller
                 'daily_rate' => $employee->daily_rate ?? 0,
                 'hourly_rate' => $employee->hourly_rate ?? 0,
                 'days_worked' => $payrollCalculation['days_worked'] ?? 0,
-                'regular_hours' => $payrollCalculation['regular_hours'] ?? 0,
-                'overtime_hours' => $payrollCalculation['overtime_hours'] ?? 0,
-                'holiday_hours' => $payrollCalculation['holiday_hours'] ?? 0,
+                'regular_hours' => $regularWorkdayHours, // Only regular workday hours, not all regular hours
+                'overtime_hours' => $regularWorkdayOvertimeHours, // Only regular workday overtime hours
+                'holiday_hours' => $totalHolidayHours, // Total holiday hours (regular + overtime)
                 'night_differential_hours' => $payrollCalculation['night_differential_hours'] ?? 0,
                 'regular_pay' => $basicPay, // Use calculated basic pay
                 'overtime_pay' => $overtimePay, // Use calculated overtime pay

@@ -458,17 +458,16 @@
                                             
                                             $basicPay = $payBreakdown['basic_pay'];
                                             
-                                            // For hours display, always use timeBreakdowns (for both draft and processing)
-                                            $regularWorkdayBreakdown = ($timeBreakdowns[$detail->employee_id] ?? [])['regular_workday'] ?? ['regular_hours' => 0, 'overtime_hours' => 0];
-                                            
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Use dynamic hours from timeBreakdowns  
+                                                $regularWorkdayBreakdown = ($timeBreakdowns[$detail->employee_id] ?? [])['regular_workday'] ?? ['regular_hours' => 0, 'overtime_hours' => 0];
                                                 $basicRegularHours = $regularWorkdayBreakdown['regular_hours'];
+                                                $basicOvertimeHours = $regularWorkdayBreakdown['overtime_hours'];
                                             } else {
-                                                // PROCESSING/APPROVED: Can use stored regular_hours or timeBreakdowns (both should match)
-                                                $basicRegularHours = $regularWorkdayBreakdown['regular_hours']; // Keep using timeBreakdowns for transparency
+                                                // PROCESSING/APPROVED: Use stored snapshot data
+                                                $basicRegularHours = $detail->regular_hours ?? 0; // From snapshot
+                                                $basicOvertimeHours = $detail->overtime_hours ?? 0; // From snapshot
                                             }
-                                            $basicOvertimeHours = $regularWorkdayBreakdown['overtime_hours'];
                                         @endphp
                                         <div class="text-xs text-gray-500">{{ number_format($basicRegularHours, 1) }} hrs</div>
                                         <div class="font-bold text-blue-600">₱{{ number_format($basicPay, 2) }}</div>
