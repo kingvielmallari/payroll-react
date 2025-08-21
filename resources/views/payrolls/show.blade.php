@@ -629,7 +629,7 @@
                                                     $overtimeHours = $breakdown['overtime_hours'];
                                                     $regularOvertimeHours = $breakdown['regular_overtime_hours'] ?? 0;
                                                     $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
-                                                    $totalOvertimeHours += $overtimeHours;
+                                                    // Don't add to total here - we'll calculate it from the breakdown items
                                                     
                                                     $hourlyRate = $detail->employee->hourly_rate ?? 0;
                                                     
@@ -645,6 +645,8 @@
                                                             'amount' => $overtimeAmount,
                                                             'percentage' => $percentageDisplay
                                                         ];
+                                                        // Add to total from the actual breakdown items
+                                                        $totalOvertimeHours += $regularOvertimeHours;
                                                     }
                                                     
                                                     // Night differential overtime breakdown
@@ -666,6 +668,8 @@
                                                             'amount' => $nightDiffOvertimeAmount,
                                                             'percentage' => $percentageDisplay
                                                         ];
+                                                        // Add to total from the actual breakdown items
+                                                        $totalOvertimeHours += $nightDiffOvertimeHours;
                                                     }
                                                     
                                                     // Fallback: if no breakdown available, show total overtime
@@ -680,6 +684,8 @@
                                                             'amount' => $overtimeAmount,
                                                             'percentage' => $percentageDisplay
                                                         ];
+                                                        // Add to total from the actual breakdown items (fallback case)
+                                                        $totalOvertimeHours += $overtimeHours;
                                                     }
                                                 }
                                             }
@@ -1285,11 +1291,51 @@
                                             (!isset($timeLog->time_in) || !isset($timeLog->time_out) || !$timeLog->time_in || !$timeLog->time_out)
                                         );
                                         
-                                        // For draft payrolls, use dynamic calculation; for approved payrolls, use stored values
+                                        // For draft payrolls, FORCE use live calculation from timeBreakdowns (same as Employee Payroll Details)
                                         if (!$isIncompleteRecord && $timeLog && $payroll->status === 'draft') {
-                                            // Use dynamic calculation for draft payrolls
-                                            $regularHours = $timeLog->dynamic_regular_hours ?? ($timeLog->regular_hours ?? 0);
-                                            $overtimeHours = $timeLog->dynamic_overtime_hours ?? ($timeLog->overtime_hours ?? 0);
+                                            // UNIFIED CALCULATION - Use SAME approach as Employee Payroll Details OVERTIME column
+                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            
+                                            // Find breakdown for this specific day using the EXACT same logic as Employee Payroll Details
+                                            $dayBreakdown = null;
+                                            
+                                            // First try to find in daily logs (if they exist)
+                                            foreach ($employeeBreakdown as $dayType => $breakdown) {
+                                                if (isset($breakdown['logs']) && is_array($breakdown['logs'])) {
+                                                    foreach ($breakdown['logs'] as $log) {
+                                                        if ($log['date'] === $date) {
+                                                            $dayBreakdown = $log;
+                                                            break 2;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // If no daily logs found, check if we can determine day type and use aggregate
+                                            if (!$dayBreakdown && $timeLog) {
+                                                // Determine day type for this date
+                                                $isWeekend = \Carbon\Carbon::parse($date)->isWeekend();
+                                                $logType = $timeLog->log_type ?? ($isWeekend ? 'rest_day' : 'regular_workday');
+                                                
+                                                // Use the aggregate breakdown for this day type
+                                                if (isset($employeeBreakdown[$logType])) {
+                                                    $aggregate = $employeeBreakdown[$logType];
+                                                    // Calculate daily average if this is aggregate data
+                                                    $regularHours = ($aggregate['regular_hours'] ?? 0);
+                                                    $overtimeHours = ($aggregate['overtime_hours'] ?? 0);
+                                                } else {
+                                                    $regularHours = 0;
+                                                    $overtimeHours = 0;
+                                                }
+                                            } else if ($dayBreakdown) {
+                                                // Use the daily breakdown
+                                                $regularHours = $dayBreakdown['regular_hours'] ?? 0;
+                                                $overtimeHours = $dayBreakdown['overtime_hours'] ?? 0;
+                                            } else {
+                                                // If no breakdown found, use 0 (don't fall back to stored values)
+                                                $regularHours = 0;
+                                                $overtimeHours = 0;
+                                            }
                                         } else {
                                             // Use stored values for approved payrolls or incomplete records
                                             $regularHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->regular_hours ?? 0) : 0;
@@ -1390,12 +1436,84 @@
                                                     @if((isset($timeLog->time_in) && $timeLog->time_in) || (isset($timeLog->time_out) && $timeLog->time_out))
                                                     
                                                     {{-- Main work schedule with regular hours --}}
-                                                    <div class="text-green-600 font-medium">
-                                                        {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $timeLog->time_out ? \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A') : 'N/A' }}
-                                                        @if($regularHours > 0)
+                                                    @php
+                                                        // Calculate regular hours period end time
+                                                        $regularPeriodEnd = $timeLog->time_out;
+                                                        $regularPeriodStart = $timeLog->time_in;
+                                                        
+                                                        // If there's overtime, regular period should end when overtime starts
+                                                        if($overtimeHours > 0 && $timeLog->time_in && $timeLog->time_out) {
+                                                            $employee = $detail->employee;
+                                                            $timeSchedule = $employee->timeSchedule;
+                                                            // Fix: Combine the log date with the time_in to get the correct datetime
+                                                            $actualTimeIn = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
+                                                                $timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->time_in)->format('H:i:s'));
+                                                            
+                                                            // Calculate overtime threshold (clock hours including break)
+                                                            $clockHoursForRegular = 8; // default working hours
+                                                            
+                                                            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                // Add break duration to working hours to get total clock hours
+                                                                $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
+                                                                $clockHoursForRegular = 8 + $breakDuration; // 8 working hours + break time
+                                                            }
+                                                            
+                                                            // Check if employee is within grace period by comparing actual time_in with scheduled time
+                                                            $scheduledStart = $timeSchedule ? 
+                                                                \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
+                                                                    $timeLog->log_date->format('Y-m-d') . ' ' . $timeSchedule->time_in->format('H:i') . ':00') :
+                                                                \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' 08:00');
+                                                            
+                                                            // Check if employee is within 15-minute grace period
+                                                            // If actualTimeIn is after scheduledStart, calculate minutes late
+                                                            $minutesLate = 0;
+                                                            if ($actualTimeIn > $scheduledStart) {
+                                                                $minutesLate = $scheduledStart->diffInMinutes($actualTimeIn);
+                                                            }
+                                                            
+                                                            // Get grace period setting from database instead of hardcoding
+                                                            $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
+                                                            $lateGracePeriodMinutes = $gracePeriodSettings ? $gracePeriodSettings->late_grace_minutes : 15;
+                                                            
+                                                            // Check if employee is within the configured grace period
+                                                            $isFullWorkingDay = $timeLog->time_in && $timeLog->time_out;
+                                                            $isWithinGracePeriod = ($minutesLate <= $lateGracePeriodMinutes) && $isFullWorkingDay;
+                                                            
+                                                            if ($isWithinGracePeriod) {
+                                                                // Grace period applied - use scheduled end time (e.g., 5:00 PM)
+                                                                $regularPeriodEnd = $scheduledStart->copy()->addHours($clockHoursForRegular);
+                                                            } else {
+                                                                // Employee was truly late or beyond grace - extend period to compensate for late minutes
+                                                                // For 8:16 AM (16 min late), they work until 5:16 PM to complete 8 hours
+                                                                $regularPeriodEnd = $actualTimeIn->copy()->addHours($clockHoursForRegular);
+                                                            }
+                                                        } else {
+                                                            $regularPeriodEnd = $timeLog->time_out ? \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A') : 'N/A';
+                                                        }
+                                                        
+                                                        // Format the regularPeriodEnd if it's a Carbon instance
+                                                        if ($regularPeriodEnd instanceof \Carbon\Carbon) {
+                                                            $regularPeriodEnd = $regularPeriodEnd->format('g:i A');
+                                                        }
+                                                        
+                                                        // Calculate ACTUAL regular hours based on our display periods to ensure consistency
+                                                        // This ensures the hour value matches the time period exactly
+                                                        if($overtimeHours > 0 && $timeLog->time_in && $timeLog->time_out) {
+                                                            // When there's overtime, regular hours should always be 8.0 working hours
+                                                            // regardless of grace period (the grace period affects the TIME PERIOD, not the HOURS)
+                                                            $displayRegularHours = 8.0;
+                                                        } else {
+                                                            // When there's no overtime, use the stored regular hours value
+                                                            $displayRegularHours = $regularHours;
+                                                        }
+                                                    @endphp
                                                     
+                                                    <div class="text-green-600 font-medium">
+                                                        {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $regularPeriodEnd }}
+                                                        @if($displayRegularHours > 0)
+                                                            (regular hours period)
                                                         @endif
-                                                        ({{ number_format($regularHours, 1) }}h)
+                                                        ({{ number_format($displayRegularHours, 1) }}h)
                                                     </div>
                                                
                                                     @endif
@@ -1483,23 +1601,73 @@
                                                     
                                                     {{-- Fallback to old display if no breakdown available --}}
                                                     @if(empty($timePeriodBreakdown) || count($timePeriodBreakdown) <= 1)
-                                                        {{-- Always show the breakdown if we have the data --}}
-                                                        @if($regularOvertimeHours > 0)
+                                                        {{-- FORCE USE THE UNIFIED CALCULATION - Use overtimeHours from our unified calculation above --}}
+                                                        @if($overtimeHours > 0)
                                                         @php
-                                                            // Calculate regular overtime period
+                                                            // Calculate regular overtime period - should start where regular hours end
                                                             $regularOTStart = '';
                                                             $regularOTEnd = '';
                                                             if ($timeLog->time_out && $timeLog->time_in) {
-                                                                $workStart = \Carbon\Carbon::parse($timeLog->time_in);
-                                                                $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
-                                                                // Show regular overtime as extending from regular hours
-                                                                $regularOTStart = $workStart->copy()->addHours(8)->format('g:i A'); // Start after 8 regular hours
-                                                                $regularOTEnd = $workStart->copy()->addHours(8)->addHours($regularOvertimeHours)->format('g:i A');
+                                                                $workEnd = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
+                                                                    $timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->time_out)->format('H:i:s'));
+                                                                $actualTimeIn = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
+                                                                    $timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->time_in)->format('H:i:s'));
+                                                                
+                                                                $employee = $detail->employee;
+                                                                $timeSchedule = $employee->timeSchedule;
+                                                                
+                                                                // Calculate clock hours for regular work
+                                                                $clockHoursForRegular = 8;
+                                                                if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                    $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
+                                                                    $clockHoursForRegular = 8 + $breakDuration;
+                                                                }
+                                                                
+                                                                // Use same logic as regular hours period calculation
+                                                                $scheduledStart = $timeSchedule ? 
+                                                                    \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
+                                                                        $timeLog->log_date->format('Y-m-d') . ' ' . $timeSchedule->time_in->format('H:i') . ':00') :
+                                                                    \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' 08:00');
+                                                                
+                                                                $minutesLate = 0;
+                                                                if ($actualTimeIn > $scheduledStart) {
+                                                                    $minutesLate = $scheduledStart->diffInMinutes($actualTimeIn);
+                                                                }
+                                                                $isFullWorkingDay = $timeLog->time_in && $timeLog->time_out;
+                                                                
+                                                                // Get grace period setting from database
+                                                                $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
+                                                                $lateGracePeriodMinutes = $gracePeriodSettings ? $gracePeriodSettings->late_grace_minutes : 15;
+                                                                $isWithinGracePeriod = ($minutesLate <= $lateGracePeriodMinutes) && $isFullWorkingDay;
+                                                                
+                                                                if ($isWithinGracePeriod) {
+                                                                    // Grace period applied - OT starts at scheduled end time
+                                                                    $regularOTStart = $scheduledStart->copy()->addHours($clockHoursForRegular)->format('g:i A');
+                                                                } else {
+                                                                    // Employee was truly late - OT starts after their actual work hours
+                                                                    $regularOTStart = $actualTimeIn->copy()->addHours($clockHoursForRegular)->format('g:i A');
+                                                                }
+                                                                
+                                                                // Regular OT ends at actual time_out
+                                                                $regularOTEnd = $workEnd->format('g:i A');
                                                             }
                                                         @endphp
                                                         @if($regularOTStart && $regularOTEnd)
+                                                        @php
+                                                            // Calculate the ACTUAL overtime hours based on our display periods
+                                                            // This ensures display time periods match the hour values exactly
+                                                            $displayOTStart = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $regularOTStart);
+                                                            $displayOTEnd = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $regularOTEnd);
+                                                            $calculatedRegularOT = $displayOTEnd->diffInMinutes($displayOTStart) / 60;
+                                                            
+                                                            // Use UNIFIED CALCULATION - the overtimeHours from our unified calculation above
+                                                            $displayRegularOTHours = $overtimeHours; // Use the unified calculation, not stored DB values
+                                                        @endphp
                                                         <div class="text-orange-600 text-xs">
-                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($regularOvertimeHours, 1) }}h)
+                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} (regular ot period)
+                                                        </div>
+                                                        <div class="text-orange-600 text-xs">
+                                                            OT: {{ number_format($displayRegularOTHours, 1) }}h
                                                         </div>
                                                         @endif
                                                      
@@ -1507,19 +1675,34 @@
                                                         
                                                         @if($nightDiffOvertimeHours > 0)
                                                         @php
-                                                            // Calculate night diff overtime period
+                                                            // Calculate night diff overtime period - should start after regular OT
                                                             $nightOTStart = '';
                                                             $nightOTEnd = '';
-                                                            if ($timeLog->time_out) {
+                                                            if ($timeLog->time_out && $timeLog->time_in) {
+                                                                $workStart = \Carbon\Carbon::parse($timeLog->time_in);
                                                                 $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
-                                                                // Night differential usually starts at 11 PM
-                                                                $nightOTStart = $workEnd->copy()->subHours($nightDiffOvertimeHours)->format('g:i A');
+                                                                
+                                                                // Calculate where regular hours + regular OT end
+                                                                $clockHoursForRegular = 8;
+                                                                $employee = $detail->employee;
+                                                                $timeSchedule = $employee->timeSchedule;
+                                                                
+                                                                if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                    $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
+                                                                    $clockHoursForRegular = 8 + $breakDuration;
+                                                                }
+                                                                
+                                                                // Night diff OT starts after regular hours + regular OT
+                                                                $nightOTStart = $workStart->copy()->addHours($clockHoursForRegular)->addHours($regularOvertimeHours)->format('g:i A');
                                                                 $nightOTEnd = $workEnd->format('g:i A');
                                                             }
                                                         @endphp
                                                         @if($nightOTStart && $nightOTEnd)
                                                         <div class="text-purple-600 text-xs">
-                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} ({{ number_format($nightDiffOvertimeHours, 1) }}h)
+                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} (ot + nd period)
+                                                        </div>
+                                                        <div class="text-purple-600 text-xs">
+                                                            OT+ND: {{ number_format($nightDiffOvertimeHours, 1) }}h
                                                         </div>
                                                         @endif
                                                      
@@ -1528,15 +1711,50 @@
                                                         {{-- If we have total overtime but no breakdown, show total --}}
                                                         @if($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0 && $overtimeHours > 0)
                                                         @php
-                                                            // Calculate overtime period (simplified display logic)
+                                                            // Calculate overtime period starting from where regular hours end
                                                             $overtimeStart = '';
                                                             $overtimeEnd = '';
-                                                            if ($timeLog->time_out) {
-                                                                $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
-                                                                $workStart = \Carbon\Carbon::parse($timeLog->time_in);
+                                                            if ($timeLog->time_out && $timeLog->time_in) {
+                                                                $workEnd = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
+                                                                    $timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->time_out)->format('H:i:s'));
+                                                                $actualTimeIn = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
+                                                                    $timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->time_in)->format('H:i:s'));
                                                                 
-                                                                // If overtime exists, show a period extending beyond normal hours
-                                                                $overtimeStart = $workEnd->copy()->subHours($overtimeHours)->format('g:i A');
+                                                                $employee = $detail->employee;
+                                                                $timeSchedule = $employee->timeSchedule;
+                                                                
+                                                                // Calculate where regular hours end
+                                                                $clockHoursForRegular = 8;
+                                                                if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                    $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
+                                                                    $clockHoursForRegular = 8 + $breakDuration;
+                                                                }
+                                                                
+                                                                // Use same logic as regular hours period calculation
+                                                                $scheduledStart = $timeSchedule ? 
+                                                                    \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
+                                                                        $timeLog->log_date->format('Y-m-d') . ' ' . $timeSchedule->time_in->format('H:i') . ':00') :
+                                                                    \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' 08:00');
+                                                                
+                                                                $minutesLate = 0;
+                                                                if ($actualTimeIn > $scheduledStart) {
+                                                                    $minutesLate = $scheduledStart->diffInMinutes($actualTimeIn);
+                                                                }
+                                                                $isFullWorkingDay = $timeLog->time_in && $timeLog->time_out;
+                                                                
+                                                                // Get grace period setting from database
+                                                                $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
+                                                                $lateGracePeriodMinutes = $gracePeriodSettings ? $gracePeriodSettings->late_grace_minutes : 15;
+                                                                $isWithinGracePeriod = ($minutesLate <= $lateGracePeriodMinutes) && $isFullWorkingDay;
+                                                                
+                                                                if ($isWithinGracePeriod) {
+                                                                    // Grace period applied - OT starts at scheduled end time
+                                                                    $overtimeStart = $scheduledStart->copy()->addHours($clockHoursForRegular)->format('g:i A');
+                                                                } else {
+                                                                    // Employee was truly late - OT starts after their actual work hours
+                                                                    $overtimeStart = $actualTimeIn->copy()->addHours($clockHoursForRegular)->format('g:i A');
+                                                                }
+                                                                
                                                                 $overtimeEnd = $workEnd->format('g:i A');
                                                             }
                                                         @endphp
