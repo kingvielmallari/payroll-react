@@ -25,6 +25,18 @@ class AllowanceBonusSettingController extends Controller
 
     public function store(Request $request)
     {
+        // Clean up empty decimal values before validation
+        $requestData = $request->all();
+        $decimalFields = ['rate_percentage', 'fixed_amount', 'multiplier', 'minimum_amount', 'maximum_amount'];
+
+        foreach ($decimalFields as $field) {
+            if (isset($requestData[$field]) && ($requestData[$field] === '' || $requestData[$field] === null)) {
+                $requestData[$field] = null;
+            }
+        }
+
+        $request->merge($requestData);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'code' => 'required|string|max:50|unique:allowance_bonus_settings,code',
@@ -68,6 +80,18 @@ class AllowanceBonusSettingController extends Controller
 
     public function update(Request $request, AllowanceBonusSetting $allowance)
     {
+        // Clean up empty decimal values before validation
+        $requestData = $request->all();
+        $decimalFields = ['rate_percentage', 'fixed_amount', 'multiplier', 'minimum_amount', 'maximum_amount'];
+
+        foreach ($decimalFields as $field) {
+            if (isset($requestData[$field]) && ($requestData[$field] === '' || $requestData[$field] === null)) {
+                $requestData[$field] = null;
+            }
+        }
+
+        $request->merge($requestData);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
