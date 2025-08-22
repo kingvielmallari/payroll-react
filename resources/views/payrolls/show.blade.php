@@ -456,21 +456,48 @@
                                                 ];
                                             }
                                             
-                                            $basicPay = $payBreakdown['basic_pay'];
+                                            // For draft mode, calculate basic pay from actual DTR data
+                                            if ($payroll->status === 'draft') {
+                                                $basicPay = 0; // Calculate from actual DTR data
+                                            } else {
+                                                $basicPay = $payBreakdown['basic_pay'];
+                                            }
                                             
                                             // Get breakdown data
                                             $basicBreakdownData = [];
+                                            $basicRegularHours = 0;
+                                            
                                             if ($payroll->status === 'draft') {
-                                                // DRAFT: Use dynamic hours from timeBreakdowns  
-                                                $regularWorkdayBreakdown = ($timeBreakdowns[$detail->employee_id] ?? [])['regular_workday'] ?? ['regular_hours' => 0, 'overtime_hours' => 0];
-                                                $basicRegularHours = $regularWorkdayBreakdown['regular_hours'];
-                                                // Create breakdown for draft mode
-                                                if ($basicRegularHours > 0) {
+                                                // DRAFT: Use ACTUAL DTR hours instead of timeBreakdowns aggregated data
+                                                $actualRegularWorkdayHours = 0;
+                                                
+                                                // Calculate actual regular workday hours from DTR data
+                                                if (isset($dtrData[$detail->employee_id])) {
+                                                    foreach ($dtrData[$detail->employee_id] as $date => $timeLogData) {
+                                                        if ($timeLogData) {
+                                                            $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
+                                                            
+                                                            // Check if this is a regular workday and has valid hours
+                                                            $logType = $timeLog->log_type ?? null;
+                                                            if ($logType === 'regular_workday' && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
+                                                                $actualRegularWorkdayHours += $timeLog->regular_hours;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // Use actual DTR hours for calculation
+                                                if ($actualRegularWorkdayHours > 0) {
+                                                    $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                    $regularAmount = $actualRegularWorkdayHours * $hourlyRate;
+                                                    
                                                     $basicBreakdownData['Regular Workday'] = [
-                                                        'hours' => $basicRegularHours,
-                                                        'rate' => $detail->employee->hourly_rate ?? 0,
-                                                        'amount' => $basicRegularHours * ($detail->employee->hourly_rate ?? 0)
+                                                        'hours' => $actualRegularWorkdayHours,
+                                                        'rate' => $hourlyRate,
+                                                        'amount' => $regularAmount
                                                     ];
+                                                    $basicRegularHours = $actualRegularWorkdayHours;
+                                                    $basicPay = $regularAmount; // Use calculated amount
                                                 }
                                             } else {
                                                 // PROCESSING/APPROVED: Use breakdown data from snapshot
@@ -511,38 +538,44 @@
                                             $holidayPay = 0; // Calculate this properly
                                             
                                             if ($payroll->status === 'draft') {
-                                                // DRAFT: Calculate holiday breakdown dynamically by type - SHOW ONLY REGULAR HOURS
-                                                $holidayTypes = ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'];
-                                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                // DRAFT: Calculate holiday breakdown using ACTUAL DTR hours, not aggregated breakdown
+                                                $actualHolidayHours = 0;
                                                 
-                                                foreach ($holidayTypes as $type) {
-                                                    if (isset($employeeBreakdown[$type])) {
-                                                        $breakdown = $employeeBreakdown[$type];
-                                                        $rateConfig = $breakdown['rate_config'];
-                                                        $displayName = $rateConfig ? $rateConfig->display_name : 'Holiday';
-                                                        $regularHours = $breakdown['regular_hours']; // ONLY regular hours
-                                                        
-                                                        if ($regularHours > 0) {
-                                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                                            $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 2.0;
-                                                            $regularAmount = $regularHours * $hourlyRate * $regularMultiplier;
+                                                // Calculate actual holiday hours from DTR data
+                                                if (isset($dtrData[$detail->employee_id])) {
+                                                    foreach ($dtrData[$detail->employee_id] as $date => $timeLogData) {
+                                                        if ($timeLogData) {
+                                                            $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
                                                             
-                                                            // Calculate percentage for display - show actual multiplier percentage
-                                                            $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
-                                                            
-                                                            if (isset($holidayBreakdown[$displayName])) {
-                                                                $holidayBreakdown[$displayName]['hours'] += $regularHours;
-                                                                $holidayBreakdown[$displayName]['amount'] += $regularAmount;
-                                                            } else {
-                                                                $holidayBreakdown[$displayName] = [
-                                                                    'hours' => $regularHours,
-                                                                    'amount' => $regularAmount,
-                                                                    'rate' => $hourlyRate * $regularMultiplier,
-                                                                    'percentage' => $percentageDisplay
-                                                                ];
+                                                            // Check if this is a holiday and has valid hours
+                                                            $logType = $timeLog->log_type ?? null;
+                                                            if (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday']) && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
+                                                                // Get rate config for this specific holiday type
+                                                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                                if (isset($employeeBreakdown[$logType])) {
+                                                                    $breakdown = $employeeBreakdown[$logType];
+                                                                    $rateConfig = $breakdown['rate_config'];
+                                                                    $displayName = $rateConfig ? $rateConfig->display_name : 'Holiday';
+                                                                    $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                                    $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.3;
+                                                                    $regularAmount = $timeLog->regular_hours * $hourlyRate * $regularMultiplier;
+                                                                    $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
+                                                                    
+                                                                    if (isset($holidayBreakdown[$displayName])) {
+                                                                        $holidayBreakdown[$displayName]['hours'] += $timeLog->regular_hours;
+                                                                        $holidayBreakdown[$displayName]['amount'] += $regularAmount;
+                                                                    } else {
+                                                                        $holidayBreakdown[$displayName] = [
+                                                                            'hours' => $timeLog->regular_hours,
+                                                                            'amount' => $regularAmount,
+                                                                            'rate' => $hourlyRate * $regularMultiplier,
+                                                                            'percentage' => $percentageDisplay
+                                                                        ];
+                                                                    }
+                                                                    $totalHolidayRegularHours += $timeLog->regular_hours;
+                                                                    $holidayPay += $regularAmount; // Sum up all amounts
+                                                                }
                                                             }
-                                                            $totalHolidayRegularHours += $regularHours;
-                                                            $holidayPay += $regularAmount; // Sum up all amounts
                                                         }
                                                     }
                                                 }
@@ -1008,9 +1041,11 @@
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php
                                             // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances + Bonuses
-                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
                                             $allowances = $detail->allowances ?? 0;
                                             $bonuses = $detail->bonuses ?? 0;
+                                            
+                                            // Handle basic pay - use the same calculation as the Basic column for consistency
+                                            $basicPayForGross = $basicPay; // Use the same calculation from basic column
                                             
                                             // Handle holiday pay - use the same calculation as the Holiday column for consistency
                                             $holidayPayForGross = $holidayPay; // Use the same calculation from holiday column
@@ -1080,17 +1115,17 @@
                                                 }
                                             }
                                             
-                                            $calculatedGrossPay = $basicPay + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
+                                            $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
                                         @endphp
                                         
                                         <!-- Show Gross Pay Breakdown -->
                                         <div class="space-y-1">
                                             @if($calculatedGrossPay > 0)
                                                
-                                                    @if($basicPay > 0)
+                                                    @if($basicPayForGross > 0)
                                                         <div class="text-xs text-gray-500">
                                                             <span>Basic:</span>
-                                                            <span>₱{{ number_format($basicPay, 2) }}</span>
+                                                            <span>₱{{ number_format($basicPayForGross, 2) }}</span>
                                                         </div>
                                                     @endif
                                                     @if($holidayPayForGross > 0)
