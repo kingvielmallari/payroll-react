@@ -12,7 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('payroll_snapshots', function (Blueprint $table) {
-            //
+            $table->json('basic_breakdown')->nullable()->after('night_differential_pay');
+            $table->json('holiday_breakdown')->nullable()->after('basic_breakdown');
+            $table->json('rest_breakdown')->nullable()->after('holiday_breakdown');
+            $table->json('overtime_breakdown')->nullable()->after('rest_breakdown');
         });
     }
 
@@ -22,7 +25,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('payroll_snapshots', function (Blueprint $table) {
-            //
+            $table->dropColumn(['basic_breakdown', 'holiday_breakdown', 'rest_breakdown', 'overtime_breakdown']);
         });
     }
 };

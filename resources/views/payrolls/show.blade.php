@@ -480,29 +480,7 @@
                                                             // Check if this is a regular workday and has valid hours
                                                             $logType = $timeLog->log_type ?? null;
                                                             if ($logType === 'regular_workday' && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
-                                                                // Try to calculate precise hours from time stamps if available
-                                                                $preciseHours = $timeLog->regular_hours;
-                                                                
-                                                                // If we have time_in and time_out, calculate more precisely
-                                                                if (isset($timeLog->time_in) && isset($timeLog->time_out)) {
-                                                                    try {
-                                                                        $timeIn = new \DateTime($timeLog->time_in);
-                                                                        $timeOut = new \DateTime($timeLog->time_out);
-                                                                        $interval = $timeOut->diff($timeIn);
-                                                                        
-                                                                        // Convert to precise decimal hours
-                                                                        $totalMinutes = ($interval->h * 60) + $interval->i;
-                                                                        $preciseHours = round($totalMinutes / 60, 4); // 4 decimal places for minute precision
-                                                                    } catch (\Exception $e) {
-                                                                        // Fallback to stored value if timestamp parsing fails
-                                                                        $preciseHours = round($timeLog->regular_hours, 4);
-                                                                    }
-                                                                } else {
-                                                                    // Use stored value with higher precision
-                                                                    $preciseHours = round($timeLog->regular_hours, 4);
-                                                                }
-                                                                
-                                                                $actualRegularWorkdayHours += $preciseHours;
+                                                                $actualRegularWorkdayHours += $timeLog->regular_hours;
                                                             }
                                                         }
                                                     }
@@ -511,12 +489,24 @@
                                                 // Use actual DTR hours for calculation
                                                 if ($actualRegularWorkdayHours > 0) {
                                                     $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                                    $regularAmount = $actualRegularWorkdayHours * $hourlyRate;
+                                                    
+                                                    // Convert hours to minutes for precise calculation
+                                                    $actualMinutes = $actualRegularWorkdayHours * 60;
+                                                    
+                                                    // Round to nearest minute for payroll accuracy
+                                                    $roundedMinutes = round($actualMinutes);
+                                                    
+                                                    $ratePerMinute = $hourlyRate / 60;
+                                                    $regularAmount = $roundedMinutes * $ratePerMinute;
+                                                    
+                                                    // // Debug: Show exact calculation
+                                                    // $debugInfo = "Debug: {$actualRegularWorkdayHours}h = {$actualMinutes}min → {$roundedMinutes}min × ₱{$ratePerMinute}/min = ₱{$regularAmount}";
                                                     
                                                     $basicBreakdownData['Regular Workday'] = [
                                                         'hours' => $actualRegularWorkdayHours,
                                                         'rate' => $hourlyRate,
-                                                        'amount' => $regularAmount
+                                                        'amount' => $regularAmount,
+                                                        // 'debug' => $debugInfo
                                                     ];
                                                     $basicRegularHours = $actualRegularWorkdayHours;
                                                     $basicPay = $regularAmount; // Use calculated amount
@@ -536,18 +526,21 @@
                                                 <!-- Show Basic Pay breakdown -->
                                                 @foreach($basicBreakdownData as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <span>{{ $type }}: {{ number_format($data['hours'], 4) }}h</span>
+                                                        <span>{{ $type }}: {{ number_format($data['hours'], 2) }}h</span>
                                                         <div class="text-xs text-gray-600">
                                                             ₱{{ number_format($data['rate'] ?? 0, 2) }}/hr = ₱{{ number_format($data['amount'] ?? 0, 2) }}
                                                         </div>
+                                                        @if(isset($data['debug']))
+                                                            <div class="text-xs text-red-500">{{ $data['debug'] }}</div>
+                                                        @endif
                                                     </div>
                                                 @endforeach
                                                 <div class="text-xs border-t pt-1">
-                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 4) }} hrs</div>
+                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 2) }} hrs</div>
                                                 </div>
                                             @else
                                                 <div class="text-xs text-gray-500">
-                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 4) }} hrs</div>
+                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 2) }} hrs</div>
                                                 </div>
                                             @endif
                                         </div>
@@ -580,23 +573,30 @@
                                                                     $displayName = $rateConfig ? $rateConfig->display_name : 'Holiday';
                                                                     $hourlyRate = $detail->employee->hourly_rate ?? 0;
                                                                     $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.3;
-                                                                    // Use higher precision for calculations - round to 4 decimal places for accurate minute calculations
-                                                                    $preciseHours = round($timeLog->regular_hours, 4);
-                                                                    $regularAmount = $preciseHours * $hourlyRate * $regularMultiplier;
+                                                                    
+                                                                    // Convert hours to minutes for precise calculation
+                                                                    $actualMinutes = $timeLog->regular_hours * 60;
+                                                                    
+                                                                    // Round to nearest minute for payroll accuracy
+                                                                    $roundedMinutes = round($actualMinutes);
+                                                                    
+                                                                    $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
+                                                                    $regularAmount = $roundedMinutes * $ratePerMinute;
+                                                                    
                                                                     $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                                     
                                                                     if (isset($holidayBreakdown[$displayName])) {
-                                                                        $holidayBreakdown[$displayName]['hours'] += $preciseHours;
+                                                                        $holidayBreakdown[$displayName]['hours'] += $timeLog->regular_hours;
                                                                         $holidayBreakdown[$displayName]['amount'] += $regularAmount;
                                                                     } else {
                                                                         $holidayBreakdown[$displayName] = [
-                                                                            'hours' => $preciseHours,
+                                                                            'hours' => $timeLog->regular_hours,
                                                                             'amount' => $regularAmount,
                                                                             'rate' => $hourlyRate * $regularMultiplier,
                                                                             'percentage' => $percentageDisplay
                                                                         ];
                                                                     }
-                                                                    $totalHolidayRegularHours += $preciseHours;
+                                                                    $totalHolidayRegularHours += $timeLog->regular_hours;
                                                                     $holidayPay += $regularAmount; // Sum up all amounts
                                                                 }
                                                             }
@@ -664,9 +664,7 @@
                                                             // Check if this is a rest day and has valid hours
                                                             $logType = $timeLog->log_type ?? null;
                                                             if ($logType === 'rest_day' && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
-                                                                // Use higher precision for calculations - round to 4 decimal places for accurate minute calculations
-                                                                $preciseHours = round($timeLog->regular_hours, 4);
-                                                                $actualRestDayHours += $preciseHours;
+                                                                $actualRestDayHours += $timeLog->regular_hours;
                                                             }
                                                         }
                                                     }
@@ -683,7 +681,16 @@
                                                     }
                                                     
                                                     $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.2; // Default to 120%
-                                                    $regularAmount = $actualRestDayHours * $hourlyRate * $regularMultiplier;
+                                                    
+                                                    // Convert hours to minutes for precise calculation
+                                                    $actualMinutes = $actualRestDayHours * 60;
+                                                    
+                                                    // Round to nearest minute for payroll accuracy
+                                                    $roundedMinutes = round($actualMinutes);
+                                                    
+                                                    $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
+                                                    $regularAmount = $roundedMinutes * $ratePerMinute;
+                                                    
                                                     $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                     
                                                     $restDayBreakdown['Rest Day'] = [
@@ -707,7 +714,15 @@
                                                             if ($regularHours > 0) {
                                                                 $hourlyRate = $detail->employee->hourly_rate ?? 0;
                                                                 $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.2;
-                                                                $regularAmount = $regularHours * $hourlyRate * $regularMultiplier;
+                                                                
+                                                                // Convert hours to minutes for precise calculation
+                                                                $actualMinutes = $regularHours * 60;
+                                                                
+                                                                // Round to nearest minute for payroll accuracy
+                                                                $roundedMinutes = round($actualMinutes);
+                                                                
+                                                                $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
+                                                                $regularAmount = $roundedMinutes * $ratePerMinute;
                                                                 
                                                                 // Calculate percentage for display - show actual multiplier percentage
                                                                 $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
