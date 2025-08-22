@@ -5974,7 +5974,7 @@ class PayrollController extends Controller
         // Regular workday overtime
         if (isset($timeBreakdown['regular_workday']) && $timeBreakdown['regular_workday']['overtime_hours'] > 0) {
             $overtimeHours = $timeBreakdown['regular_workday']['overtime_hours'];
-            $breakdown['Regular Workday Overtime'] = [
+            $breakdown['Regular Workday OT'] = [
                 'hours' => $overtimeHours,
                 'rate' => $hourlyRate,
                 'multiplier' => 1.25,
@@ -5984,10 +5984,10 @@ class PayrollController extends Controller
 
         // Holiday overtime (already included in holiday pay, but shows overtime specifically)
         $holidayOvertimeTypes = [
-            'special_holiday' => ['name' => 'Special Holiday Overtime', 'multiplier' => 1.69], // 1.3 * 1.3
-            'regular_holiday' => ['name' => 'Regular Holiday Overtime', 'multiplier' => 2.6], // 2.0 * 1.3
-            'rest_day_special_holiday' => ['name' => 'Rest Day Special Holiday Overtime', 'multiplier' => 1.95], // 1.5 * 1.3
-            'rest_day_regular_holiday' => ['name' => 'Rest Day Regular Holiday Overtime', 'multiplier' => 3.38] // 2.6 * 1.3
+            'special_holiday' => ['name' => 'Special Holiday OT', 'multiplier' => 1.69], // 1.3 * 1.3
+            'regular_holiday' => ['name' => 'Regular Holiday OT', 'multiplier' => 2.6], // 2.0 * 1.3
+            'rest_day_special_holiday' => ['name' => 'Rest Day Special Holiday OT', 'multiplier' => 1.95], // 1.5 * 1.3
+            'rest_day_regular_holiday' => ['name' => 'Rest Day Regular Holiday OT', 'multiplier' => 3.38] // 2.6 * 1.3
         ];
 
         foreach ($holidayOvertimeTypes as $type => $config) {
@@ -6005,7 +6005,7 @@ class PayrollController extends Controller
         // Rest day overtime
         if (isset($timeBreakdown['rest_day']) && $timeBreakdown['rest_day']['overtime_hours'] > 0) {
             $overtimeHours = $timeBreakdown['rest_day']['overtime_hours'];
-            $breakdown['Rest Day Overtime'] = [
+            $breakdown['Rest Day OT'] = [
                 'hours' => $overtimeHours,
                 'rate' => $hourlyRate,
                 'multiplier' => 1.69, // 1.3 * 1.3

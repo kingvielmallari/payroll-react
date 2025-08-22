@@ -487,18 +487,18 @@
                                                 <!-- Show Basic Pay breakdown -->
                                                 @foreach($basicBreakdownData as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <span>{{ $type }}: {{ number_format($data['hours'], 1) }}h</span>
+                                                        <span>{{ $type }}: {{ number_format($data['hours'], 2) }}h</span>
                                                         <div class="text-xs text-gray-600">
                                                             ₱{{ number_format($data['rate'] ?? 0, 2) }}/hr = ₱{{ number_format($data['amount'] ?? 0, 2) }}
                                                         </div>
                                                     </div>
                                                 @endforeach
                                                 <div class="text-xs border-t pt-1">
-                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 1) }} hrs</div>
+                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 2) }} hrs</div>
                                                 </div>
                                             @else
                                                 <div class="text-xs text-gray-500">
-                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 1) }} hrs</div>
+                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 2) }} hrs</div>
                                                 </div>
                                             @endif
                                         </div>
@@ -506,11 +506,9 @@
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
-                                            // Use backend calculation instead of frontend calculation
-                                            $holidayPay = $payBreakdown['holiday_pay'] ?? 0;
-                                            
                                             $holidayBreakdown = [];
                                             $totalHolidayRegularHours = 0;
+                                            $holidayPay = 0; // Calculate this properly
                                             
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Calculate holiday breakdown dynamically by type - SHOW ONLY REGULAR HOURS
@@ -544,6 +542,7 @@
                                                                 ];
                                                             }
                                                             $totalHolidayRegularHours += $regularHours;
+                                                            $holidayPay += $regularAmount; // Sum up all amounts
                                                         }
                                                     }
                                                 }
@@ -561,6 +560,7 @@
                                                             'percentage' => number_format($data['multiplier'] * 100, 0) . '%'
                                                         ];
                                                         $totalHolidayRegularHours += $data['hours'];
+                                                        $holidayPay += $data['amount']; // Sum up amounts from snapshot
                                                     }
                                                 }
                                             }
@@ -571,7 +571,7 @@
                                                 <!-- Show individual holiday type breakdowns -->
                                                 @foreach($holidayBreakdown as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <span>{{ $type }}: {{ number_format($data['hours'], 1) }}h</span>
+                                                        <span>{{ $type }}: {{ number_format($data['hours'], 2) }}h</span>
                                                         <div class="text-xs text-gray-600">
                                                             {{ $data['percentage'] }} = ₱{{ number_format($data['amount'], 2) }}
                                                         </div>
@@ -579,7 +579,7 @@
                                                 @endforeach
                                                 
                                                 <div class="text-xs border-t pt-1">
-                                                    <div class="text-gray-500">Total: {{ number_format($totalHolidayRegularHours, 1) }} hrs</div>
+                                                    <div class="text-gray-500">Total: {{ number_format($totalHolidayRegularHours, 2) }} hrs</div>
                                                 </div>
                                             @else
                                                 <div class="text-gray-400">0 hrs</div>
@@ -589,44 +589,84 @@
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
-                                            // Use backend calculation for rest day pay
-                                            $restDayPay = $payBreakdown['rest_day_pay'] ?? 0;
-                                            
                                             $restDayBreakdown = [];
                                             $totalRestRegularHours = 0;
+                                            $restDayPay = 0; // Calculate this properly
                                             
                                             if ($payroll->status === 'draft') {
-                                                // DRAFT: Calculate rest day breakdown by type - SHOW ONLY REGULAR HOURS
-                                                $restDayTypes = ['rest_day'];
+                                                // DRAFT: Calculate rest day breakdown using ACTUAL DTR hours, not aggregated breakdown
                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                $actualRestDayHours = 0;
                                                 
-                                                foreach ($restDayTypes as $type) {
-                                                    if (isset($employeeBreakdown[$type])) {
-                                                        $breakdown = $employeeBreakdown[$type];
-                                                        $rateConfig = $breakdown['rate_config'];
-                                                        $displayName = $rateConfig ? $rateConfig->display_name : 'Rest Day';
-                                                        $regularHours = $breakdown['regular_hours']; // ONLY regular hours
-                                                        
-                                                        if ($regularHours > 0) {
-                                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                                            $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.3;
-                                                            $regularAmount = $regularHours * $hourlyRate * $regularMultiplier;
+                                                // Calculate actual rest day hours from DTR data
+                                                if (isset($dtrData[$detail->employee_id])) {
+                                                    foreach ($dtrData[$detail->employee_id] as $date => $timeLogData) {
+                                                        if ($timeLogData) {
+                                                            $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
                                                             
-                                                            // Calculate percentage for display - show actual multiplier percentage
-                                                            $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
-                                                            
-                                                            if (isset($restDayBreakdown[$displayName])) {
-                                                                $restDayBreakdown[$displayName]['hours'] += $regularHours;
-                                                                $restDayBreakdown[$displayName]['amount'] += $regularAmount;
-                                                            } else {
-                                                                $restDayBreakdown[$displayName] = [
-                                                                    'hours' => $regularHours,
-                                                                    'amount' => $regularAmount,
-                                                                    'rate' => $hourlyRate * $regularMultiplier,
-                                                                    'percentage' => $percentageDisplay
-                                                                ];
+                                                            // Check if this is a rest day and has valid hours
+                                                            $logType = $timeLog->log_type ?? null;
+                                                            if ($logType === 'rest_day' && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
+                                                                $actualRestDayHours += $timeLog->regular_hours;
                                                             }
-                                                            $totalRestRegularHours += $regularHours;
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // If we found actual DTR hours, use them
+                                                if ($actualRestDayHours > 0) {
+                                                    $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                    
+                                                    // Get the rest day rate config for multiplier
+                                                    $rateConfig = null;
+                                                    if (isset($employeeBreakdown['rest_day']['rate_config'])) {
+                                                        $rateConfig = $employeeBreakdown['rest_day']['rate_config'];
+                                                    }
+                                                    
+                                                    $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.2; // Default to 120%
+                                                    $regularAmount = $actualRestDayHours * $hourlyRate * $regularMultiplier;
+                                                    $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
+                                                    
+                                                    $restDayBreakdown['Rest Day'] = [
+                                                        'hours' => $actualRestDayHours,
+                                                        'amount' => $regularAmount,
+                                                        'rate' => $hourlyRate * $regularMultiplier,
+                                                        'percentage' => $percentageDisplay
+                                                    ];
+                                                    $totalRestRegularHours = $actualRestDayHours;
+                                                    $restDayPay = $regularAmount; // Use calculated amount
+                                                } else {
+                                                    // Fallback to breakdown calculation if no DTR data
+                                                    $restDayTypes = ['rest_day'];
+                                                    foreach ($restDayTypes as $type) {
+                                                        if (isset($employeeBreakdown[$type])) {
+                                                            $breakdown = $employeeBreakdown[$type];
+                                                            $rateConfig = $breakdown['rate_config'];
+                                                            $displayName = $rateConfig ? $rateConfig->display_name : 'Rest Day';
+                                                            $regularHours = $breakdown['regular_hours']; // ONLY regular hours
+                                                            
+                                                            if ($regularHours > 0) {
+                                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                                $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.2;
+                                                                $regularAmount = $regularHours * $hourlyRate * $regularMultiplier;
+                                                                
+                                                                // Calculate percentage for display - show actual multiplier percentage
+                                                                $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
+                                                                
+                                                                if (isset($restDayBreakdown[$displayName])) {
+                                                                    $restDayBreakdown[$displayName]['hours'] += $regularHours;
+                                                                    $restDayBreakdown[$displayName]['amount'] += $regularAmount;
+                                                                } else {
+                                                                    $restDayBreakdown[$displayName] = [
+                                                                        'hours' => $regularHours,
+                                                                        'amount' => $regularAmount,
+                                                                        'rate' => $hourlyRate * $regularMultiplier,
+                                                                        'percentage' => $percentageDisplay
+                                                                    ];
+                                                                }
+                                                                $totalRestRegularHours += $regularHours;
+                                                                $restDayPay += $regularAmount; // Sum up all amounts
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -649,6 +689,7 @@
                                                             'percentage' => number_format($data['multiplier'] * 100, 0) . '%'
                                                         ];
                                                         $totalRestRegularHours += $data['hours'];
+                                                        $restDayPay += $data['amount']; // Sum up amounts from snapshot
                                                     }
                                                 }
                                             }
@@ -660,7 +701,7 @@
                                                 @foreach($restDayBreakdown as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
                                                        
-                                                            <span>{{ $type }}: {{ number_format($data['hours'], 1) }}h</span>
+                                                            <span>{{ $type }}: {{ number_format($data['hours'], 2) }}h</span>
                                                      
                                                         <div class="text-xs text-gray-600">
                                                             {{ $data['percentage'] }} = ₱{{ number_format($data['amount'], 2) }}
@@ -669,12 +710,12 @@
                                                 @endforeach
                                                 
                                                 <div class="text-xs border-t pt-1">
-                                                    <div class="text-gray-500">Total: {{ number_format($totalRestRegularHours, 1) }} hrs</div>
+                                                    <div class="text-gray-500">Total: {{ number_format($totalRestRegularHours, 2) }} hrs</div>
                                                     <div class="font-bold text-cyan-600">₱{{ number_format($restDayPay, 2) }}</div>
                                                 </div>
                                             @else
                                                 @if($totalRestRegularHours > 0)
-                                                    <div class="text-xs text-gray-500">{{ number_format($totalRestRegularHours, 1) }} hrs</div>
+                                                    <div class="text-xs text-gray-500">{{ number_format($totalRestRegularHours, 2) }} hrs</div>
                                                     <div class="font-bold text-cyan-600">₱{{ number_format($restDayPay, 2) }}</div>
                                                 @else
                                                     <div class="text-gray-400">₱0.00</div>
@@ -690,79 +731,83 @@
                                             $overtimeBreakdown = [];
                                             
                                             if ($payroll->status === 'draft') {
-                                                // DRAFT: Calculate overtime breakdown dynamically
+                                                // DRAFT: Calculate overtime breakdown dynamically with CORRECT amounts
                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                $calculatedOvertimeTotal = 0;
                                                 
-                                                foreach ($employeeBreakdown as $logType => $breakdown) {
-                                                    if ($breakdown['overtime_hours'] > 0) {
-                                                        $rateConfig = $breakdown['rate_config'];
-                                                        $displayName = $rateConfig ? $rateConfig->display_name : 'Regular Day';
-                                                        $overtimeHours = $breakdown['overtime_hours'];
-                                                        
-                                                        // Include ALL overtime from ALL day types (regular, holiday, rest day)
-                                                        $regularOvertimeHours = $breakdown['overtime_hours'] ?? 0;
-                                                        $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
-                                                        
-                                                        $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                                        
-                                                        // Regular overtime breakdown
-                                                        if ($regularOvertimeHours > 0) {
-                                                            $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
-                                                            $overtimeAmount = $regularOvertimeHours * $hourlyRate * $overtimeMultiplier;
-                                                            $percentageDisplay = number_format($overtimeMultiplier * 100, 0) . '%';
-                                                            
-                                                            $overtimeBreakdown[] = [
-                                                                'name' => $displayName . ' OT',
-                                                                'hours' => $regularOvertimeHours,
-                                                                'amount' => $overtimeAmount,
-                                                                'percentage' => $percentageDisplay
-                                                            ];
-                                                            // Add to total from the actual breakdown items
-                                                            $totalOvertimeHours += $regularOvertimeHours;
-                                                        }
-                                                        
-                                                        // Night differential overtime breakdown
-                                                        if ($nightDiffOvertimeHours > 0) {
-                                                            // Get night differential rate
-                                                            $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
-                                                            $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
-                                                            
-                                                            // Base overtime rate + night differential
-                                                            $baseOvertimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
-                                                            $combinedMultiplier = $baseOvertimeMultiplier + ($nightDiffMultiplier - 1); // e.g., 1.25 + 0.10 = 1.35
-                                                            
-                                                            $nightDiffOvertimeAmount = $nightDiffOvertimeHours * $hourlyRate * $combinedMultiplier;
-                                                            $percentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
-                                                            
-                                                            $overtimeBreakdown[] = [
-                                                                'name' => $displayName . ' OT+ND',
-                                                                'hours' => $nightDiffOvertimeHours,
-                                                                'amount' => $nightDiffOvertimeAmount,
-                                                                'percentage' => $percentageDisplay
-                                                            ];
-                                                            // Add to total from the actual breakdown items
-                                                            $totalOvertimeHours += $nightDiffOvertimeHours;
-                                                        }
-                                                        
-                                                        // Fallback: if no breakdown available, show total overtime
-                                                        if ($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0 && $overtimeHours > 0) {
-                                                            $overtimeMultiplier = $rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25;
-                                                            $overtimeAmount = $overtimeHours * $hourlyRate * $overtimeMultiplier;
-                                                            $percentageDisplay = number_format($overtimeMultiplier * 100, 0) . '%';
-                                                            
-                                                            $overtimeBreakdown[] = [
-                                                                'name' => $displayName . ' OT',
-                                                                'hours' => $overtimeHours,
-                                                                'amount' => $overtimeAmount,
-                                                                'percentage' => $percentageDisplay
-                                                            ];
-                                                            // Add to total from the actual breakdown items (fallback case)
-                                                            $totalOvertimeHours += $overtimeHours;
-                                                        }
-                                                    }
+                                                // Regular workday overtime
+                                                if (isset($employeeBreakdown['regular_workday']) && $employeeBreakdown['regular_workday']['overtime_hours'] > 0) {
+                                                    $hours = $employeeBreakdown['regular_workday']['overtime_hours'];
+                                                    $rateConfig = $employeeBreakdown['regular_workday']['rate_config'];
+                                                    $multiplier = $rateConfig ? ($rateConfig->overtime_rate_multiplier ?? 1.25) : 1.25;
+                                                    $amount = $hours * $hourlyRate * $multiplier;
+                                                    
+                                                    $overtimeBreakdown[] = [
+                                                        'name' => 'Regular Workday OT',
+                                                        'hours' => $hours,
+                                                        'amount' => $amount,
+                                                        'percentage' => number_format($multiplier * 100, 0) . '%'
+                                                    ];
+                                                    $totalOvertimeHours += $hours;
+                                                    $calculatedOvertimeTotal += $amount;
                                                 }
+                                                
+                                                // Special holiday overtime
+                                                if (isset($employeeBreakdown['special_holiday']) && $employeeBreakdown['special_holiday']['overtime_hours'] > 0) {
+                                                    $hours = $employeeBreakdown['special_holiday']['overtime_hours'];
+                                                    $rateConfig = $employeeBreakdown['special_holiday']['rate_config'];
+                                                    $multiplier = $rateConfig ? ($rateConfig->overtime_rate_multiplier ?? 1.69) : 1.69;
+                                                    $amount = $hours * $hourlyRate * $multiplier;
+                                                    
+                                                    $overtimeBreakdown[] = [
+                                                        'name' => 'Special Holiday OT',
+                                                        'hours' => $hours,
+                                                        'amount' => $amount,
+                                                        'percentage' => number_format($multiplier * 100, 0) . '%'
+                                                    ];
+                                                    $totalOvertimeHours += $hours;
+                                                    $calculatedOvertimeTotal += $amount;
+                                                }
+                                                
+                                                // Regular holiday overtime  
+                                                if (isset($employeeBreakdown['regular_holiday']) && $employeeBreakdown['regular_holiday']['overtime_hours'] > 0) {
+                                                    $hours = $employeeBreakdown['regular_holiday']['overtime_hours'];
+                                                    $rateConfig = $employeeBreakdown['regular_holiday']['rate_config'];
+                                                    $multiplier = $rateConfig ? ($rateConfig->overtime_rate_multiplier ?? 2.6) : 2.6;
+                                                    $amount = $hours * $hourlyRate * $multiplier;
+                                                    
+                                                    $overtimeBreakdown[] = [
+                                                        'name' => 'Regular Holiday OT',
+                                                        'hours' => $hours,
+                                                        'amount' => $amount,
+                                                        'percentage' => number_format($multiplier * 100, 0) . '%'
+                                                    ];
+                                                    $totalOvertimeHours += $hours;
+                                                    $calculatedOvertimeTotal += $amount;
+                                                }
+                                                
+                                                // Rest day overtime
+                                                if (isset($employeeBreakdown['rest_day']) && $employeeBreakdown['rest_day']['overtime_hours'] > 0) {
+                                                    $hours = $employeeBreakdown['rest_day']['overtime_hours'];
+                                                    $rateConfig = $employeeBreakdown['rest_day']['rate_config'];
+                                                    $multiplier = $rateConfig ? ($rateConfig->overtime_rate_multiplier ?? 1.69) : 1.69;
+                                                    $amount = $hours * $hourlyRate * $multiplier;
+                                                    
+                                                    $overtimeBreakdown[] = [
+                                                        'name' => 'Rest Day OT',
+                                                        'hours' => $hours,
+                                                        'amount' => $amount,
+                                                        'percentage' => number_format($multiplier * 100, 0) . '%'
+                                                    ];
+                                                    $totalOvertimeHours += $hours;
+                                                    $calculatedOvertimeTotal += $amount;
+                                                }
+                                                
+                                                // Override the backend overtime pay with our correct calculation for display
+                                                $overtimePay = $calculatedOvertimeTotal;
                                             } else {
-                                                // PROCESSING/APPROVED: Use breakdown data from snapshot
+                                                // PROCESSING/APPROVED: Use breakdown data from snapshot - NO CALCULATION!
                                                 if ($detail->earnings_breakdown) {
                                                     $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
                                                     $overtimeBreakdownData = $earningsBreakdown['overtime'] ?? [];
@@ -776,6 +821,8 @@
                                                         ];
                                                         $totalOvertimeHours += $data['hours'];
                                                     }
+                                                    // Use the total from snapshots
+                                                    $overtimePay = array_sum(array_column($overtimeBreakdown, 'amount'));
                                                 }
                                             }
                                         @endphp
@@ -784,7 +831,7 @@
                                             @if(!empty($overtimeBreakdown))
                                                 @foreach($overtimeBreakdown as $ot)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <span>{{ $ot['name'] }}: {{ number_format($ot['hours'], 1) }}h</span>
+                                                        <span>{{ $ot['name'] }}: {{ number_format($ot['hours'], 2) }}h</span>
                                                         <div class="text-xs text-gray-600">
                                                             {{ $ot['percentage'] }} = ₱{{ number_format($ot['amount'], 2) }}
                                                         </div>
@@ -792,7 +839,7 @@
                                                 @endforeach
                                                 
                                                 <div class="text-xs border-t pt-1">
-                                                    <div class="text-gray-500">Total: {{ number_format($totalOvertimeHours, 1) }} hrs</div>
+                                                    <div class="text-gray-500">Total: {{ number_format($totalOvertimeHours, 2) }} hrs</div>
                                                 </div>
                                             @else
                                                 <div class="text-gray-400">0 hrs</div>
@@ -962,31 +1009,78 @@
                                         @php
                                             // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances + Bonuses
                                             $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
-                                            $holidayPay = $detail->holiday_pay ?? 0;
-                                            $overtimePay = $detail->overtime_pay ?? 0;
                                             $allowances = $detail->allowances ?? 0;
                                             $bonuses = $detail->bonuses ?? 0;
                                             
-                                            // Calculate rest pay for gross pay calculation
-                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                            $restPay = 0;
+                                            // Handle holiday pay - use the same calculation as the Holiday column for consistency
+                                            $holidayPayForGross = $holidayPay; // Use the same calculation from holiday column
                                             
-                                            if (isset($employeeBreakdown['rest_day'])) {
-                                                $restBreakdown = $employeeBreakdown['rest_day'];
-                                                $rateConfig = $restBreakdown['rate_config'];
-                                                if ($rateConfig) {
-                                                    $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
-                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
-                                                    
-                                                    $regularRestPay = $restBreakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
-                                                    $overtimeRestPay = $restBreakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
-                                                    
-                                                    $restPay = $regularRestPay + $overtimeRestPay;
+                                            // Handle rest pay - use the same calculation as the Rest column for consistency
+                                            $restPayForGross = $restDayPay; // Use the same calculation from rest column
+                                            
+                                            // Handle overtime pay - use snapshot in processing mode, calculate in draft mode  
+                                            if (!isset($isDynamic) || !$isDynamic) {
+                                                // PROCESSING/APPROVED: Use overtime breakdown from snapshot
+                                                if (isset($detail->overtime_breakdown) && is_array($detail->overtime_breakdown)) {
+                                                    $overtimePay = 0;
+                                                    foreach ($detail->overtime_breakdown as $overtimeData) {
+                                                        $overtimePay += $overtimeData['amount'] ?? 0;
+                                                    }
+                                                } else {
+                                                    $overtimePay = $detail->overtime_pay ?? 0;
+                                                }
+                                            } else {
+                                                // DRAFT: Calculate overtime pay correctly
+                                                $overtimePay = 0;
+                                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                
+                                                // Calculate overtime for regular workdays
+                                                if (isset($employeeBreakdown['regular_workday'])) {
+                                                    $regularBreakdown = $employeeBreakdown['regular_workday'];
+                                                    $overtimeHours = $regularBreakdown['overtime_hours'] ?? 0;
+                                                    $rateConfig = $regularBreakdown['rate_config'];
+                                                    if ($rateConfig && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+                                                        $overtimePay += $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                    }
+                                                }
+                                                
+                                                // Calculate overtime for special holidays
+                                                if (isset($employeeBreakdown['special_holiday'])) {
+                                                    $specialBreakdown = $employeeBreakdown['special_holiday'];
+                                                    $overtimeHours = $specialBreakdown['overtime_hours'] ?? 0;
+                                                    $rateConfig = $specialBreakdown['rate_config'];
+                                                    if ($rateConfig && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                                        $overtimePay += $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                    }
+                                                }
+                                                
+                                                // Calculate overtime for regular holidays  
+                                                if (isset($employeeBreakdown['regular_holiday'])) {
+                                                    $regularHolidayBreakdown = $employeeBreakdown['regular_holiday'];
+                                                    $overtimeHours = $regularHolidayBreakdown['overtime_hours'] ?? 0;
+                                                    $rateConfig = $regularHolidayBreakdown['rate_config'];
+                                                    if ($rateConfig && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 2.6;
+                                                        $overtimePay += $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                    }
+                                                }
+                                                
+                                                // Calculate overtime for rest days
+                                                if (isset($employeeBreakdown['rest_day'])) {
+                                                    $restDayBreakdown = $employeeBreakdown['rest_day'];
+                                                    $overtimeHours = $restDayBreakdown['overtime_hours'] ?? 0;
+                                                    $rateConfig = $restDayBreakdown['rate_config'];
+                                                    if ($rateConfig && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                                        $overtimePay += $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                    }
                                                 }
                                             }
                                             
-                                            $calculatedGrossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses;
+                                            $calculatedGrossPay = $basicPay + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
                                         @endphp
                                         
                                         <!-- Show Gross Pay Breakdown -->
@@ -999,16 +1093,16 @@
                                                             <span>₱{{ number_format($basicPay, 2) }}</span>
                                                         </div>
                                                     @endif
-                                                    @if($holidayPay > 0)
+                                                    @if($holidayPayForGross > 0)
                                                         <div class="text-xs text-gray-500">
                                                             <span>Holiday:</span>
-                                                            <span>₱{{ number_format($holidayPay, 2) }}</span>
+                                                            <span>₱{{ number_format($holidayPayForGross, 2) }}</span>
                                                         </div>
                                                     @endif
-                                                    @if($restPay > 0)
+                                                    @if($restPayForGross > 0)
                                                         <div class="text-xs text-gray-500">
                                                             <span>Rest:</span>
-                                                            <span>₱{{ number_format($restPay, 2) }}</span>
+                                                            <span>₱{{ number_format($restPayForGross, 2) }}</span>
                                                         </div>
                                                     @endif
                                                     @if($overtimePay > 0)
@@ -1184,29 +1278,122 @@
                                             // Calculate net pay - use snapshot data for processing/approved payrolls
                                             $detailDeductionTotal = 0;
                                             
-                                            // First calculate the correct gross pay for this detail
+                                            // Use the SAME calculation logic as the gross pay column
                                             $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
                                             $holidayPay = $detail->holiday_pay ?? 0;
-                                            $overtimePay = $detail->overtime_pay ?? 0;
                                             $allowances = $detail->allowances ?? 0;
                                             $bonuses = $detail->bonuses ?? 0;
                                             
-                                            // Calculate rest pay for this employee
-                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                            // Handle rest pay - use snapshot in processing mode, calculate in draft mode
                                             $restPay = 0;
+                                            if (!isset($isDynamic) || !$isDynamic) {
+                                                // PROCESSING/APPROVED: Use rest breakdown from snapshot
+                                                if (isset($detail->rest_breakdown) && is_array($detail->rest_breakdown)) {
+                                                    foreach ($detail->rest_breakdown as $restData) {
+                                                        if (is_array($restData)) {
+                                                            $restPay += $restData['amount'] ?? 0;
+                                                        } else {
+                                                            $restPay += $restData;
+                                                        }
+                                                    }
+                                                } else {
+                                                    // Fallback: Calculate rest pay if no snapshot
+                                                    $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                    $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                    
+                                                    if (isset($employeeBreakdown['rest_day'])) {
+                                                        $restBreakdown = $employeeBreakdown['rest_day'];
+                                                        $rateConfig = $restBreakdown['rate_config'];
+                                                        if ($rateConfig) {
+                                                            $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
+                                                            $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                                            
+                                                            $regularRestPay = $restBreakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                                            $overtimeRestPay = $restBreakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                                            
+                                                            $restPay = $regularRestPay + $overtimeRestPay;
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                // DRAFT: Calculate rest pay dynamically
+                                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                
+                                                if (isset($employeeBreakdown['rest_day'])) {
+                                                    $restBreakdown = $employeeBreakdown['rest_day'];
+                                                    $rateConfig = $restBreakdown['rate_config'];
+                                                    if ($rateConfig) {
+                                                        $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
+                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                                        
+                                                        $regularRestPay = $restBreakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+                                                        $overtimeRestPay = $restBreakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+                                                        
+                                                        $restPay = $regularRestPay + $overtimeRestPay;
+                                                    }
+                                                }
+                                            }
                                             
-                                            if (isset($employeeBreakdown['rest_day'])) {
-                                                $restBreakdown = $employeeBreakdown['rest_day'];
-                                                $rateConfig = $restBreakdown['rate_config'];
-                                                if ($rateConfig) {
-                                                    $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
-                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
-                                                    
-                                                    $regularRestPay = $restBreakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
-                                                    $overtimeRestPay = $restBreakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
-                                                    
-                                                    $restPay = $regularRestPay + $overtimeRestPay;
+                                            // Handle overtime pay - use snapshot in processing mode, calculate in draft mode  
+                                            if (!isset($isDynamic) || !$isDynamic) {
+                                                // PROCESSING/APPROVED: Use overtime breakdown from snapshot
+                                                if (isset($detail->overtime_breakdown) && is_array($detail->overtime_breakdown)) {
+                                                    $overtimePay = 0;
+                                                    foreach ($detail->overtime_breakdown as $overtimeData) {
+                                                        $overtimePay += $overtimeData['amount'] ?? 0;
+                                                    }
+                                                } else {
+                                                    $overtimePay = $detail->overtime_pay ?? 0;
+                                                }
+                                            } else {
+                                                // DRAFT: Calculate overtime pay correctly using dynamic settings
+                                                $overtimePay = 0;
+                                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                
+                                                // Calculate overtime for regular workdays
+                                                if (isset($employeeBreakdown['regular_workday'])) {
+                                                    $regularBreakdown = $employeeBreakdown['regular_workday'];
+                                                    $overtimeHours = $regularBreakdown['overtime_hours'] ?? 0;
+                                                    $rateConfig = $regularBreakdown['rate_config'];
+                                                    if ($rateConfig && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+                                                        $overtimePay += $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                    }
+                                                }
+                                                
+                                                // Calculate overtime for special holidays
+                                                if (isset($employeeBreakdown['special_holiday'])) {
+                                                    $specialBreakdown = $employeeBreakdown['special_holiday'];
+                                                    $overtimeHours = $specialBreakdown['overtime_hours'] ?? 0;
+                                                    $rateConfig = $specialBreakdown['rate_config'];
+                                                    if ($rateConfig && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                                        $overtimePay += $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                    }
+                                                }
+                                                
+                                                // Calculate overtime for regular holidays  
+                                                if (isset($employeeBreakdown['regular_holiday'])) {
+                                                    $regularHolidayBreakdown = $employeeBreakdown['regular_holiday'];
+                                                    $overtimeHours = $regularHolidayBreakdown['overtime_hours'] ?? 0;
+                                                    $rateConfig = $regularHolidayBreakdown['rate_config'];
+                                                    if ($rateConfig && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 2.6;
+                                                        $overtimePay += $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                    }
+                                                }
+                                                
+                                                // Calculate overtime for rest days
+                                                if (isset($employeeBreakdown['rest_day'])) {
+                                                    $restDayBreakdown = $employeeBreakdown['rest_day'];
+                                                    $overtimeHours = $restDayBreakdown['overtime_hours'] ?? 0;
+                                                    $rateConfig = $restDayBreakdown['rate_config'];
+                                                    if ($rateConfig && $overtimeHours > 0) {
+                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                                                        $overtimePay += $overtimeHours * $hourlyRate * $overtimeMultiplier;
+                                                    }
                                                 }
                                             }
                                             
@@ -1641,7 +1828,7 @@
                                                         @if($displayRegularHours > 0)
                                                             {{-- (regular hours period) --}}
                                                         @endif
-                                                        ({{ number_format($displayRegularHours, 1) }}h)
+                                                        ({{ number_format($displayRegularHours, 2) }}h)
                                                     </div>
                                                
                                                     @endif
@@ -1719,9 +1906,9 @@
                                                         </div>
                                                         <div class="{{ $period['color_class'] }} text-xs">
                                                             @if($period['type'] === 'regular_overtime')
-                                                                OT: {{ number_format($period['hours'], 1) }}h
+                                                                OT: {{ number_format($period['hours'], 2) }}h
                                                             @elseif($period['type'] === 'night_diff_overtime')
-                                                                OT+ND: {{ number_format($period['hours'], 1) }}h
+                                                                OT+ND: {{ number_format($period['hours'], 2) }}h
                                                             @endif
                                                         </div>
                                                         @endif
@@ -1812,7 +1999,7 @@
                                                             $displayRegularOTHours = $calculatedRegularOT; // Use calculated time period, not DB values
                                                         @endphp
                                                         <div class="text-orange-600 text-xs">
-                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($displayRegularOTHours, 1) }}h)
+                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($displayRegularOTHours, 2) }}h)
                                                         </div>
                                                    
                                                         @endif
@@ -1852,7 +2039,7 @@
                                                             {{ $nightOTStart }} - {{ $nightOTEnd }} (ot + nd period)
                                                         </div>
                                                         <div class="text-purple-600 text-xs">
-                                                            OT+ND: {{ number_format($nightDiffOvertimeHours, 1) }}h
+                                                            OT+ND: {{ number_format($nightDiffOvertimeHours, 2) }}h
                                                         </div>
                                                         @endif
                                                      
@@ -1936,11 +2123,11 @@
                                                             {{ $overtimeStart }} - {{ $overtimeEnd }} 
                                                         </div>
                                                         <div class="text-orange-600 text-xs">
-                                                            OT: {{ number_format($calculatedOTHours, 1) }}h
+                                                            OT: {{ number_format($calculatedOTHours, 2) }}h
                                                         </div>
                                                         @else
                                                         <div class="text-orange-600 text-xs">
-                                                            OT: {{ number_format($overtimeHours, 1) }}h
+                                                            OT: {{ number_format($overtimeHours, 2) }}h
                                                         </div>
                                                         @endif
                                                         @endif
