@@ -4367,6 +4367,12 @@ class PayrollController extends Controller
             $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
             $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail);
 
+            // Create detailed breakdowns for Basic, Holiday, Rest, and Overtime columns
+            $basicBreakdown = $this->createBasicPayBreakdown($employeeTimeBreakdown, $employee);
+            $holidayBreakdown = $this->createHolidayPayBreakdown($employeeTimeBreakdown, $employee);
+            $restBreakdown = $this->createRestPayBreakdown($employeeTimeBreakdown, $employee);
+            $overtimeBreakdown = $this->createOvertimePayBreakdown($employeeTimeBreakdown, $employee);
+
             // Log the calculated values for debugging
             Log::info("Snapshot calculation for employee {$employee->id}", [
                 'basic_pay' => $basicPay,
@@ -4421,6 +4427,10 @@ class PayrollController extends Controller
                 'overtime_pay' => $overtimePay, // Use calculated overtime pay
                 'holiday_pay' => $holidayPay, // Use calculated holiday pay
                 'night_differential_pay' => $payrollCalculation['night_differential_pay'] ?? 0,
+                'basic_breakdown' => $basicBreakdown,
+                'holiday_breakdown' => $holidayBreakdown,
+                'rest_breakdown' => $restBreakdown,
+                'overtime_breakdown' => $overtimeBreakdown,
                 'allowances_breakdown' => $allowancesBreakdown,
                 'allowances_total' => $payrollCalculation['allowances'] ?? 0,
                 'bonuses_breakdown' => $bonusesBreakdown,
@@ -5279,8 +5289,12 @@ class PayrollController extends Controller
             foreach ($payroll->payrollDetails as $detail) {
                 $snapshot = $snapshots->where('employee_id', $detail->employee_id)->first();
                 if ($snapshot) {
-                    // Set breakdown data from snapshots
+                    // Set breakdown data from snapshots - includes Basic, Holiday, Rest, Overtime breakdowns
                     $detail->earnings_breakdown = json_encode([
+                        'basic' => $snapshot->basic_breakdown ?? [],
+                        'holiday' => $snapshot->holiday_breakdown ?? [],
+                        'rest' => $snapshot->rest_breakdown ?? [],
+                        'overtime' => $snapshot->overtime_breakdown ?? [],
                         'allowances' => $snapshot->allowances_breakdown ?? []
                     ]);
                     $detail->deductions_breakdown = json_encode([
@@ -5289,12 +5303,23 @@ class PayrollController extends Controller
                 }
             }
         } else {
-            // For draft payrolls, calculate allowance breakdowns dynamically
+            // For draft payrolls, calculate breakdowns dynamically
             foreach ($payroll->payrollDetails as $detail) {
                 // Calculate allowances breakdown dynamically
                 $allowancesData = $this->calculateAllowances($detail->employee, $detail->basic_salary, $detail->days_worked, $detail->regular_hours);
 
+                // Calculate time breakdown for Basic, Holiday, Rest, Overtime columns
+                $timeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                $basicBreakdownDynamic = $this->createBasicPayBreakdown($timeBreakdown, $detail->employee);
+                $holidayBreakdownDynamic = $this->createHolidayPayBreakdown($timeBreakdown, $detail->employee);
+                $restBreakdownDynamic = $this->createRestPayBreakdown($timeBreakdown, $detail->employee);
+                $overtimeBreakdownDynamic = $this->createOvertimePayBreakdown($timeBreakdown, $detail->employee);
+
                 $detail->earnings_breakdown = json_encode([
+                    'basic' => $basicBreakdownDynamic,
+                    'holiday' => $holidayBreakdownDynamic,
+                    'rest' => $restBreakdownDynamic,
+                    'overtime' => $overtimeBreakdownDynamic,
                     'allowances' => $allowancesData['breakdown'] ?? []
                 ]);
             }
@@ -5856,5 +5881,138 @@ class PayrollController extends Controller
         // Calculate deduction based on hourly rate
         $hourlyRate = $employee->hourly_rate ?? 0;
         return $undertimeHours * $hourlyRate;
+    }
+
+    /**
+     * Create Basic Pay breakdown for snapshot (regular workdays only)
+     */
+    private function createBasicPayBreakdown($timeBreakdown, $employee)
+    {
+        $breakdown = [];
+        $hourlyRate = $employee->hourly_rate ?? 0;
+
+        // Only include regular workday breakdown for basic pay
+        if (isset($timeBreakdown['regular_workday'])) {
+            $regularData = $timeBreakdown['regular_workday'];
+            $breakdown['Regular Workday'] = [
+                'hours' => $regularData['regular_hours'],
+                'rate' => $hourlyRate,
+                'multiplier' => 1.0,
+                'amount' => $regularData['regular_hours'] * $hourlyRate * 1.0
+            ];
+        }
+
+        return $breakdown;
+    }
+
+    /**
+     * Create Holiday Pay breakdown for snapshot
+     */
+    private function createHolidayPayBreakdown($timeBreakdown, $employee)
+    {
+        $breakdown = [];
+        $hourlyRate = $employee->hourly_rate ?? 0;
+
+        $holidayTypes = [
+            'special_holiday' => ['name' => 'Special Holiday', 'multiplier' => 1.3],
+            'regular_holiday' => ['name' => 'Regular Holiday', 'multiplier' => 2.0],
+            'rest_day_special_holiday' => ['name' => 'Rest Day Special Holiday', 'multiplier' => 1.5],
+            'rest_day_regular_holiday' => ['name' => 'Rest Day Regular Holiday', 'multiplier' => 2.6]
+        ];
+
+        foreach ($holidayTypes as $type => $config) {
+            if (isset($timeBreakdown[$type])) {
+                $data = $timeBreakdown[$type];
+                $totalHours = $data['regular_hours'] + $data['overtime_hours'];
+                if ($totalHours > 0) {
+                    $breakdown[$config['name']] = [
+                        'hours' => $totalHours,
+                        'rate' => $hourlyRate,
+                        'multiplier' => $config['multiplier'],
+                        'amount' => $totalHours * $hourlyRate * $config['multiplier']
+                    ];
+                }
+            }
+        }
+
+        return $breakdown;
+    }
+
+    /**
+     * Create Rest Pay breakdown for snapshot
+     */
+    private function createRestPayBreakdown($timeBreakdown, $employee)
+    {
+        $breakdown = [];
+        $hourlyRate = $employee->hourly_rate ?? 0;
+
+        // Only include rest day breakdown
+        if (isset($timeBreakdown['rest_day'])) {
+            $restData = $timeBreakdown['rest_day'];
+            $totalHours = $restData['regular_hours'] + $restData['overtime_hours'];
+            if ($totalHours > 0) {
+                $breakdown['Rest Day'] = [
+                    'hours' => $totalHours,
+                    'rate' => $hourlyRate,
+                    'multiplier' => 1.3,
+                    'amount' => $totalHours * $hourlyRate * 1.3
+                ];
+            }
+        }
+
+        return $breakdown;
+    }
+
+    /**
+     * Create Overtime Pay breakdown for snapshot
+     */
+    private function createOvertimePayBreakdown($timeBreakdown, $employee)
+    {
+        $breakdown = [];
+        $hourlyRate = $employee->hourly_rate ?? 0;
+
+        // Regular workday overtime
+        if (isset($timeBreakdown['regular_workday']) && $timeBreakdown['regular_workday']['overtime_hours'] > 0) {
+            $overtimeHours = $timeBreakdown['regular_workday']['overtime_hours'];
+            $breakdown['Regular Workday Overtime'] = [
+                'hours' => $overtimeHours,
+                'rate' => $hourlyRate,
+                'multiplier' => 1.25,
+                'amount' => $overtimeHours * $hourlyRate * 1.25
+            ];
+        }
+
+        // Holiday overtime (already included in holiday pay, but shows overtime specifically)
+        $holidayOvertimeTypes = [
+            'special_holiday' => ['name' => 'Special Holiday Overtime', 'multiplier' => 1.69], // 1.3 * 1.3
+            'regular_holiday' => ['name' => 'Regular Holiday Overtime', 'multiplier' => 2.6], // 2.0 * 1.3
+            'rest_day_special_holiday' => ['name' => 'Rest Day Special Holiday Overtime', 'multiplier' => 1.95], // 1.5 * 1.3
+            'rest_day_regular_holiday' => ['name' => 'Rest Day Regular Holiday Overtime', 'multiplier' => 3.38] // 2.6 * 1.3
+        ];
+
+        foreach ($holidayOvertimeTypes as $type => $config) {
+            if (isset($timeBreakdown[$type]) && $timeBreakdown[$type]['overtime_hours'] > 0) {
+                $overtimeHours = $timeBreakdown[$type]['overtime_hours'];
+                $breakdown[$config['name']] = [
+                    'hours' => $overtimeHours,
+                    'rate' => $hourlyRate,
+                    'multiplier' => $config['multiplier'],
+                    'amount' => $overtimeHours * $hourlyRate * $config['multiplier']
+                ];
+            }
+        }
+
+        // Rest day overtime
+        if (isset($timeBreakdown['rest_day']) && $timeBreakdown['rest_day']['overtime_hours'] > 0) {
+            $overtimeHours = $timeBreakdown['rest_day']['overtime_hours'];
+            $breakdown['Rest Day Overtime'] = [
+                'hours' => $overtimeHours,
+                'rate' => $hourlyRate,
+                'multiplier' => 1.69, // 1.3 * 1.3
+                'amount' => $overtimeHours * $hourlyRate * 1.69
+            ];
+        }
+
+        return $breakdown;
     }
 }
