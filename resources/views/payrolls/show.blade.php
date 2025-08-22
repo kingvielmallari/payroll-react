@@ -35,38 +35,16 @@
                     <div class="flex flex-row gap-4">
                         <div class="bg-blue-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
                             @php
-                                $totalBasicPay = 0;
-                                
-                                if ($payroll->status === 'draft') {
-                                    // DRAFT: Use SAME calculation as Basic column
-                                    foreach($payroll->payrollDetails as $detail) {
-                                        $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
-                                        $totalBasicPay += $basicPay;
-                                    }
-                                } else {
-                                    // PROCESSING/APPROVED: Use stored static data from database
-                                    $totalBasicPay = $payroll->payrollDetails->sum('regular_pay');
-                                }
+                                $totalBasicPay = 0; // This will be updated by JavaScript to match Basic column exactly
                             @endphp
-                            <div class="text-2xl font-bold text-blue-600">₱{{ number_format($totalBasicPay, 2) }}</div>
+                            <div class="text-2xl font-bold text-blue-600" id="totalBasicDisplay">₱{{ number_format($totalBasicPay, 2) }}</div>
                             <div class="text-sm text-blue-800">Total Basic</div>
                         </div>
                         <div class="bg-yellow-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
                             @php
-                                $totalHolidayPay = 0;
-                                
-                                if ($payroll->status === 'draft') {
-                                    // DRAFT: Use SAME calculation as Holiday column
-                                    foreach($payroll->payrollDetails as $detail) {
-                                        $holidayPay = $payBreakdownByEmployee[$detail->employee_id]['holiday_pay'] ?? $detail->holiday_pay ?? 0;
-                                        $totalHolidayPay += $holidayPay;
-                                    }
-                                } else {
-                                    // PROCESSING/APPROVED: Use stored static data from database
-                                    $totalHolidayPay = $payroll->payrollDetails->sum('holiday_pay');
-                                }
+                                $totalHolidayPay = 0; // This will be updated by JavaScript to match Holiday column exactly
                             @endphp
-                            <div class="text-2xl font-bold text-yellow-600">₱{{ number_format($totalHolidayPay, 2) }}</div>
+                            <div class="text-2xl font-bold text-yellow-600" id="totalHolidayDisplay">₱{{ number_format($totalHolidayPay, 2) }}</div>
                             <div class="text-sm text-yellow-800">Total Holiday</div>
                         </div>
                         <div class="bg-gray-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
@@ -89,208 +67,9 @@
                         </div>
                         <div class="bg-green-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
                             @php
-                                $totalGrossPay = 0;
-                                
-                                if ($payroll->status === 'draft') {
-                                    // DRAFT: Sum the ACTUAL calculated gross pay from each employee row
-                                    // This ensures the top summary matches exactly what's displayed in the Gross Pay column
-                                    foreach($payroll->payrollDetails as $detail) {
-                                        // Calculate DYNAMIC allowances (same logic as Allowances column)
-                                        $allowances = 0;
-                                        if (isset($allowanceSettings) && $allowanceSettings->isNotEmpty()) {
-                                            foreach($allowanceSettings as $setting) {
-                                                $calculatedAmount = 0;
-                                                if($setting->calculation_type === 'percentage') {
-                                                    $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
-                                                    $calculatedAmount = ($basicPay * $setting->rate_percentage) / 100;
-                                                } elseif($setting->calculation_type === 'fixed_amount') {
-                                                    $calculatedAmount = $setting->fixed_amount;
-                                                    
-                                                    // Apply frequency-based calculation for daily allowances
-                                                    if ($setting->frequency === 'daily') {
-                                                        // Calculate actual working days for this employee
-                                                        $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                        $workingDays = 0;
-                                                        
-                                                        // Count working days from DTR data
-                                                        if (isset($employeeBreakdown['regular_workday'])) {
-                                                            $regularBreakdown = $employeeBreakdown['regular_workday'];
-                                                            $workingDays += ($regularBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
-                                                        }
-                                                        if (isset($employeeBreakdown['special_holiday'])) {
-                                                            $specialBreakdown = $employeeBreakdown['special_holiday'];
-                                                            $workingDays += ($specialBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
-                                                        }
-                                                        if (isset($employeeBreakdown['regular_holiday'])) {
-                                                            $regularHolidayBreakdown = $employeeBreakdown['regular_holiday'];
-                                                            $workingDays += ($regularHolidayBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
-                                                        }
-                                                        if (isset($employeeBreakdown['rest_day'])) {
-                                                            $restBreakdown = $employeeBreakdown['rest_day'];
-                                                            $workingDays += ($restBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
-                                                        }
-                                                        
-                                                        // Apply max days limit if set
-                                                        $maxDays = $setting->max_days_per_period ?? $workingDays;
-                                                        $applicableDays = min($workingDays, $maxDays);
-                                                        
-                                                        $calculatedAmount = $setting->fixed_amount * $applicableDays;
-                                                    }
-                                                } elseif($setting->calculation_type === 'daily_rate_multiplier') {
-                                                    $dailyRate = $detail->employee->daily_rate ?? 0;
-                                                    $multiplier = $setting->multiplier ?? 1;
-                                                    $calculatedAmount = $dailyRate * $multiplier;
-                                                }
-                                                
-                                                // Apply minimum and maximum limits
-                                                if ($setting->minimum_amount && $calculatedAmount < $setting->minimum_amount) {
-                                                    $calculatedAmount = $setting->minimum_amount;
-                                                }
-                                                if ($setting->maximum_amount && $calculatedAmount > $setting->maximum_amount) {
-                                                    $calculatedAmount = $setting->maximum_amount;
-                                                }
-                                                
-                                                $allowances += $calculatedAmount;
-                                            }
-                                        } else {
-                                            // Fallback to stored value if no active settings
-                                            $allowances = $detail->allowances ?? 0;
-                                        }
-                                        
-                                        $bonuses = $detail->bonuses ?? 0;
-                                        
-                                        // Get the SAME basic pay calculation as Basic column
-                                        $basicPayForGross = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
-                                        
-                                        // Get the SAME holiday pay calculation as Holiday column
-                                        $holidayPayForGross = $payBreakdownByEmployee[$detail->employee_id]['holiday_pay'] ?? $detail->holiday_pay ?? 0;
-                                        
-                                        // Get the SAME rest day pay calculation as Rest column
-                                        $restDayBreakdown = [];
-                                        $totalRestRegularHours = 0;
-                                        $restDayPayForGross = 0;
-                                        
-                                        if ($payroll->status === 'draft') {
-                                            // Calculate using DTR data (same as Rest column)
-                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                            
-                                            if (isset($employeeBreakdown['rest_day'])) {
-                                                $restBreakdown = $employeeBreakdown['rest_day'];
-                                                $rateConfig = $restBreakdown['rate_config'];
-                                                if ($rateConfig) {
-                                                    $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.3;
-                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
-                                                    
-                                                    // Apply per-minute calculation for rest day pay (same as Rest column)
-                                                    $regularRestHourlyRate = $hourlyRate * $regularMultiplier;
-                                                    $regularMinutes = ($restBreakdown['regular_hours'] ?? 0) * 60;
-                                                    $roundedRegularMinutes = round($regularMinutes);
-                                                    $regularRatePerMinute = $regularRestHourlyRate / 60;
-                                                    $regularRestPay = $roundedRegularMinutes * $regularRatePerMinute;
-                                                    
-                                                    $overtimeRestHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                    $overtimeMinutes = ($restBreakdown['overtime_hours'] ?? 0) * 60;
-                                                    $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                    $overtimeRatePerMinute = $overtimeRestHourlyRate / 60;
-                                                    $overtimeRestPay = $roundedOvertimeMinutes * $overtimeRatePerMinute;
-                                                    
-                                                    $restDayPayForGross = $regularRestPay + $overtimeRestPay;
-                                                }
-                                            }
-                                        }
-                                        
-                                        // Get the SAME overtime pay calculation as Overtime column
-                                        $overtimePayForGross = 0;
-                                        $totalOvertimeHours = 0;
-                                        $overtimeBreakdown = [];
-                                        
-                                        if ($payroll->status === 'draft') {
-                                            $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                            $calculatedOvertimeTotal = 0;
-                                            
-                                            // Regular workday overtime (same calculation as Overtime column)
-                                            if (isset($employeeBreakdown['regular_workday']) && $employeeBreakdown['regular_workday']['overtime_hours'] > 0) {
-                                                $regularBreakdown = $employeeBreakdown['regular_workday'];
-                                                $overtimeHours = $regularBreakdown['overtime_hours'];
-                                                $rateConfig = $regularBreakdown['rate_config'];
-                                                if ($rateConfig) {
-                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
-                                                    
-                                                    // Apply per-minute calculation for overtime (same as Overtime column)
-                                                    $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                    $overtimeMinutes = $overtimeHours * 60;
-                                                    $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                    $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                    $calculatedOvertimeTotal += $roundedOvertimeMinutes * $overtimeRatePerMinute;
-                                                }
-                                            }
-                                            
-                                            // Special holiday overtime (same calculation as Overtime column)
-                                            if (isset($employeeBreakdown['special_holiday']) && $employeeBreakdown['special_holiday']['overtime_hours'] > 0) {
-                                                $specialBreakdown = $employeeBreakdown['special_holiday'];
-                                                $overtimeHours = $specialBreakdown['overtime_hours'];
-                                                $rateConfig = $specialBreakdown['rate_config'];
-                                                if ($rateConfig) {
-                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
-                                                    
-                                                    // Apply per-minute calculation for overtime (same as Overtime column)
-                                                    $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                    $overtimeMinutes = $overtimeHours * 60;
-                                                    $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                    $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                    $calculatedOvertimeTotal += $roundedOvertimeMinutes * $overtimeRatePerMinute;
-                                                }
-                                            }
-                                            
-                                            // Regular holiday overtime (same calculation as Overtime column)
-                                            if (isset($employeeBreakdown['regular_holiday']) && $employeeBreakdown['regular_holiday']['overtime_hours'] > 0) {
-                                                $regularHolidayBreakdown = $employeeBreakdown['regular_holiday'];
-                                                $overtimeHours = $regularHolidayBreakdown['overtime_hours'];
-                                                $rateConfig = $regularHolidayBreakdown['rate_config'];
-                                                if ($rateConfig) {
-                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 2.6;
-                                                    
-                                                    // Apply per-minute calculation for overtime (same as Overtime column)
-                                                    $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                    $overtimeMinutes = $overtimeHours * 60;
-                                                    $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                    $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                    $calculatedOvertimeTotal += $roundedOvertimeMinutes * $overtimeRatePerMinute;
-                                                }
-                                            }
-                                            
-                                            // Rest day overtime (same calculation as Overtime column)
-                                            if (isset($employeeBreakdown['rest_day']) && $employeeBreakdown['rest_day']['overtime_hours'] > 0) {
-                                                $restDayBreakdown = $employeeBreakdown['rest_day'];
-                                                $overtimeHours = $restDayBreakdown['overtime_hours'];
-                                                $rateConfig = $restDayBreakdown['rate_config'];
-                                                if ($rateConfig) {
-                                                    $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
-                                                    
-                                                    // Apply per-minute calculation for overtime (same as Overtime column)
-                                                    $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                    $overtimeMinutes = $overtimeHours * 60;
-                                                    $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                    $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                    $calculatedOvertimeTotal += $roundedOvertimeMinutes * $overtimeRatePerMinute;
-                                                }
-                                            }
-                                            
-                                            // Override the backend overtime pay with our correct calculation for display (same as Overtime column)
-                                            $overtimePayForGross = $calculatedOvertimeTotal;
-                                        }
-                                        
-                                        // Calculate gross using EXACT same formula as Gross Pay column
-                                        $detailGross = $basicPayForGross + $holidayPayForGross + $restDayPayForGross + $overtimePayForGross + $allowances + $bonuses;
-                                        $totalGrossPay += $detailGross;
-                                    }
-                                } else {
-                                    // PROCESSING/APPROVED: Use stored static data from database
-                                    $totalGrossPay = $payroll->payrollDetails->sum('gross_pay');
-                                }
+                                $totalGrossPay = 0; // This will be updated by JavaScript to match Gross Pay column exactly
                             @endphp
-                            <div class="text-2xl font-bold text-green-600">₱{{ number_format($totalGrossPay, 2) }}</div>
+                            <div class="text-2xl font-bold text-green-600" id="totalGrossDisplay">₱{{ number_format($totalGrossPay, 2) }}</div>
                             <div class="text-sm text-green-800">Total Gross</div>
                         </div>
                         <div class="bg-red-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
@@ -408,10 +187,9 @@
                         </div>
                         <div class="bg-purple-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
                             @php
-                                // Calculate correct net pay: Correct Gross - Actual Deductions
-                                $correctNetPay = $totalGrossPay - $actualTotalDeductions;
+                                $correctNetPay = 0; // This will be updated by JavaScript to match Net Pay column exactly
                             @endphp
-                            <div class="text-2xl font-bold text-purple-600">₱{{ number_format($correctNetPay, 2) }}</div>
+                            <div class="text-2xl font-bold text-purple-600" id="totalNetDisplay">₱{{ number_format($correctNetPay, 2) }}</div>
                             <div class="text-sm text-purple-800">Total Net</div>
                         </div>
                     </div>
@@ -786,7 +564,7 @@
                                                 </div>
                                             @endif
                                         </div>
-                                        <div class="font-bold text-blue-600">₱{{ number_format($basicPay, 2) }}</div>
+                                        <div class="font-bold text-blue-600 basic-pay-amount" data-basic-amount="{{ $basicPay }}">₱{{ number_format($basicPay, 2) }}</div>
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
@@ -884,7 +662,7 @@
                                                 <div class="text-gray-400">0 hrs</div>
                                             @endif
                                         </div>
-                                        <div class="font-bold text-yellow-600">₱{{ number_format($holidayPay, 2) }}</div>
+                                        <div class="font-bold text-yellow-600 holiday-pay-amount" data-holiday-amount="{{ $holidayPay }}">₱{{ number_format($holidayPay, 2) }}</div>
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
@@ -1550,7 +1328,7 @@
                                                     @endif
                                              
                                             @endif
-                                            <div class="font-bold text-green-600">₱{{ number_format($calculatedGrossPay, 2) }}</div>
+                                            <div class="font-bold text-green-600 gross-pay-amount" data-gross-amount="{{ $calculatedGrossPay }}">₱{{ number_format($calculatedGrossPay, 2) }}</div>
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
@@ -1843,8 +1621,9 @@
                                                 }
                                             }
                                             
-                                            // Calculate gross pay using SAME logic as Gross Pay column
-                                            $calculatedGrossPay = $basicPay + $holidayPay + $restPayForNet + $overtimePayForNet + $allowances + $bonuses;
+                                            // Calculate gross pay using EXACT SAME logic and variables as Gross Pay column
+                                            // This ensures Net Pay breakdown shows SAME gross amount as Gross Pay column
+                                            $calculatedGrossPayForNet = $calculatedGrossPay; // Use the SAME gross calculation from Gross Pay column
                                             
                                             // For processing/approved payrolls with snapshots, use the snapshot deduction total
                                             if (!isset($isDynamic) || !$isDynamic) {
@@ -1882,7 +1661,7 @@
                                                 $detailDeductionTotal = $detail->sss_contribution + $detail->philhealth_contribution + $detail->pagibig_contribution + $detail->withholding_tax + $detail->cash_advance_deductions + $detail->other_deductions;
                                             }
                                             
-                                            $calculatedNetPay = $calculatedGrossPay - $detailDeductionTotal;
+                                            $calculatedNetPay = $calculatedGrossPayForNet - $detailDeductionTotal;
                                         @endphp
                                         
                                         <!-- Show Net Pay Breakdown -->
@@ -1891,7 +1670,7 @@
                                                
                                                     <div class="text-xs text-gray-500">
                                                         <span>Gross:</span>
-                                                        <span>₱{{ number_format($calculatedGrossPay, 2) }}</span>
+                                                        <span>₱{{ number_format($calculatedGrossPayForNet, 2) }}</span>
                                                     </div>
                                                     <div class="text-xs text-gray-500">
                                                         <span>Deduct:</span>
@@ -1899,7 +1678,7 @@
                                                     </div>
                                               
                                             @endif
-                                            <div class="font-bold text-purple-600">₱{{ number_format($calculatedNetPay, 2) }}</div>
+                                            <div class="font-bold text-purple-600 net-pay-amount" data-net-amount="{{ $calculatedNetPay }}">₱{{ number_format($calculatedNetPay, 2) }}</div>
                                         </div>
                                     </td>
                                     {{-- @if($payroll->status == 'approved')
@@ -1933,6 +1712,67 @@
                     </div>
                 </div>
             </div>
+
+            <!-- JavaScript to update all summary boxes to match their respective column totals -->
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    // Helper function to format currency
+                    function formatCurrency(amount) {
+                        return '₱' + amount.toLocaleString('en-PH', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
+                    }
+                    
+                    // Calculate and update Total Basic (matches Basic column)
+                    const basicPayElements = document.querySelectorAll('.basic-pay-amount');
+                    let totalBasic = 0;
+                    basicPayElements.forEach(function(element) {
+                        const basicAmount = parseFloat(element.getAttribute('data-basic-amount')) || 0;
+                        totalBasic += basicAmount;
+                    });
+                    const totalBasicDisplay = document.getElementById('totalBasicDisplay');
+                    if (totalBasicDisplay) {
+                        totalBasicDisplay.textContent = formatCurrency(totalBasic);
+                    }
+                    
+                    // Calculate and update Total Holiday (matches Holiday column)
+                    const holidayPayElements = document.querySelectorAll('.holiday-pay-amount');
+                    let totalHoliday = 0;
+                    holidayPayElements.forEach(function(element) {
+                        const holidayAmount = parseFloat(element.getAttribute('data-holiday-amount')) || 0;
+                        totalHoliday += holidayAmount;
+                    });
+                    const totalHolidayDisplay = document.getElementById('totalHolidayDisplay');
+                    if (totalHolidayDisplay) {
+                        totalHolidayDisplay.textContent = formatCurrency(totalHoliday);
+                    }
+                    
+                    // Calculate and update Total Gross (matches Gross Pay column)
+                    const grossPayElements = document.querySelectorAll('.gross-pay-amount');
+                    let totalGross = 0;
+                    grossPayElements.forEach(function(element) {
+                        const grossAmount = parseFloat(element.getAttribute('data-gross-amount')) || 0;
+                        totalGross += grossAmount;
+                    });
+                    const totalGrossDisplay = document.getElementById('totalGrossDisplay');
+                    if (totalGrossDisplay) {
+                        totalGrossDisplay.textContent = formatCurrency(totalGross);
+                    }
+                    
+                    // Calculate and update Total Net (matches Net Pay column)
+                    const netPayElements = document.querySelectorAll('.net-pay-amount');
+                    let totalNet = 0;
+                    netPayElements.forEach(function(element) {
+                        const netAmount = parseFloat(element.getAttribute('data-net-amount')) || 0;
+                        totalNet += netAmount;
+                    });
+                    const totalNetDisplay = document.getElementById('totalNetDisplay');
+                    if (totalNetDisplay) {
+                        totalNetDisplay.textContent = formatCurrency(totalNet);
+                    }
+                });
+            </script>
 
             <!-- DTR Summary for Period -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
