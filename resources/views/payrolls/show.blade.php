@@ -469,7 +469,11 @@
                                                 $basicOvertimeHours = $detail->overtime_hours ?? 0; // From snapshot
                                             }
                                         @endphp
-                                        <div class="text-xs text-gray-500">{{ number_format($basicRegularHours, 1) }} hrs</div>
+                                        <div class="text-xs text-gray-500">
+                                            
+                                             <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 1) }} hrs
+                                            </div>
+                                        </div>
                                         <div class="font-bold text-blue-600">₱{{ number_format($basicPay, 2) }}</div>
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
@@ -788,19 +792,60 @@
                                         <div class="space-y-1">
                                             @if($detail->bonuses > 0)
                                                 <!-- Show Calculated Bonus Breakdown -->
-                                                @if($detail->earnings_breakdown)
-                                                    @php
+                                                @php
+                                                    $bonusDetails = [];
+                                                    $showBreakdown = false;
+                                                    
+                                                    if($detail->earnings_breakdown) {
                                                         $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
                                                         $bonusDetails = $earningsBreakdown['bonuses'] ?? [];
-                                                    @endphp
-                                                    @if(!empty($bonusDetails))
-                                                        @foreach($bonusDetails as $code => $bonusData)
+                                                        $showBreakdown = !empty($bonusDetails);
+                                                    }
+                                                @endphp
+                                                
+                                                @if($showBreakdown)
+                                                    <!-- Show stored bonus breakdown -->
+                                                    @foreach($bonusDetails as $code => $bonusData)
+                                                        <div class="text-xs text-gray-500">
+                                                            <span>{{ $bonusData['name'] ?? $code }}:</span>
+                                                            <span>₱{{ number_format($bonusData['amount'] ?? $bonusData, 2) }}</span>
+                                                        </div>
+                                                    @endforeach
+                                                @elseif(isset($isDynamic) && $isDynamic && isset($bonusSettings) && $bonusSettings->isNotEmpty())
+                                                    <!-- Fallback: Show Active Bonus Settings if no breakdown available -->
+                                                    @foreach($bonusSettings as $setting)
+                                                        @php
+                                                            // Calculate actual amount for display
+                                                            $displayAmount = 0;
+                                                            if($setting->calculation_type === 'percentage') {
+                                                                $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                                                $displayAmount = ($basicPay * $setting->rate_percentage) / 100;
+                                                            } elseif($setting->calculation_type === 'fixed_amount') {
+                                                                $displayAmount = $setting->fixed_amount;
+                                                            }
+                                                        @endphp
+                                                        @if($displayAmount > 0)
                                                             <div class="text-xs text-gray-500">
-                                                                <span>{{ $bonusData['name'] ?? $code }}:</span>
-                                                                <span>₱{{ number_format($bonusData['amount'] ?? $bonusData, 2) }}</span>
+                                                                <span>{{ $setting->name }}:</span>
+                                                                <span>₱{{ number_format($displayAmount, 2) }}</span>
                                                             </div>
-                                                        @endforeach
-                                                    @endif
+                                                        @endif
+                                                    @endforeach
+                                                @else
+                                                    <!-- Debug: Show why breakdown is not displaying -->
+                                                    <div class="text-xs text-red-500">
+                                                        @if(!isset($isDynamic))
+                                                            No isDynamic
+                                                        @elseif(!$isDynamic)
+                                                            Not dynamic
+                                                        @elseif(!isset($bonusSettings))
+                                                            No bonusSettings
+                                                        @elseif($bonusSettings->isEmpty())
+                                                            Empty bonusSettings
+                                                        @else
+                                                            Unknown issue
+                                                        @endif
+                                                    </div>
                                                 @endif
                                                 
                                                 <div class="font-bold text-blue-600">

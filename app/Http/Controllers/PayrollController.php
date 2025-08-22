@@ -1809,12 +1809,17 @@ class PayrollController extends Controller
 
         // Load current dynamic settings for display
         $allowanceSettings = collect();
+        $bonusSettings = collect();
         $deductionSettings = collect();
 
         if ($isDynamic) {
             // Get current active settings for draft payrolls
             $allowanceSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
                 ->where('type', 'allowance')
+                ->orderBy('sort_order')
+                ->get();
+            $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+                ->where('type', 'bonus')
                 ->orderBy('sort_order')
                 ->get();
             $deductionSettings = \App\Models\DeductionTaxSetting::active()
@@ -1912,6 +1917,7 @@ class PayrollController extends Controller
             'dtrData',
             'periodDates',
             'allowanceSettings',
+            'bonusSettings',
             'deductionSettings',
             'isDynamic',
             'timeBreakdowns',
@@ -4885,6 +4891,10 @@ class PayrollController extends Controller
             ->where('type', 'allowance')
             ->orderBy('sort_order')
             ->get();
+        $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'bonus')
+            ->orderBy('sort_order')
+            ->get();
         $deductionSettings = \App\Models\DeductionTaxSetting::active()
             ->orderBy('sort_order')
             ->get();
@@ -4896,6 +4906,7 @@ class PayrollController extends Controller
             'dtrData',
             'periodDates',
             'allowanceSettings',
+            'bonusSettings',
             'deductionSettings',
             'timeBreakdowns',
             'payBreakdownByEmployee',
@@ -5126,6 +5137,10 @@ class PayrollController extends Controller
             ->where('type', 'allowance')
             ->orderBy('sort_order')
             ->get();
+        $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'bonus')
+            ->orderBy('sort_order')
+            ->get();
         $deductionSettings = \App\Models\DeductionTaxSetting::active()
             ->orderBy('sort_order')
             ->get();
@@ -5290,6 +5305,7 @@ class PayrollController extends Controller
             'dtrData',
             'periodDates',
             'allowanceSettings',
+            'bonusSettings',
             'deductionSettings',
             'timeBreakdowns',
             'payBreakdownByEmployee',
@@ -5736,6 +5752,10 @@ class PayrollController extends Controller
             ->where('type', 'allowance')
             ->orderBy('sort_order')
             ->get();
+        $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'bonus')
+            ->orderBy('sort_order')
+            ->get();
         $deductionSettings = \App\Models\DeductionTaxSetting::active()
             ->orderBy('sort_order')
             ->get();
@@ -5749,6 +5769,7 @@ class PayrollController extends Controller
             'dtrData',
             'periodDates',
             'allowanceSettings',
+            'bonusSettings',
             'deductionSettings',
             'timeBreakdowns',
             'payBreakdownByEmployee',

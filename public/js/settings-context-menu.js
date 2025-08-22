@@ -193,7 +193,7 @@ class SettingsContextMenu {
         document.getElementById('contextMenuToggle').addEventListener('click', (e) => {
             e.preventDefault();
             if (this.currentItemId && this.toggleUrl) {
-                this.submitForm(this.toggleUrl, 'POST');
+                this.submitForm(this.toggleUrl, 'PATCH');
             }
             this.hide();
         });
