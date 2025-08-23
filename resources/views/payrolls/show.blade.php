@@ -440,6 +440,15 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 @foreach($payroll->payrollDetails as $detail)
+                                @php
+                                    // Fetch snapshot data once for this employee (for processing/locked payrolls)
+                                    $employeeSnapshot = null;
+                                    if ($payroll->status !== 'draft') {
+                                        $employeeSnapshot = \App\Models\PayrollSnapshot::where('payroll_id', $payroll->id)
+                                                                                      ->where('employee_id', $detail->employee_id)
+                                                                                      ->first();
+                                    }
+                                @endphp
                                 <tr class="hover:bg-gray-50">
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="flex items-center">
@@ -533,11 +542,14 @@
                                                 }
                                             } else {
                                                 // PROCESSING/APPROVED: Use breakdown data from snapshot
-                                                if ($detail->earnings_breakdown) {
-                                                    $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
-                                                    $basicBreakdownData = $earningsBreakdown['basic'] ?? [];
+                                                $basicBreakdownData = [];
+                                                if ($employeeSnapshot && $employeeSnapshot->basic_breakdown) {
+                                                    $basicBreakdownData = is_string($employeeSnapshot->basic_breakdown) 
+                                                        ? json_decode($employeeSnapshot->basic_breakdown, true) 
+                                                        : $employeeSnapshot->basic_breakdown;
                                                 }
                                                 $basicRegularHours = array_sum(array_column($basicBreakdownData, 'hours'));
+                                                $basicPay = $detail->regular_pay ?? 0; // Use snapshot basic pay amount
                                             }
                                         @endphp
                                         
@@ -625,9 +637,11 @@
                                                 }
                                             } else {
                                                 // PROCESSING/APPROVED: Use breakdown data from snapshot
-                                                if ($detail->earnings_breakdown) {
-                                                    $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
-                                                    $holidayBreakdownData = $earningsBreakdown['holiday'] ?? [];
+                                                $holidayBreakdownData = [];
+                                                if ($employeeSnapshot && $employeeSnapshot->holiday_breakdown) {
+                                                    $holidayBreakdownData = is_string($employeeSnapshot->holiday_breakdown) 
+                                                        ? json_decode($employeeSnapshot->holiday_breakdown, true) 
+                                                        : $employeeSnapshot->holiday_breakdown;
                                                     
                                                     foreach ($holidayBreakdownData as $type => $data) {
                                                         $holidayBreakdown[$type] = [
@@ -771,9 +785,11 @@
                                                 }
                                             } else {
                                                 // PROCESSING/APPROVED: Use breakdown data from snapshot
-                                                if ($detail->earnings_breakdown) {
-                                                    $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
-                                                    $restBreakdownData = $earningsBreakdown['rest'] ?? [];
+                                                $restBreakdownData = [];
+                                                if ($employeeSnapshot && $employeeSnapshot->rest_breakdown) {
+                                                    $restBreakdownData = is_string($employeeSnapshot->rest_breakdown) 
+                                                        ? json_decode($employeeSnapshot->rest_breakdown, true) 
+                                                        : $employeeSnapshot->rest_breakdown;
                                                     
                                                     foreach ($restBreakdownData as $type => $data) {
                                                         $restDayBreakdown[$type] = [
@@ -926,9 +942,11 @@
                                                 $overtimePay = $calculatedOvertimeTotal;
                                             } else {
                                                 // PROCESSING/APPROVED: Use breakdown data from snapshot - NO CALCULATION!
-                                                if ($detail->earnings_breakdown) {
-                                                    $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
-                                                    $overtimeBreakdownData = $earningsBreakdown['overtime'] ?? [];
+                                                $overtimeBreakdownData = [];
+                                                if ($employeeSnapshot && $employeeSnapshot->overtime_breakdown) {
+                                                    $overtimeBreakdownData = is_string($employeeSnapshot->overtime_breakdown) 
+                                                        ? json_decode($employeeSnapshot->overtime_breakdown, true) 
+                                                        : $employeeSnapshot->overtime_breakdown;
                                                     
                                                     foreach ($overtimeBreakdownData as $type => $data) {
                                                         $overtimeBreakdown[] = [
@@ -941,6 +959,9 @@
                                                     }
                                                     // Use the total from snapshots
                                                     $overtimePay = array_sum(array_column($overtimeBreakdown, 'amount'));
+                                                } else {
+                                                    // Fallback to the simple overtime pay from snapshot
+                                                    $overtimePay = $detail->overtime_pay ?? 0;
                                                 }
                                             }
                                         @endphp
@@ -1061,20 +1082,26 @@
                                                     </span>
                                                 </div>
                                             @elseif($detail->allowances > 0)
-                                                <!-- PROCESSING/APPROVED: Show Stored Breakdown -->
-                                                @if($detail->earnings_breakdown)
-                                                    @php
-                                                        $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
-                                                        $allowanceDetails = $earningsBreakdown['allowances'] ?? [];
-                                                    @endphp
-                                                    @if(!empty($allowanceDetails))
-                                                        @foreach($allowanceDetails as $code => $allowanceData)
+                                                <!-- PROCESSING/APPROVED: Show Breakdown from Snapshot -->
+                                                @php
+                                                    // Get allowances breakdown from the fetched snapshot
+                                                    $allowancesBreakdown = [];
+                                                    if ($employeeSnapshot && $employeeSnapshot->allowances_breakdown) {
+                                                        $allowancesBreakdown = is_string($employeeSnapshot->allowances_breakdown) 
+                                                            ? json_decode($employeeSnapshot->allowances_breakdown, true) 
+                                                            : $employeeSnapshot->allowances_breakdown;
+                                                    }
+                                                @endphp
+                                                
+                                                @if(!empty($allowancesBreakdown))
+                                                    @foreach($allowancesBreakdown as $allowance)
+                                                        @if(isset($allowance['amount']) && $allowance['amount'] > 0)
                                                             <div class="text-xs text-gray-500">
-                                                                <span>{{ $allowanceData['name'] ?? $code }}:</span>
-                                                                <span>₱{{ number_format($allowanceData['amount'] ?? $allowanceData, 2) }}</span>
+                                                                <span>{{ $allowance['name'] ?? $allowance['code'] }}:</span>
+                                                                <span>₱{{ number_format($allowance['amount'], 2) }}</span>
                                                             </div>
-                                                        @endforeach
-                                                    @endif
+                                                        @endif
+                                                    @endforeach
                                                 @endif
                                                 
                                                 <div class="font-bold text-green-600">
@@ -1098,25 +1125,25 @@
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
                                             @if($detail->bonuses > 0)
-                                                <!-- Show Calculated Bonus Breakdown -->
+                                                <!-- PROCESSING/APPROVED: Show Bonus Breakdown from Snapshot -->
                                                 @php
-                                                    $bonusDetails = [];
-                                                    $showBreakdown = false;
-                                                    
-                                                    if($detail->earnings_breakdown) {
-                                                        $earningsBreakdown = json_decode($detail->earnings_breakdown, true);
-                                                        $bonusDetails = $earningsBreakdown['bonuses'] ?? [];
-                                                        $showBreakdown = !empty($bonusDetails);
+                                                    // Get bonuses breakdown from the fetched snapshot
+                                                    $bonusesBreakdown = [];
+                                                    if ($employeeSnapshot && $employeeSnapshot->bonuses_breakdown) {
+                                                        $bonusesBreakdown = is_string($employeeSnapshot->bonuses_breakdown) 
+                                                            ? json_decode($employeeSnapshot->bonuses_breakdown, true) 
+                                                            : $employeeSnapshot->bonuses_breakdown;
                                                     }
                                                 @endphp
                                                 
-                                                @if($showBreakdown)
-                                                    <!-- Show stored bonus breakdown -->
-                                                    @foreach($bonusDetails as $code => $bonusData)
-                                                        <div class="text-xs text-gray-500">
-                                                            <span>{{ $bonusData['name'] ?? $code }}:</span>
-                                                            <span>₱{{ number_format($bonusData['amount'] ?? $bonusData, 2) }}</span>
-                                                        </div>
+                                                @if(!empty($bonusesBreakdown))
+                                                    @foreach($bonusesBreakdown as $bonus)
+                                                        @if(isset($bonus['amount']) && $bonus['amount'] > 0)
+                                                            <div class="text-xs text-gray-500">
+                                                                <span>{{ $bonus['name'] ?? $bonus['code'] }}:</span>
+                                                                <span>₱{{ number_format($bonus['amount'], 2) }}</span>
+                                                            </div>
+                                                        @endif
                                                     @endforeach
                                                 @elseif(isset($isDynamic) && $isDynamic && isset($bonusSettings) && $bonusSettings->isNotEmpty())
                                                     <!-- Fallback: Show Active Bonus Settings if no breakdown available -->
@@ -1343,6 +1370,23 @@
                                                 @if(isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown) && !empty($detail->deduction_breakdown))
                                                     @php $hasBreakdown = true; @endphp
                                                     @foreach($detail->deduction_breakdown as $code => $deductionData)
+                                                        @php
+                                                            $amount = $deductionData['amount'] ?? $deductionData;
+                                                            $calculatedDeductionTotal += $amount;
+                                                        @endphp
+                                                        <div class="text-xs text-gray-500">
+                                                            <span>{{ $deductionData['name'] ?? $code }}:</span>
+                                                            <span>₱{{ number_format($amount, 2) }}</span>
+                                                        </div>
+                                                    @endforeach
+                                                @elseif($employeeSnapshot && $employeeSnapshot->deductions_breakdown)
+                                                    @php 
+                                                        $hasBreakdown = true; 
+                                                        $deductionsBreakdown = is_string($employeeSnapshot->deductions_breakdown) 
+                                                            ? json_decode($employeeSnapshot->deductions_breakdown, true) 
+                                                            : $employeeSnapshot->deductions_breakdown;
+                                                    @endphp
+                                                    @foreach($deductionsBreakdown as $code => $deductionData)
                                                         @php
                                                             $amount = $deductionData['amount'] ?? $deductionData;
                                                             $calculatedDeductionTotal += $amount;
