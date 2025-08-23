@@ -1222,99 +1222,20 @@
                                             $bonuses = $detail->bonuses ?? 0;
                                             
                                             // Handle basic pay - use the same calculation as the Basic column for consistency
-                                            $basicPayForGross = $basicPay; // Use the same calculation from basic column
+                                            $basicPayForGross = round($basicPay, 2); // Use rounded value to match display
                                             
                                             // Handle holiday pay - use the same calculation as the Holiday column for consistency
-                                            $holidayPayForGross = $holidayPay; // Use the same calculation from holiday column
+                                            $holidayPayForGross = round($holidayPay, 2); // Use rounded value to match display
                                             
                                             // Handle rest pay - use the same calculation as the Rest column for consistency
-                                            $restPayForGross = $restDayPay; // Use the same calculation from rest column
+                                            $restPayForGross = round($restDayPay, 2); // Use rounded value to match display
                                             
-                                            // Handle overtime pay - use snapshot in processing mode, calculate in draft mode  
-                                            if (!isset($isDynamic) || !$isDynamic) {
-                                                // PROCESSING/APPROVED: Use overtime breakdown from snapshot
-                                                if (isset($detail->overtime_breakdown) && is_array($detail->overtime_breakdown)) {
-                                                    $overtimePay = 0;
-                                                    foreach ($detail->overtime_breakdown as $overtimeData) {
-                                                        $overtimePay += $overtimeData['amount'] ?? 0;
-                                                    }
-                                                } else {
-                                                    $overtimePay = $detail->overtime_pay ?? 0;
-                                                }
-                                            } else {
-                                                // DRAFT: Calculate overtime pay correctly using SAME per-minute logic as Employee Payroll Details
-                                                $overtimePay = 0;
-                                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                                
-                                                // Calculate overtime for regular workdays
-                                                if (isset($employeeBreakdown['regular_workday'])) {
-                                                    $regularBreakdown = $employeeBreakdown['regular_workday'];
-                                                    $overtimeHours = $regularBreakdown['overtime_hours'] ?? 0;
-                                                    $rateConfig = $regularBreakdown['rate_config'];
-                                                    if ($rateConfig && $overtimeHours > 0) {
-                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
-                                                        
-                                                        // Apply per-minute calculation for overtime (same as Employee Payroll Details)
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $overtimeHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $overtimePay += $roundedOvertimeMinutes * $overtimeRatePerMinute;
-                                                    }
-                                                }
-                                                
-                                                // Calculate overtime for special holidays
-                                                if (isset($employeeBreakdown['special_holiday'])) {
-                                                    $specialBreakdown = $employeeBreakdown['special_holiday'];
-                                                    $overtimeHours = $specialBreakdown['overtime_hours'] ?? 0;
-                                                    $rateConfig = $specialBreakdown['rate_config'];
-                                                    if ($rateConfig && $overtimeHours > 0) {
-                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
-                                                        
-                                                        // Apply per-minute calculation for overtime (same as Employee Payroll Details)
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $overtimeHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $overtimePay += $roundedOvertimeMinutes * $overtimeRatePerMinute;
-                                                    }
-                                                }
-                                                
-                                                // Calculate overtime for regular holidays  
-                                                if (isset($employeeBreakdown['regular_holiday'])) {
-                                                    $regularHolidayBreakdown = $employeeBreakdown['regular_holiday'];
-                                                    $overtimeHours = $regularHolidayBreakdown['overtime_hours'] ?? 0;
-                                                    $rateConfig = $regularHolidayBreakdown['rate_config'];
-                                                    if ($rateConfig && $overtimeHours > 0) {
-                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 2.6;
-                                                        
-                                                        // Apply per-minute calculation for overtime (same as Employee Payroll Details)
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $overtimeHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $overtimePay += $roundedOvertimeMinutes * $overtimeRatePerMinute;
-                                                    }
-                                                }
-                                                
-                                                // Calculate overtime for rest days
-                                                if (isset($employeeBreakdown['rest_day'])) {
-                                                    $restDayBreakdown = $employeeBreakdown['rest_day'];
-                                                    $overtimeHours = $restDayBreakdown['overtime_hours'] ?? 0;
-                                                    $rateConfig = $restDayBreakdown['rate_config'];
-                                                    if ($rateConfig && $overtimeHours > 0) {
-                                                        $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
-                                                        
-                                                        // Apply per-minute calculation for overtime (same as Employee Payroll Details)
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $overtimeHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $overtimePay += $roundedOvertimeMinutes * $overtimeRatePerMinute;
-                                                    }
-                                                }
-                                            }
+                            // Handle overtime pay - use the SAME variable that was calculated in the Overtime column
+                                            // DO NOT recalculate, just use the $overtimePay that was already computed above
+                                            // This ensures 100% consistency between Overtime column and Gross Pay breakdown
+                                            
+                                            // Round overtime pay to match display precision
+                                            $overtimePay = round($overtimePay, 2);
                                             
                                             $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
                                         @endphp
