@@ -4374,22 +4374,22 @@ class PayrollController extends Controller
                 }
             }
 
-            // Use the calculated values from the same method used in draft mode
-            $basicPay = $payrollCalculation['basic_salary'] ?? 0;
-            $holidayPay = $payrollCalculation['holiday_pay'] ?? 0;
-            $overtimePay = $payrollCalculation['overtime_pay'] ?? 0;
-            $restPay = $payrollCalculation['rest_pay'] ?? 0; // If available in calculation
-
-            // Get breakdown data for allowances and bonuses (exactly as they are in draft mode)
-            $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
-            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
-            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail);
-
             // Create detailed breakdowns for Basic, Holiday, Rest, and Overtime columns
             $basicBreakdown = $this->createBasicPayBreakdown($employeeTimeBreakdown, $employee);
             $holidayBreakdown = $this->createHolidayPayBreakdown($employeeTimeBreakdown, $employee);
             $restBreakdown = $this->createRestPayBreakdown($employeeTimeBreakdown, $employee);
             $overtimeBreakdown = $this->createOvertimePayBreakdown($employeeTimeBreakdown, $employee);
+
+            // Calculate actual amounts from breakdowns (not from payrollCalculation which contains wrong values)
+            $basicPay = array_sum(array_column($basicBreakdown, 'amount'));
+            $holidayPay = array_sum(array_column($holidayBreakdown, 'amount'));
+            $restPay = array_sum(array_column($restBreakdown, 'amount'));
+            $overtimePay = array_sum(array_column($overtimeBreakdown, 'amount'));
+
+            // Get breakdown data for allowances and bonuses (exactly as they are in draft mode)
+            $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
+            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
+            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail);
 
             // Log the calculated values for debugging
             Log::info("Snapshot calculation for employee {$employee->id}", [

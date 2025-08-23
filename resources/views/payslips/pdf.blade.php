@@ -182,11 +182,13 @@
             <tr class="section-header">
                 <td colspan="3">EARNINGS</td>
             </tr>
+            @if($payrollDetail->regular_pay > 0)
             <tr>
                 <td>Regular Pay</td>
                 <td>{{ number_format($payrollDetail->regular_hours, 1) }} hrs</td>
                 <td class="amount">₱{{ number_format($payrollDetail->regular_pay, 2) }}</td>
             </tr>
+            @endif
             @if($payrollDetail->overtime_pay > 0)
             <tr>
                 <td>Overtime Pay</td>
@@ -199,6 +201,13 @@
                 <td>Holiday Pay</td>
                 <td>-</td>
                 <td class="amount">₱{{ number_format($payrollDetail->holiday_pay, 2) }}</td>
+            </tr>
+            @endif
+            @if($payrollDetail->rest_pay > 0)
+            <tr>
+                <td>Rest Pay</td>
+                <td>-</td>
+                <td class="amount">₱{{ number_format($payrollDetail->rest_pay, 2) }}</td>
             </tr>
             @endif
             @if($payrollDetail->night_differential_pay > 0)
@@ -229,10 +238,12 @@
                 <td class="amount">₱{{ number_format($payrollDetail->other_earnings, 2) }}</td>
             </tr>
             @endif
+            @if($payrollDetail->gross_pay > 0)
             <tr class="gross-total">
                 <td colspan="2"><strong>TOTAL GROSS PAY</strong></td>
                 <td class="amount">₱{{ number_format($payrollDetail->gross_pay, 2) }}</td>
             </tr>
+            @endif
 
             <!-- Deductions -->
             <tr class="section-header">
@@ -279,16 +290,20 @@
                 <td class="amount">₱{{ number_format($payrollDetail->other_deductions, 2) }}</td>
             </tr>
             @endif
+            @if($payrollDetail->total_deductions > 0)
             <tr class="deduction-total">
                 <td colspan="2"><strong>TOTAL DEDUCTIONS</strong></td>
                 <td class="amount">₱{{ number_format($payrollDetail->total_deductions, 2) }}</td>
             </tr>
+            @endif
 
             <!-- Net Pay -->
+            @if($payrollDetail->net_pay > 0)
             <tr class="net-total">
                 <td colspan="2"><strong>NET PAY</strong></td>
                 <td class="amount">₱{{ number_format($payrollDetail->net_pay, 2) }}</td>
             </tr>
+            @endif
         </tbody>
     </table>
 

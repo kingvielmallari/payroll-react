@@ -76,6 +76,41 @@
     </div>
 
     <div class="content">
+        @php
+            // Get the snapshot data for this employee to get correct calculated values
+            $employeeSnapshot = \App\Models\PayrollSnapshot::where('payroll_id', $payroll->id)
+                ->where('employee_id', $employee->id)
+                ->first();
+                
+            // Use snapshot values if available, otherwise fall back to detail values  
+            $actualBasicPay = $employeeSnapshot ? $employeeSnapshot->regular_pay : $payrollDetail->regular_pay;
+            $actualHolidayPay = $employeeSnapshot ? $employeeSnapshot->holiday_pay : ($payrollDetail->holiday_pay ?? 0);
+            
+            // Calculate rest pay from rest_breakdown JSON
+            $actualRestPay = 0;
+            if ($employeeSnapshot && $employeeSnapshot->rest_breakdown) {
+                $restBreakdown = is_string($employeeSnapshot->rest_breakdown) ? 
+                    json_decode($employeeSnapshot->rest_breakdown, true) : 
+                    $employeeSnapshot->rest_breakdown;
+                if (is_array($restBreakdown)) {
+                    foreach ($restBreakdown as $restData) {
+                        $actualRestPay += $restData['amount'] ?? 0;
+                    }
+                }
+            }
+            
+            $actualOvertimePay = $employeeSnapshot ? $employeeSnapshot->overtime_pay : $payrollDetail->overtime_pay;
+            
+            // Get allowances and bonuses from payroll detail
+            $actualAllowances = $payrollDetail->allowances ?? 0;
+            $actualBonuses = $payrollDetail->bonuses ?? 0;
+            
+            // Calculate gross pay by adding all components to ensure correct total
+            $actualGrossPay = $actualBasicPay + $actualHolidayPay + $actualRestPay + $actualOvertimePay + $actualAllowances + $actualBonuses;
+            
+            $actualNetPay = $employeeSnapshot ? $employeeSnapshot->net_pay : $payrollDetail->net_pay;
+        @endphp
+        
         <p>Dear {{ $employee->first_name }} {{ $employee->last_name }},</p>
         
         <p>Please find attached your payslip for the period {{ $payroll->period_start->format('F d') }} to {{ $payroll->period_end->format('F d, Y') }}.</p>
@@ -99,14 +134,28 @@
                 <td>Basic Salary</td>
                 <td class="amount">₱{{ number_format($payrollDetail->basic_salary, 2) }}</td>
             </tr>
+            @if($actualBasicPay > 0)
             <tr>
                 <td>Regular Pay</td>
-                <td class="amount">₱{{ number_format($payrollDetail->regular_pay, 2) }}</td>
+                <td class="amount">₱{{ number_format($actualBasicPay, 2) }}</td>
             </tr>
-            @if($payrollDetail->overtime_pay > 0)
+            @endif
+            @if($actualHolidayPay > 0)
             <tr>
-                <td>Overtime Pay ({{ number_format($payrollDetail->overtime_hours, 1) }} hrs)</td>
-                <td class="amount">₱{{ number_format($payrollDetail->overtime_pay, 2) }}</td>
+                <td>Holiday Pay</td>
+                <td class="amount">₱{{ number_format($actualHolidayPay, 2) }}</td>
+            </tr>
+            @endif
+            @if($actualRestPay > 0)
+            <tr>
+                <td>Rest Pay</td>
+                <td class="amount">₱{{ number_format($actualRestPay, 2) }}</td>
+            </tr>
+            @endif
+            @if($actualOvertimePay > 0)
+            <tr>
+                <td>Overtime Pay</td>
+                <td class="amount">₱{{ number_format($actualOvertimePay, 2) }}</td>
             </tr>
             @endif
             @if($payrollDetail->allowances > 0)
@@ -123,7 +172,7 @@
             @endif
             <tr style="background-color: #e8f5e8;">
                 <td><strong>Gross Pay</strong></td>
-                <td class="amount gross-amount">₱{{ number_format($payrollDetail->gross_pay, 2) }}</td>
+                <td class="amount gross-amount">₱{{ number_format($actualGrossPay, 2) }}</td>
             </tr>
             <tr>
                 <td colspan="2"><strong>Deductions</strong></td>
@@ -156,7 +205,7 @@
             </tr>
             <tr style="background-color: #e3f2fd; font-size: 1.1em;">
                 <td><strong>Net Pay</strong></td>
-                <td class="amount net-amount">₱{{ number_format($payrollDetail->net_pay, 2) }}</td>
+                <td class="amount net-amount">₱{{ number_format($actualNetPay, 2) }}</td>
             </tr>
         </table>
 

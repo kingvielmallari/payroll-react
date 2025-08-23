@@ -75,6 +75,59 @@
     <!-- Payslips Container -->
     <div id="payslips-container">
         @foreach($payroll->payrollDetails as $index => $detail)
+            @php
+                // Get the snapshot data for this employee to get correct calculated values
+                $employeeSnapshot = \App\Models\PayrollSnapshot::where('payroll_id', $payroll->id)
+                    ->where('employee_id', $detail->employee_id)
+                    ->first();
+                    
+                // Use snapshot values if available, otherwise fall back to detail values
+                $actualBasicPay = $employeeSnapshot ? $employeeSnapshot->regular_pay : $detail->regular_pay;
+                $actualHolidayPay = $employeeSnapshot ? $employeeSnapshot->holiday_pay : $detail->holiday_pay;
+                
+                // Calculate rest pay from rest_breakdown JSON
+                $actualRestPay = 0;
+                if ($employeeSnapshot && $employeeSnapshot->rest_breakdown) {
+                    $restBreakdown = is_string($employeeSnapshot->rest_breakdown) ? 
+                        json_decode($employeeSnapshot->rest_breakdown, true) : 
+                        $employeeSnapshot->rest_breakdown;
+                    if (is_array($restBreakdown)) {
+                        foreach ($restBreakdown as $restData) {
+                            $actualRestPay += $restData['amount'] ?? 0;
+                        }
+                    }
+                }
+                
+                $actualOvertimePay = $employeeSnapshot ? $employeeSnapshot->overtime_pay : $detail->overtime_pay;
+                
+                // Get allowances and bonuses from payroll detail
+                $actualAllowances = $detail->allowances ?? 0;
+                $actualBonuses = $detail->bonuses ?? 0;
+                
+                // Calculate total deductions (same logic as display section)
+                $calculatedDeductionTotal = 0;
+                if($employeeSnapshot && isset($employeeSnapshot->deductions_breakdown) && is_array($employeeSnapshot->deductions_breakdown)) {
+                    foreach ($employeeSnapshot->deductions_breakdown as $deductionData) {
+                        $calculatedDeductionTotal += $deductionData['amount'] ?? 0;
+                    }
+                }
+                $calculatedDeductionTotal += $detail->sss_contribution ?? 0;
+                $calculatedDeductionTotal += $detail->philhealth_contribution ?? 0;
+                $calculatedDeductionTotal += $detail->pagibig_contribution ?? 0;
+                $calculatedDeductionTotal += $detail->withholding_tax ?? 0;
+                $calculatedDeductionTotal += $detail->cash_advance_deductions ?? 0;
+                $calculatedDeductionTotal += $detail->other_deductions ?? 0;
+                
+                // Use fallback to stored total if calculated is 0
+                $actualTotalDeductions = $calculatedDeductionTotal > 0 ? $calculatedDeductionTotal : ($detail->total_deductions ?? 0);
+                
+                // Calculate gross pay by adding all components to ensure correct total
+                $actualGrossPay = $actualBasicPay + $actualHolidayPay + $actualRestPay + $actualOvertimePay + $actualAllowances + $actualBonuses;
+                
+                // Calculate net pay dynamically: Gross Pay - Total Deductions
+                $actualNetPay = $actualGrossPay - $actualTotalDeductions;
+            @endphp
+            
             @if($index > 0)
                 <div class="page-break"></div>
             @endif
@@ -171,38 +224,54 @@
                     <div>
                         <h3 class="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-1">Earnings</h3>
                         <div class="space-y-3">
+                            @if($actualBasicPay > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Regular Pay</span>
-                                <span class="font-semibold text-blue-600">₱{{ number_format($detail->regular_pay, 2) }}</span>
+                                <span class="font-semibold text-blue-600">₱{{ number_format($actualBasicPay, 2) }}</span>
                             </div>
-                            @if($detail->overtime_pay > 0)
+                            @endif
+                            @if($actualHolidayPay > 0)
+                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span class="text-sm text-gray-700">Holiday Pay</span>
+                                <span class="font-semibold text-yellow-600">₱{{ number_format($actualHolidayPay, 2) }}</span>
+                            </div>
+                            @endif
+                            @if($actualRestPay > 0)
+                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span class="text-sm text-gray-700">Rest Pay</span>
+                                <span class="font-semibold text-cyan-600">₱{{ number_format($actualRestPay, 2) }}</span>
+                            </div>
+                            @endif
+                            @if($actualOvertimePay > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Overtime Pay</span>
-                                <span class="font-semibold text-orange-600">₱{{ number_format($detail->overtime_pay, 2) }}</span>
+                                <span class="font-semibold text-orange-600">₱{{ number_format($actualOvertimePay, 2) }}</span>
                             </div>
                             @endif
                             @if($detail->allowances > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Allowances</span>
-                                <span class="font-semibold text-yellow-600">₱{{ number_format($detail->allowances, 2) }}</span>
+                                <span class="font-semibold text-purple-600">₱{{ number_format($detail->allowances, 2) }}</span>
                             </div>
                             @endif
                             @if($detail->bonuses > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Bonuses</span>
-                                <span class="font-semibold text-yellow-600">₱{{ number_format($detail->bonuses, 2) }}</span>
+                                <span class="font-semibold text-indigo-600">₱{{ number_format($detail->bonuses, 2) }}</span>
                             </div>
                             @endif
                             @if($detail->other_earnings > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Other Earnings</span>
-                                <span class="font-semibold text-yellow-600">₱{{ number_format($detail->other_earnings, 2) }}</span>
+                                <span class="font-semibold text-pink-600">₱{{ number_format($detail->other_earnings, 2) }}</span>
                             </div>
                             @endif
+                            @if($actualGrossPay > 0)
                             <div class="flex justify-between items-center py-3 border-t-2 border-gray-300 bg-green-50">
                                 <span class="font-semibold text-gray-800">Gross Pay</span>
-                                <span class="font-bold text-lg text-green-600">₱{{ number_format($detail->gross_pay, 2) }}</span>
+                                <span class="font-bold text-lg text-green-600">₱{{ number_format($actualGrossPay, 2) }}</span>
                             </div>
+                            @endif
                         </div>
                     </div>
 
@@ -210,18 +279,11 @@
                     <div>
                         <h3 class="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-1">Deductions</h3>
                         <div class="space-y-3">
-                            @php
-                                $calculatedDeductionTotal = 0;
-                                $hasDeductionBreakdown = false;
-                            @endphp
-                            
                             <!-- Show deduction breakdown if available from snapshot -->
                             @if(isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown) && !empty($detail->deduction_breakdown))
-                                @php $hasDeductionBreakdown = true; @endphp
                                 @foreach($detail->deduction_breakdown as $code => $deductionData)
                                     @php
                                         $amount = $deductionData['amount'] ?? $deductionData;
-                                        $calculatedDeductionTotal += $amount;
                                     @endphp
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                         <span class="text-sm text-gray-700">{{ $deductionData['name'] ?? $code }}</span>
@@ -231,42 +293,36 @@
                             @else
                                 <!-- Traditional breakdown display -->
                                 @if($detail->sss_contribution > 0)
-                                    @php $calculatedDeductionTotal += $detail->sss_contribution; @endphp
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                         <span class="text-sm text-gray-700">SSS Contribution</span>
                                         <span class="font-semibold text-red-600">₱{{ number_format($detail->sss_contribution, 2) }}</span>
                                     </div>
                                 @endif
                                 @if($detail->philhealth_contribution > 0)
-                                    @php $calculatedDeductionTotal += $detail->philhealth_contribution; @endphp
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                         <span class="text-sm text-gray-700">PhilHealth Contribution</span>
                                         <span class="font-semibold text-red-600">₱{{ number_format($detail->philhealth_contribution, 2) }}</span>
                                     </div>
                                 @endif
                                 @if($detail->pagibig_contribution > 0)
-                                    @php $calculatedDeductionTotal += $detail->pagibig_contribution; @endphp
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                         <span class="text-sm text-gray-700">Pag-IBIG Contribution</span>
                                         <span class="font-semibold text-red-600">₱{{ number_format($detail->pagibig_contribution, 2) }}</span>
                                     </div>
                                 @endif
                                 @if($detail->withholding_tax > 0)
-                                    @php $calculatedDeductionTotal += $detail->withholding_tax; @endphp
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                         <span class="text-sm text-gray-700">Withholding Tax</span>
                                         <span class="font-semibold text-red-600">₱{{ number_format($detail->withholding_tax, 2) }}</span>
                                     </div>
                                 @endif
                                 @if($detail->cash_advance_deductions > 0)
-                                    @php $calculatedDeductionTotal += $detail->cash_advance_deductions; @endphp
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                         <span class="text-sm text-gray-700">Cash Advance</span>
                                         <span class="font-semibold text-red-600">₱{{ number_format($detail->cash_advance_deductions, 2) }}</span>
                                     </div>
                                 @endif
                                 @if($detail->other_deductions > 0)
-                                    @php $calculatedDeductionTotal += $detail->other_deductions; @endphp
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                         <span class="text-sm text-gray-700">Other Deductions</span>
                                         <span class="font-semibold text-red-600">₱{{ number_format($detail->other_deductions, 2) }}</span>
@@ -274,29 +330,33 @@
                                 @endif
                             @endif
                             
-                            @if($calculatedDeductionTotal == 0)
+                            @if($actualTotalDeductions == 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-400">No deductions</span>
                                 <span class="font-semibold text-gray-400">₱0.00</span>
                             </div>
                             @endif
                             
+                            @if($actualTotalDeductions > 0)
                             <div class="flex justify-between items-center py-3 border-t-2 border-gray-300 bg-red-50">
                                 <span class="font-semibold text-gray-800">Total Deductions</span>
-                                <span class="font-bold text-lg text-red-600">₱{{ number_format($calculatedDeductionTotal > 0 ? $calculatedDeductionTotal : $detail->total_deductions, 2) }}</span>
+                                <span class="font-bold text-lg text-red-600">₱{{ number_format($actualTotalDeductions, 2) }}</span>
                             </div>
+                            @endif
                         </div>
                     </div>
                 </div>
 
                 <!-- Net Pay -->
+                @if($actualNetPay > 0)
                 <div class="bg-purple-50 border-2 border-purple-200 rounded-lg p-6 mb-8">
                     <div class="flex justify-between items-center">
                         <h3 class="text-xl font-bold text-gray-800">NET PAY</h3>
-                        <span class="text-3xl font-bold text-purple-600">₱{{ number_format($detail->net_pay, 2) }}</span>
+                        <span class="text-3xl font-bold text-purple-600">₱{{ number_format($actualNetPay, 2) }}</span>
                     </div>
                     <p class="text-sm text-gray-600 mt-2">Amount to be paid to employee</p>
                 </div>
+                @endif
 
                 <!-- Footer -->
                 <div class="border-t border-gray-300 pt-6 text-center">
