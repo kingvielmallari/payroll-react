@@ -509,7 +509,9 @@
                                                             // Check if this is a regular workday and has valid hours
                                                             $logType = $timeLog->log_type ?? null;
                                                             if ($logType === 'regular_workday' && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
-                                                                $actualRegularWorkdayHours += $timeLog->regular_hours;
+                                                                // Use dynamic hours for draft mode, stored hours for processing mode
+                                                                $actualHours = isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : $timeLog->regular_hours;
+                                                                $actualRegularWorkdayHours += $actualHours;
                                                             }
                                                         }
                                                     }
@@ -607,7 +609,9 @@
                                                                     $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.3;
                                                                     
                                                                     // Convert hours to minutes for precise calculation
-                                                                    $actualMinutes = $timeLog->regular_hours * 60;
+                                                                    // Use dynamic hours for draft mode, stored hours for processing mode
+                                                                    $actualHours = isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : $timeLog->regular_hours;
+                                                                    $actualMinutes = $actualHours * 60;
                                                                     
                                                                     // Round to nearest minute for payroll accuracy
                                                                     $roundedMinutes = round($actualMinutes);
@@ -618,17 +622,17 @@
                                                                     $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                                     
                                                                     if (isset($holidayBreakdown[$displayName])) {
-                                                                        $holidayBreakdown[$displayName]['hours'] += $timeLog->regular_hours;
+                                                                        $holidayBreakdown[$displayName]['hours'] += $actualHours;
                                                                         $holidayBreakdown[$displayName]['amount'] += $regularAmount;
                                                                     } else {
                                                                         $holidayBreakdown[$displayName] = [
-                                                                            'hours' => $timeLog->regular_hours,
+                                                                            'hours' => $actualHours,
                                                                             'amount' => $regularAmount,
                                                                             'rate' => $hourlyRate * $regularMultiplier,
                                                                             'percentage' => $percentageDisplay
                                                                         ];
                                                                     }
-                                                                    $totalHolidayRegularHours += $timeLog->regular_hours;
+                                                                    $totalHolidayRegularHours += $actualHours;
                                                                     $holidayPay += $regularAmount; // Sum up all amounts
                                                                 }
                                                             }
@@ -698,7 +702,9 @@
                                                             // Check if this is a rest day and has valid hours
                                                             $logType = $timeLog->log_type ?? null;
                                                             if ($logType === 'rest_day' && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
-                                                                $actualRestDayHours += $timeLog->regular_hours;
+                                                                // Use dynamic hours for draft mode, stored hours for processing mode
+                                                                $actualHours = isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : $timeLog->regular_hours;
+                                                                $actualRestDayHours += $actualHours;
                                                             }
                                                         }
                                                     }

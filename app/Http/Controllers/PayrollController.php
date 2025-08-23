@@ -4306,8 +4306,12 @@ class PayrollController extends Controller
                         $employeeBreakdown[$logType] = [
                             'regular_hours' => 0,
                             'overtime_hours' => 0,
+                            'regular_overtime_hours' => 0,
+                            'night_diff_overtime_hours' => 0,
                             'total_hours' => 0,
                             'days_count' => 0,
+                            'display_name' => '',
+                            'rate_config' => null
                         ];
                     }
 
@@ -4315,12 +4319,23 @@ class PayrollController extends Controller
                     $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
                     $regularHours = $dynamicCalculation['regular_hours'];
                     $overtimeHours = $dynamicCalculation['overtime_hours'];
+                    $regularOvertimeHours = $dynamicCalculation['regular_overtime_hours'] ?? 0;
+                    $nightDiffOvertimeHours = $dynamicCalculation['night_diff_overtime_hours'] ?? 0;
                     $totalHours = $dynamicCalculation['total_hours'];
 
                     $employeeBreakdown[$logType]['regular_hours'] += $regularHours;
                     $employeeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
+                    $employeeBreakdown[$logType]['regular_overtime_hours'] += $regularOvertimeHours;
+                    $employeeBreakdown[$logType]['night_diff_overtime_hours'] += $nightDiffOvertimeHours;
                     $employeeBreakdown[$logType]['total_hours'] += $totalHours;
                     $employeeBreakdown[$logType]['days_count']++;
+
+                    // Get rate configuration for this type (same as draft payroll)
+                    $rateConfig = $timeLog->getRateConfiguration();
+                    if ($rateConfig) {
+                        $employeeBreakdown[$logType]['display_name'] = $rateConfig->display_name;
+                        $employeeBreakdown[$logType]['rate_config'] = $rateConfig;
+                    }
                 }
             }
 
@@ -5896,24 +5911,57 @@ class PayrollController extends Controller
         $breakdown = [];
         $hourlyRate = $employee->hourly_rate ?? 0;
 
+        // Get dynamic rate configurations from database settings (same as draft payroll)
         $holidayTypes = [
-            'special_holiday' => ['name' => 'Special Holiday', 'multiplier' => 1.3],
-            'regular_holiday' => ['name' => 'Regular Holiday', 'multiplier' => 2.0],
-            'rest_day_special_holiday' => ['name' => 'Rest Day Special Holiday', 'multiplier' => 1.5],
-            'rest_day_regular_holiday' => ['name' => 'Rest Day Regular Holiday', 'multiplier' => 2.6]
+            'special_holiday' => 'Special Holiday',
+            'regular_holiday' => 'Regular Holiday',
+            'rest_day_special_holiday' => 'Rest Day Special Holiday',
+            'rest_day_regular_holiday' => 'Rest Day Regular Holiday'
         ];
 
-        foreach ($holidayTypes as $type => $config) {
+        foreach ($holidayTypes as $type => $name) {
             if (isset($timeBreakdown[$type])) {
                 $data = $timeBreakdown[$type];
-                $totalHours = $data['regular_hours'] + $data['overtime_hours'];
-                if ($totalHours > 0) {
-                    $breakdown[$config['name']] = [
-                        'hours' => $totalHours,
-                        'rate' => $hourlyRate,
-                        'multiplier' => $config['multiplier'],
-                        'amount' => $totalHours * $hourlyRate * $config['multiplier']
-                    ];
+                $regularHours = $data['regular_hours']; // Only use regular hours for holiday pay (same as draft)
+                if ($regularHours > 0) {
+                    // Get rate config from the time breakdown (same as draft calculation)
+                    $rateConfig = $data['rate_config'] ?? null;
+
+                    // If rate config is not available, fetch from database as fallback
+                    if (!$rateConfig) {
+                        $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $type)
+                            ->where('is_active', true)
+                            ->first();
+                    }
+
+                    if ($rateConfig) {
+                        $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                        // Calculate per-minute amount (same as draft payroll)
+                        $amount = ($regularHours * 60) * ($hourlyRate / 60) * $multiplier;
+                        $breakdown[$name] = [
+                            'hours' => $regularHours,
+                            'rate' => number_format($hourlyRate, 2),
+                            'multiplier' => $multiplier,
+                            'amount' => $amount
+                        ];
+                    } else {
+                        // Ultimate fallback to hardcoded multipliers if no config found
+                        $fallbackMultipliers = [
+                            'special_holiday' => 1.3,
+                            'regular_holiday' => 2.0,
+                            'rest_day_special_holiday' => 1.5,
+                            'rest_day_regular_holiday' => 2.6
+                        ];
+                        $multiplier = $fallbackMultipliers[$type] ?? 1.0;
+                        // Calculate per-minute amount (same as draft payroll)
+                        $amount = ($regularHours * 60) * ($hourlyRate / 60) * $multiplier;
+                        $breakdown[$name] = [
+                            'hours' => $regularHours,
+                            'rate' => number_format($hourlyRate, 2),
+                            'multiplier' => $multiplier,
+                            'amount' => $amount
+                        ];
+                    }
                 }
             }
         }
@@ -5932,14 +5980,39 @@ class PayrollController extends Controller
         // Only include rest day breakdown
         if (isset($timeBreakdown['rest_day'])) {
             $restData = $timeBreakdown['rest_day'];
-            $totalHours = $restData['regular_hours'] + $restData['overtime_hours'];
-            if ($totalHours > 0) {
-                $breakdown['Rest Day'] = [
-                    'hours' => $totalHours,
-                    'rate' => $hourlyRate,
-                    'multiplier' => 1.3,
-                    'amount' => $totalHours * $hourlyRate * 1.3
-                ];
+            $regularHours = $restData['regular_hours']; // Only use regular hours for rest day pay (same as draft)
+            if ($regularHours > 0) {
+                // Get rate config from the time breakdown (same as draft calculation)
+                $rateConfig = $restData['rate_config'] ?? null;
+
+                // If rate config is not available, fetch from database as fallback
+                if (!$rateConfig) {
+                    $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'rest_day')
+                        ->where('is_active', true)
+                        ->first();
+                }
+
+                if ($rateConfig) {
+                    $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                    // Calculate per-minute amount (same as draft payroll)
+                    $amount = ($regularHours * 60) * ($hourlyRate / 60) * $multiplier;
+                    $breakdown['Rest Day'] = [
+                        'hours' => $regularHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $multiplier,
+                        'amount' => $amount
+                    ];
+                } else {
+                    // Ultimate fallback to hardcoded multiplier if no config found
+                    // Calculate per-minute amount (same as draft payroll)
+                    $amount = ($regularHours * 60) * ($hourlyRate / 60) * 1.3;
+                    $breakdown['Rest Day'] = [
+                        'hours' => $regularHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => 1.3,
+                        'amount' => $amount
+                    ];
+                }
             }
         }
 
@@ -5956,44 +6029,129 @@ class PayrollController extends Controller
 
         // Regular workday overtime
         if (isset($timeBreakdown['regular_workday']) && $timeBreakdown['regular_workday']['overtime_hours'] > 0) {
-            $overtimeHours = $timeBreakdown['regular_workday']['overtime_hours'];
-            $breakdown['Regular Workday Overtime'] = [
-                'hours' => $overtimeHours,
-                'rate' => $hourlyRate,
-                'multiplier' => 1.25,
-                'amount' => $overtimeHours * $hourlyRate * 1.25
-            ];
+            $regularData = $timeBreakdown['regular_workday'];
+            $overtimeHours = $regularData['overtime_hours'];
+            // Get rate config from the time breakdown (same as draft calculation)
+            $rateConfig = $regularData['rate_config'] ?? null;
+
+            // If rate config is not available, fetch from database as fallback
+            if (!$rateConfig) {
+                $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'regular_workday')
+                    ->where('is_active', true)
+                    ->first();
+            }
+
+            if ($rateConfig) {
+                $multiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+                // Calculate per-minute amount (same as draft payroll)
+                $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * $multiplier;
+                $breakdown['Regular Workday Overtime'] = [
+                    'hours' => $overtimeHours,
+                    'rate' => number_format($hourlyRate, 2),
+                    'multiplier' => $multiplier,
+                    'amount' => $amount
+                ];
+            } else {
+                // Ultimate fallback to hardcoded multiplier if no config found
+                // Calculate per-minute amount (same as draft payroll)
+                $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * 1.25;
+                $breakdown['Regular Workday Overtime'] = [
+                    'hours' => $overtimeHours,
+                    'rate' => number_format($hourlyRate, 2),
+                    'multiplier' => 1.25,
+                    'amount' => $amount
+                ];
+            }
         }
 
-        // Holiday overtime (already included in holiday pay, but shows overtime specifically)
+        // Holiday overtime - use dynamic multipliers from rate configs
         $holidayOvertimeTypes = [
-            'special_holiday' => ['name' => 'Special Holiday Overtime', 'multiplier' => 1.69], // 1.3 * 1.3
-            'regular_holiday' => ['name' => 'Regular Holiday Overtime', 'multiplier' => 2.6], // 2.0 * 1.3
-            'rest_day_special_holiday' => ['name' => 'Rest Day Special Holiday Overtime', 'multiplier' => 1.95], // 1.5 * 1.3
-            'rest_day_regular_holiday' => ['name' => 'Rest Day Regular Holiday Overtime', 'multiplier' => 3.38] // 2.6 * 1.3
+            'special_holiday' => 'Special Holiday Overtime',
+            'regular_holiday' => 'Regular Holiday Overtime',
+            'rest_day_special_holiday' => 'Rest Day Special Holiday Overtime',
+            'rest_day_regular_holiday' => 'Rest Day Regular Holiday Overtime'
         ];
 
-        foreach ($holidayOvertimeTypes as $type => $config) {
+        foreach ($holidayOvertimeTypes as $type => $name) {
             if (isset($timeBreakdown[$type]) && $timeBreakdown[$type]['overtime_hours'] > 0) {
-                $overtimeHours = $timeBreakdown[$type]['overtime_hours'];
-                $breakdown[$config['name']] = [
-                    'hours' => $overtimeHours,
-                    'rate' => $hourlyRate,
-                    'multiplier' => $config['multiplier'],
-                    'amount' => $overtimeHours * $hourlyRate * $config['multiplier']
-                ];
+                $data = $timeBreakdown[$type];
+                $overtimeHours = $data['overtime_hours'];
+                // Get rate config from the time breakdown (same as draft calculation)
+                $rateConfig = $data['rate_config'] ?? null;
+
+                // If rate config is not available, fetch from database as fallback
+                if (!$rateConfig) {
+                    $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $type)
+                        ->where('is_active', true)
+                        ->first();
+                }
+
+                if ($rateConfig) {
+                    $multiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+                    // Calculate per-minute amount (same as draft payroll)
+                    $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * $multiplier;
+                    $breakdown[$name] = [
+                        'hours' => $overtimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $multiplier,
+                        'amount' => $amount
+                    ];
+                } else {
+                    // Ultimate fallback to hardcoded multipliers if no config found
+                    $fallbackMultipliers = [
+                        'special_holiday' => 1.69,
+                        'regular_holiday' => 2.6,
+                        'rest_day_special_holiday' => 1.95,
+                        'rest_day_regular_holiday' => 3.38
+                    ];
+                    $multiplier = $fallbackMultipliers[$type] ?? 1.25;
+                    // Calculate per-minute amount (same as draft payroll)
+                    $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * $multiplier;
+                    $breakdown[$name] = [
+                        'hours' => $overtimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $multiplier,
+                        'amount' => $amount
+                    ];
+                }
             }
         }
 
         // Rest day overtime
         if (isset($timeBreakdown['rest_day']) && $timeBreakdown['rest_day']['overtime_hours'] > 0) {
-            $overtimeHours = $timeBreakdown['rest_day']['overtime_hours'];
-            $breakdown['Rest Day Overtime'] = [
-                'hours' => $overtimeHours,
-                'rate' => $hourlyRate,
-                'multiplier' => 1.69, // 1.3 * 1.3
-                'amount' => $overtimeHours * $hourlyRate * 1.69
-            ];
+            $restData = $timeBreakdown['rest_day'];
+            $overtimeHours = $restData['overtime_hours'];
+            // Get rate config from the time breakdown (same as draft calculation)
+            $rateConfig = $restData['rate_config'] ?? null;
+
+            // If rate config is not available, fetch from database as fallback
+            if (!$rateConfig) {
+                $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'rest_day')
+                    ->where('is_active', true)
+                    ->first();
+            }
+
+            if ($rateConfig) {
+                $multiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+                // Calculate per-minute amount (same as draft payroll)
+                $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * $multiplier;
+                $breakdown['Rest Day Overtime'] = [
+                    'hours' => $overtimeHours,
+                    'rate' => number_format($hourlyRate, 2),
+                    'multiplier' => $multiplier,
+                    'amount' => $amount
+                ];
+            } else {
+                // Ultimate fallback to hardcoded multiplier if no config found
+                // Calculate per-minute amount (same as draft payroll)
+                $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * 1.69;
+                $breakdown['Rest Day Overtime'] = [
+                    'hours' => $overtimeHours,
+                    'rate' => number_format($hourlyRate, 2),
+                    'multiplier' => 1.69,
+                    'amount' => $amount
+                ];
+            }
         }
 
         return $breakdown;
