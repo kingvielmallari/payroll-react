@@ -5892,11 +5892,19 @@ class PayrollController extends Controller
         // Only include regular workday breakdown for basic pay
         if (isset($timeBreakdown['regular_workday'])) {
             $regularData = $timeBreakdown['regular_workday'];
+            $regularHours = $regularData['regular_hours'];
+
+            // Calculate per-minute amount with rounding (same as draft payroll)
+            $actualMinutes = $regularHours * 60;
+            $roundedMinutes = round($actualMinutes);
+            $ratePerMinute = $hourlyRate / 60;
+            $amount = $roundedMinutes * $ratePerMinute;
+
             $breakdown['Regular Workday'] = [
-                'hours' => $regularData['regular_hours'],
+                'hours' => $regularHours,
                 'rate' => $hourlyRate,
                 'multiplier' => 1.0,
-                'amount' => $regularData['regular_hours'] * $hourlyRate * 1.0
+                'amount' => $amount
             ];
         }
 
@@ -5912,11 +5920,12 @@ class PayrollController extends Controller
         $hourlyRate = $employee->hourly_rate ?? 0;
 
         // Get dynamic rate configurations from database settings (same as draft payroll)
+        // Order matches the expected display order: Regular Holiday first, then Special Holiday
         $holidayTypes = [
-            'special_holiday' => 'Special Holiday',
             'regular_holiday' => 'Regular Holiday',
-            'rest_day_special_holiday' => 'Rest Day Special Holiday',
-            'rest_day_regular_holiday' => 'Rest Day Regular Holiday'
+            'special_holiday' => 'Special Holiday',
+            'rest_day_regular_holiday' => 'Rest Day Regular Holiday',
+            'rest_day_special_holiday' => 'Rest Day Special Holiday'
         ];
 
         foreach ($holidayTypes as $type => $name) {
@@ -5936,8 +5945,12 @@ class PayrollController extends Controller
 
                     if ($rateConfig) {
                         $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
-                        // Calculate per-minute amount (same as draft payroll)
-                        $amount = ($regularHours * 60) * ($hourlyRate / 60) * $multiplier;
+                        // Calculate per-minute amount with rounding (same as draft payroll)
+                        $actualMinutes = $regularHours * 60;
+                        $roundedMinutes = round($actualMinutes);
+                        $ratePerMinute = ($hourlyRate * $multiplier) / 60;
+                        $amount = $roundedMinutes * $ratePerMinute;
+
                         $breakdown[$name] = [
                             'hours' => $regularHours,
                             'rate' => number_format($hourlyRate, 2),
@@ -5953,8 +5966,12 @@ class PayrollController extends Controller
                             'rest_day_regular_holiday' => 2.6
                         ];
                         $multiplier = $fallbackMultipliers[$type] ?? 1.0;
-                        // Calculate per-minute amount (same as draft payroll)
-                        $amount = ($regularHours * 60) * ($hourlyRate / 60) * $multiplier;
+                        // Calculate per-minute amount with rounding (same as draft payroll)
+                        $actualMinutes = $regularHours * 60;
+                        $roundedMinutes = round($actualMinutes);
+                        $ratePerMinute = ($hourlyRate * $multiplier) / 60;
+                        $amount = $roundedMinutes * $ratePerMinute;
+
                         $breakdown[$name] = [
                             'hours' => $regularHours,
                             'rate' => number_format($hourlyRate, 2),
@@ -5994,8 +6011,12 @@ class PayrollController extends Controller
 
                 if ($rateConfig) {
                     $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
-                    // Calculate per-minute amount (same as draft payroll)
-                    $amount = ($regularHours * 60) * ($hourlyRate / 60) * $multiplier;
+                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    $actualMinutes = $regularHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $multiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
                     $breakdown['Rest Day'] = [
                         'hours' => $regularHours,
                         'rate' => number_format($hourlyRate, 2),
@@ -6004,8 +6025,12 @@ class PayrollController extends Controller
                     ];
                 } else {
                     // Ultimate fallback to hardcoded multiplier if no config found
-                    // Calculate per-minute amount (same as draft payroll)
-                    $amount = ($regularHours * 60) * ($hourlyRate / 60) * 1.3;
+                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    $actualMinutes = $regularHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * 1.3) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
                     $breakdown['Rest Day'] = [
                         'hours' => $regularHours,
                         'rate' => number_format($hourlyRate, 2),
@@ -6043,8 +6068,12 @@ class PayrollController extends Controller
 
             if ($rateConfig) {
                 $multiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
-                // Calculate per-minute amount (same as draft payroll)
-                $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * $multiplier;
+                // Calculate per-minute amount with rounding (same as draft payroll)
+                $actualMinutes = $overtimeHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = ($hourlyRate * $multiplier) / 60;
+                $amount = $roundedMinutes * $ratePerMinute;
+
                 $breakdown['Regular Workday Overtime'] = [
                     'hours' => $overtimeHours,
                     'rate' => number_format($hourlyRate, 2),
@@ -6053,8 +6082,12 @@ class PayrollController extends Controller
                 ];
             } else {
                 // Ultimate fallback to hardcoded multiplier if no config found
-                // Calculate per-minute amount (same as draft payroll)
-                $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * 1.25;
+                // Calculate per-minute amount with rounding (same as draft payroll)
+                $actualMinutes = $overtimeHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = ($hourlyRate * 1.25) / 60;
+                $amount = $roundedMinutes * $ratePerMinute;
+
                 $breakdown['Regular Workday Overtime'] = [
                     'hours' => $overtimeHours,
                     'rate' => number_format($hourlyRate, 2),
@@ -6088,8 +6121,12 @@ class PayrollController extends Controller
 
                 if ($rateConfig) {
                     $multiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
-                    // Calculate per-minute amount (same as draft payroll)
-                    $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * $multiplier;
+                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    $actualMinutes = $overtimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $multiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
                     $breakdown[$name] = [
                         'hours' => $overtimeHours,
                         'rate' => number_format($hourlyRate, 2),
@@ -6105,8 +6142,12 @@ class PayrollController extends Controller
                         'rest_day_regular_holiday' => 3.38
                     ];
                     $multiplier = $fallbackMultipliers[$type] ?? 1.25;
-                    // Calculate per-minute amount (same as draft payroll)
-                    $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * $multiplier;
+                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    $actualMinutes = $overtimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $multiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
                     $breakdown[$name] = [
                         'hours' => $overtimeHours,
                         'rate' => number_format($hourlyRate, 2),
@@ -6133,8 +6174,12 @@ class PayrollController extends Controller
 
             if ($rateConfig) {
                 $multiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
-                // Calculate per-minute amount (same as draft payroll)
-                $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * $multiplier;
+                // Calculate per-minute amount with rounding (same as draft payroll)
+                $actualMinutes = $overtimeHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = ($hourlyRate * $multiplier) / 60;
+                $amount = $roundedMinutes * $ratePerMinute;
+
                 $breakdown['Rest Day Overtime'] = [
                     'hours' => $overtimeHours,
                     'rate' => number_format($hourlyRate, 2),
@@ -6143,8 +6188,12 @@ class PayrollController extends Controller
                 ];
             } else {
                 // Ultimate fallback to hardcoded multiplier if no config found
-                // Calculate per-minute amount (same as draft payroll)
-                $amount = ($overtimeHours * 60) * ($hourlyRate / 60) * 1.69;
+                // Calculate per-minute amount with rounding (same as draft payroll)
+                $actualMinutes = $overtimeHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = ($hourlyRate * 1.69) / 60;
+                $amount = $roundedMinutes * $ratePerMinute;
+
                 $breakdown['Rest Day Overtime'] = [
                     'hours' => $overtimeHours,
                     'rate' => number_format($hourlyRate, 2),
