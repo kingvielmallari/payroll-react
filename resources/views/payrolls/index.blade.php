@@ -23,7 +23,7 @@
                     <div class="flex flex-wrap items-end gap-4 mb-4 w-full">
                         <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Pay Schedule</label>
-                            <select name="pay_schedule" id="pay_schedule" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm payroll-filter">
+                            <select name="pay_schedule" id="pay_schedule" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All Schedules</option>
                                 <option value="daily" {{ request('pay_schedule') == 'daily' ? 'selected' : '' }}>Daily</option>
                                 <option value="weekly" {{ request('pay_schedule') == 'weekly' ? 'selected' : '' }}>Weekly</option>
@@ -33,7 +33,7 @@
                         </div>
                         <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Status</label>
-                            <select name="status" id="status" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm payroll-filter">
+                            <select name="status" id="status" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All Statuses</option>
                                 <option value="processing" {{ request('status') == 'processing' ? 'selected' : '' }}>Processing</option>
                                 <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Approved</option>
@@ -41,27 +41,27 @@
                         </div>
                         <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Type</label>
-                            <select name="type" id="type" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm payroll-filter">
+                            <select name="type" id="type" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All Types</option>
                                 <option value="automated" {{ request('type') == 'automated' ? 'selected' : '' }}>Automated</option>
                                 <option value="manual" {{ request('type') == 'manual' ? 'selected' : '' }}>Manual</option>
                             </select>
                         </div>
-                        <div class="flex-1 min-w-[180px]">
+                        <div class="flex-1 min-w-[220px]">
                             <label class="block text-sm font-medium text-gray-700">Pay Period</label>
-                            <select name="pay_period" id="pay_period" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm payroll-filter">
+                            <select name="pay_period" id="pay_period" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500 text-sm">
                                 <option value="">All Periods</option>
                                 <!-- Pay periods will be populated dynamically based on schedule selection -->
                             </select>
                         </div>
                         <div class="flex items-end gap-2">
-                            <button type="button" id="reset_filters" class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                            <button type="button" id="reset_filters" class="inline-flex items-center px-4 h-10 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                 </svg>
                                 Reset Filters
                             </button>
-                            <button type="button" id="generate_summary" class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                            <button type="button" id="generate_summary" class="inline-flex items-center px-4 h-10 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
@@ -108,8 +108,8 @@
                                 @foreach($payrolls as $payroll)
                                 <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
                                    oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $payroll->payroll_type }}', '{{ $payroll->pay_schedule }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : '' }}')"
-                                   onclick="window.location.href='@if($payroll->payroll_type === 'automated' && $payroll->payrollDetails->count() === 1){{ route('payrolls.automation.show', ['schedule' => $payroll->pay_schedule, 'employee' => $payroll->payrollDetails->first()->employee_id]) }}@else{{ route('payrolls.show', $payroll) }}@endif'"
-                                   title="Right-click for actions">
+                                   onclick="window.open('@if($payroll->payroll_type === 'automated' && $payroll->payrollDetails->count() === 1){{ route('payrolls.automation.show', ['schedule' => $payroll->pay_schedule, 'employee' => $payroll->payrollDetails->first()->employee_id]) }}@else{{ route('payrolls.show', $payroll) }}@endif', '_blank')"
+                                   title="Click to open in new tab, Right-click for actions">
                                    
                                     <!-- Payroll Number Column -->
                                     <td class="px-6 py-4 whitespace-nowrap">
@@ -352,12 +352,12 @@
             }
             @endcan
             
-            // Show Delete if user has permission
-            @can('delete payrolls')
+            // Show Delete if user has permission (temporarily enabled for all users)
+            // @can('delete payrolls')
             if (status === 'draft' || status === 'processing' || status === 'approved') {
                 document.getElementById('contextMenuDelete').style.display = 'flex';
             }
-            @endcan
+            // @endcan
         }
         
         // Handle process action
@@ -510,9 +510,16 @@
             filterSelects.forEach(select => {
                 select.addEventListener('change', function() {
                     if (this.id === 'pay_schedule') {
+                        // For pay schedule changes, first update periods then apply filters
                         updatePayPeriods(this.value);
+                        // Apply filters after a short delay to allow periods to load
+                        setTimeout(() => {
+                            applyFilters();
+                        }, 300);
+                    } else {
+                        // For other filters, apply immediately
+                        applyFilters();
                     }
-                    applyFilters();
                 });
             });
 

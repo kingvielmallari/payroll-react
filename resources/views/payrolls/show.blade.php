@@ -832,11 +832,12 @@
                                             @else
                                                 @if($totalRestRegularHours > 0)
                                                     <div class="text-xs text-gray-500">{{ number_format($totalRestRegularHours, 2) }} hrs</div>
-                                                    <div class="font-bold text-cyan-600">₱{{ number_format($restDayPay, 2) }}</div>
                                                 @else
-                                                    <div class="text-gray-400">₱0.00</div>
+                                                    <div class="text-gray-400">0 hrs</div>
                                                 @endif
                                             @endif
+                                        </div>
+                                        <div class="font-bold text-cyan-600">₱{{ number_format($restDayPay, 2) }}</div>
                                         </div>
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">

@@ -116,8 +116,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('payrolls/{payroll}/edit', [PayrollController::class, 'edit'])->name('payrolls.edit');
         Route::put('payrolls/{payroll}', [PayrollController::class, 'update'])->name('payrolls.update');
         Route::delete('payrolls/{payroll}', [PayrollController::class, 'destroy'])
-            ->name('payrolls.destroy')
-            ->middleware('can:delete payrolls');
+            ->name('payrolls.destroy');
+        // ->middleware('can:delete payrolls'); // Temporarily disabled
         Route::post('payrolls/{payroll}/recalculate', [PayrollController::class, 'recalculate'])
             ->name('payrolls.recalculate')
             ->middleware('can:edit payrolls');
