@@ -1890,10 +1890,23 @@
                                                 $isWeekend = \Carbon\Carbon::parse($date)->isWeekend();
                                                 $logType = $timeLog->log_type ?? ($isWeekend ? 'rest_day' : 'regular_workday');
                                                 
-                                                // For DTR Summary, only show overtime if there's ACTUAL overtime for this specific day
-                                                // Don't use aggregate data as it shows total overtime across all days of this type
-                                                $regularHours = $timeLog->regular_hours ?? 0;
-                                                $overtimeHours = $timeLog->overtime_hours ?? 0;
+                                                // For DTR Summary, ALWAYS calculate dynamic values with grace periods
+                                                // This ensures consistent display between draft and processing payrolls
+                                                if ($timeLog->time_in && $timeLog->time_out && $timeLog->remarks !== 'Incomplete Time Record') {
+                                                    // Calculate dynamic values on-the-fly for DTR display
+                                                    $controller = app(App\Http\Controllers\PayrollController::class);
+                                                    $reflection = new ReflectionClass($controller);
+                                                    $method = $reflection->getMethod('calculateTimeLogHoursDynamically');
+                                                    $method->setAccessible(true);
+                                                    $dynamicCalc = $method->invoke($controller, $timeLog);
+                                                    
+                                                    $regularHours = $dynamicCalc['regular_hours'] ?? 0;
+                                                    $overtimeHours = $dynamicCalc['overtime_hours'] ?? 0;
+                                                } else {
+                                                    // Fallback for incomplete records
+                                                    $regularHours = $timeLog->regular_hours ?? 0;
+                                                    $overtimeHours = $timeLog->overtime_hours ?? 0;
+                                                }
                                             } else if ($dayBreakdown) {
                                                 // Use the daily breakdown
                                                 $regularHours = $dayBreakdown['regular_hours'] ?? 0;
@@ -1904,9 +1917,11 @@
                                                 $overtimeHours = 0;
                                             }
                                         } else {
-                                            // Use stored values for approved payrolls or incomplete records
-                                            $regularHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->regular_hours ?? 0) : 0;
-                                            $overtimeHours = (!$isIncompleteRecord && $timeLog) ? ($timeLog->overtime_hours ?? 0) : 0;
+                                            // Always use dynamic calculation if available, otherwise stored values
+                                            $regularHours = (!$isIncompleteRecord && $timeLog) ? 
+                                                (isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : ($timeLog->regular_hours ?? 0)) : 0;
+                                            $overtimeHours = (!$isIncompleteRecord && $timeLog) ? 
+                                                (isset($timeLog->dynamic_overtime_hours) ? $timeLog->dynamic_overtime_hours : ($timeLog->overtime_hours ?? 0)) : 0;
                                         }
                                         $totalEmployeeHours += $regularHours;
                                         $totalEmployeeOvertimeHours += $overtimeHours;
@@ -2067,17 +2082,23 @@
                                                             $regularPeriodEnd = $regularPeriodEnd->format('g:i A');
                                                         }
                                                         
-                                                        // Calculate ACTUAL regular hours based on our display periods to ensure consistency
-                                                        // This ensures the hour value matches the time period exactly
-                                                        if($overtimeHours > 0 && $timeLog->time_in && $timeLog->time_out) {
-                                                            // When there's overtime, regular hours should use the dynamic overtime threshold
-                                                            // regardless of grace period (the grace period affects the TIME PERIOD, not the HOURS)
-                                                            $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
-                                                            $overtimeThresholdMinutes = $gracePeriodSettings ? $gracePeriodSettings->overtime_threshold_minutes : 480;
-                                                            $displayRegularHours = $overtimeThresholdMinutes / 60; // Convert to hours (e.g., 500 minutes = 8.33 hours)
+                                                        // FOR DTR SUMMARY: ALWAYS use the dynamic calculation results to ensure consistency
+                                                        // Force dynamic calculation for DTR display regardless of payroll status
+                                                        if ($timeLog->time_in && $timeLog->time_out && $timeLog->remarks !== 'Incomplete Time Record') {
+                                                            // Calculate dynamic values on-the-fly for DTR display
+                                                            $controller = app(App\Http\Controllers\PayrollController::class);
+                                                            $reflection = new ReflectionClass($controller);
+                                                            $method = $reflection->getMethod('calculateTimeLogHoursDynamically');
+                                                            $method->setAccessible(true);
+                                                            $dynamicCalc = $method->invoke($controller, $timeLog);
+                                                            
+                                                            // Always use the dynamic calculation for display hours
+                                                            $displayRegularHours = $dynamicCalc['regular_hours'] ?? 0;
+                                                            $displayOvertimeHours = $dynamicCalc['overtime_hours'] ?? 0;
                                                         } else {
-                                                            // When there's no overtime, use the stored regular hours value
+                                                            // Fallback for incomplete records
                                                             $displayRegularHours = $regularHours;
+                                                            $displayOvertimeHours = $overtimeHours;
                                                         }
                                                     @endphp
                                                     
@@ -2159,7 +2180,7 @@
                                                         </div>
                                                     @endif
                                                 
-                                                    @if($overtimeHours > 0)
+                                                    @if($displayOvertimeHours > 0)
                                                     @php
                                                         // Get detailed time period breakdown
                                                         $timePeriodBreakdown = $timeLog->getTimePeriodBreakdown();
@@ -2205,8 +2226,8 @@
                                                     
                                                     {{-- Fallback to old display if no breakdown available --}}
                                                     @if(empty($timePeriodBreakdown) || count($timePeriodBreakdown) <= 1)
-                                                        {{-- FORCE USE THE UNIFIED CALCULATION - Use overtimeHours from our unified calculation above --}}
-                                                        @if($overtimeHours > 0)
+                                                        {{-- FORCE USE THE UNIFIED CALCULATION - Use displayOvertimeHours from our dynamic calculation above --}}
+                                                        @if($displayOvertimeHours > 0)
                                                         @php
                                                             // Calculate regular overtime period - should start where regular hours end
                                                             $regularOTStart = '';
@@ -2284,8 +2305,8 @@
                                                                 $calculatedRegularOT = $overtimeHours;
                                                             }
                                                             
-                                                            // Use the CALCULATED hours based on time period, not stored DB values
-                                                            $displayRegularOTHours = $calculatedRegularOT; // Use calculated time period, not DB values
+                                                            // Use the dynamic overtime hours from our calculation above
+                                                            $displayRegularOTHours = $displayOvertimeHours; // Use dynamic calculation result
                                                         @endphp
                                                         <div class="text-orange-600 text-xs">
                                                             {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($displayRegularOTHours, 2) }}h)
@@ -2335,7 +2356,7 @@
                                                         @endif
                                                         
                                                         {{-- If we have total overtime but no breakdown, show total --}}
-                                                        @if($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0 && $overtimeHours > 0)
+                                                        @if($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0 && $displayOvertimeHours > 0)
                                                         @php
                                                             // Calculate overtime period starting from where regular hours end
                                                             $overtimeStart = '';
