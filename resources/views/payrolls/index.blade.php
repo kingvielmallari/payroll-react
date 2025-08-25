@@ -2,28 +2,13 @@
     <x-slot name="header">
         <div class="flex justify-between items-center">
             <div class="flex items-center space-x-4">
-                @if(request('schedule'))
-                <a href="{{ route('payrolls.index') }}" 
-                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                    </svg>
-                    Back to Schedule Selection
-                </a>
-                @endif
                 <div>
                     <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                        @if(request('schedule') && isset($scheduleSetting))
-                            {{ $scheduleSetting->name }} Payrolls
-                        @else
-                            {{ __('Payroll Management') }}
-                        @endif
+                        {{ __('Payroll Management') }}
                     </h2>
-                    @if(request('schedule') && isset($scheduleSetting))
                     <p class="text-sm text-gray-600 mt-1">
-                        Manage payrolls for {{ strtolower($scheduleSetting->name) }} pay schedule
+                        Manage all payrolls across different schedules
                     </p>
-                    @endif
                 </div>
             </div>
         </div>
@@ -34,46 +19,56 @@
             <!-- Filters -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg mb-6">
                 <div class="p-6">
-                    <form method="GET" action="{{ route('payrolls.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div>
+                    <!-- Filter Inputs and Action Buttons in 1 Row -->
+                    <div class="flex flex-wrap items-end gap-4 mb-4 w-full">
+                        <div class="flex-1 min-w-[180px]">
+                            <label class="block text-sm font-medium text-gray-700">Pay Schedule</label>
+                            <select name="pay_schedule" id="pay_schedule" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm payroll-filter">
+                                <option value="">All Schedules</option>
+                                <option value="daily" {{ request('pay_schedule') == 'daily' ? 'selected' : '' }}>Daily</option>
+                                <option value="weekly" {{ request('pay_schedule') == 'weekly' ? 'selected' : '' }}>Weekly</option>
+                                <option value="semi_monthly" {{ request('pay_schedule') == 'semi_monthly' ? 'selected' : '' }}>Semi Monthly</option>
+                                <option value="monthly" {{ request('pay_schedule') == 'monthly' ? 'selected' : '' }}>Monthly</option>
+                            </select>
+                        </div>
+                        <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Status</label>
-                            <select name="status" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <select name="status" id="status" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm payroll-filter">
                                 <option value="">All Statuses</option>
-                                <option value="draft" {{ request('status') == 'draft' ? 'selected' : '' }}>Draft</option>
                                 <option value="processing" {{ request('status') == 'processing' ? 'selected' : '' }}>Processing</option>
                                 <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Approved</option>
-                                <option value="paid" {{ request('status') == 'paid' ? 'selected' : '' }}>Paid</option>
-                                <option value="cancelled" {{ request('status') == 'cancelled' ? 'selected' : '' }}>Cancelled</option>
                             </select>
                         </div>
-                        <div>
+                        <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Type</label>
-                            <select name="type" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <select name="type" id="type" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm payroll-filter">
                                 <option value="">All Types</option>
-                                <option value="regular" {{ request('type') == 'regular' ? 'selected' : '' }}>Regular</option>
-                                <option value="special" {{ request('type') == 'special' ? 'selected' : '' }}>Special</option>
-                                <option value="13th_month" {{ request('type') == '13th_month' ? 'selected' : '' }}>13th Month</option>
-                                <option value="bonus" {{ request('type') == 'bonus' ? 'selected' : '' }}>Bonus</option>
+                                <option value="automated" {{ request('type') == 'automated' ? 'selected' : '' }}>Automated</option>
+                                <option value="manual" {{ request('type') == 'manual' ? 'selected' : '' }}>Manual</option>
                             </select>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Date From</label>
-                            <input type="date" name="date_from" value="{{ request('date_from') }}" 
-                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                        <div class="flex-1 min-w-[180px]">
+                            <label class="block text-sm font-medium text-gray-700">Pay Period</label>
+                            <select name="pay_period" id="pay_period" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm payroll-filter">
+                                <option value="">All Periods</option>
+                                <!-- Pay periods will be populated dynamically based on schedule selection -->
+                            </select>
                         </div>
-                        <div class="flex items-end space-x-2">
-                            <div class="flex-1">
-                                <label class="block text-sm font-medium text-gray-700">Date To</label>
-                                <input type="date" name="date_to" value="{{ request('date_to') }}" 
-                                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
-                            </div>
-                            <div class="flex-shrink-0">
-                                <button type="submit" class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700">
-                                    Filter
-                                </button>
-                            </div>
+                        <div class="flex items-end gap-2">
+                            <button type="button" id="reset_filters" class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Reset Filters
+                            </button>
+                            <button type="button" id="generate_summary" class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                Generate Payroll Summary
+                            </button>
                         </div>
-                    </form>
+                    </div>
                 </div>
             </div>
 
@@ -95,29 +90,17 @@
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
                                         Payroll Number
                                     </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
                                         Period
                                     </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Type
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
                                         Employee
                                     </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Total Gross (DTR)
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Total Net
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
                                         Status
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Created
                                     </th>
                                 </tr>
                             </thead>
@@ -127,58 +110,72 @@
                                    oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $payroll->payroll_type }}', '{{ $payroll->pay_schedule }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : '' }}')"
                                    onclick="window.location.href='@if($payroll->payroll_type === 'automated' && $payroll->payrollDetails->count() === 1){{ route('payrolls.automation.show', ['schedule' => $payroll->pay_schedule, 'employee' => $payroll->payrollDetails->first()->employee_id]) }}@else{{ route('payrolls.show', $payroll) }}@endif'"
                                    title="Right-click for actions">
+                                   
+                                    <!-- Payroll Number Column -->
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm font-medium text-gray-900">{{ $payroll->payroll_number }}</div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">
-                                            {{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}
-                                        </div>
-                                        <div class="text-sm text-gray-500">Pay Date: {{ $payroll->pay_date->format('M d, Y') }}</div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 w-fit
+                                            {{ $payroll->payroll_type == 'automated' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800' }}">
                                             {{ ucfirst(str_replace('_', ' ', $payroll->payroll_type)) }}
                                         </span>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    
+                                    <!-- Period Column -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900 font-medium">
+                                            {{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}
+                                        </div>
+                                        <div class="text-xs text-gray-500">Pay Date: {{ $payroll->pay_date->format('M d, Y') }}</div>
+                                    </td>
+                                    
+                                    <!-- Employee Column -->
+                                    <td class="px-6 py-4 whitespace-nowrap">
                                         @if($payroll->payroll_details_count <= 3)
                                             @foreach($payroll->payrollDetails as $detail)
-                                                <div class="text-sm">
-                                                    <span class="font-medium">{{ $detail->employee->full_name }}</span>
-                                                    <span class="text-gray-500 text-xs ml-1">({{ $detail->employee->employee_number }})</span>
-                                                </div>
+                                                <div class="text-sm font-medium text-gray-900">{{ $detail->employee->full_name }}</div>
+                                                <div class="text-xs text-gray-500">{{ $detail->employee->employee_number }}</div>
+                                                @if(!$loop->last)
+                                                    <div class="my-1"></div>
+                                                @endif
                                             @endforeach
                                         @else
                                             @foreach($payroll->payrollDetails->take(2) as $detail)
-                                                <div class="text-sm">
-                                                    <span class="font-medium">{{ $detail->employee->full_name }}</span>
-                                                    <span class="text-gray-500 text-xs ml-1">({{ $detail->employee->employee_number }})</span>
-                                                </div>
+                                                <div class="text-sm font-medium text-gray-900">{{ $detail->employee->full_name }}</div>
+                                                <div class="text-xs text-gray-500">{{ $detail->employee->employee_number }}</div>
+                                                @if(!$loop->last)
+                                                    <div class="my-1"></div>
+                                                @endif
                                             @endforeach
-                                            <div class="text-xs text-gray-500 mt-1">
+                                            <div class="text-xs text-blue-600 mt-2">
                                                 +{{ $payroll->payroll_details_count - 2 }} more employees
                                             </div>
                                         @endif
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        <div class="font-medium text-green-600">₱{{ number_format($payroll->total_gross, 2) }}</div>
-                                        <div class="text-xs text-gray-500">Based on DTR</div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        ₱{{ number_format($payroll->total_net, 2) }}
-                                    </td>
+                                    
+                                    <!-- Status Column -->
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
-                                            {{ $payroll->status == 'paid' ? 'bg-green-100 text-green-800' : 
-                                               ($payroll->status == 'approved' ? 'bg-blue-100 text-blue-800' : 
-                                                ($payroll->status == 'processing' ? 'bg-yellow-100 text-yellow-800' : 
-                                                 ($payroll->status == 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'))) }}">
+                                        <div class="text-sm font-medium text-gray-900">
+                                            @if($payroll->status == 'approved' && $payroll->approved_at)
+                                                {{ $payroll->approved_at->format('M d, Y') }}
+                                            @elseif($payroll->status == 'processing' && $payroll->processed_at)
+                                                {{ $payroll->processed_at->format('M d, Y') }}
+                                            @else
+                                                {{ $payroll->created_at->format('M d, Y') }}
+                                            @endif
+                                        </div>
+                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 w-fit
+                                            @if($payroll->status == 'paid')
+                                                bg-green-100 text-green-800
+                                            @elseif($payroll->status == 'approved')
+                                                bg-green-100 text-green-800
+                                            @elseif($payroll->status == 'processing')
+                                                bg-yellow-100 text-yellow-800
+                                           
+                                            @else
+                                                bg-gray-100 text-gray-800
+                                            @endif">
                                             {{ ucfirst($payroll->status) }}
                                         </span>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {{ $payroll->created_at->format('M d, Y') }}
                                     </td>
                                 </tr>
                                 @endforeach
@@ -197,12 +194,7 @@
                         </svg>
                         <h3 class="mt-2 text-sm font-medium text-gray-900">No payrolls found</h3>
                         <p class="mt-1 text-sm text-gray-500">
-                            @if(request('schedule'))
-                                No payrolls found for {{ isset($scheduleSetting) ? strtolower($scheduleSetting->name) : 'this' }} pay schedule.
-                                <br>Payrolls will be automatically created when payroll periods start.
-                            @else
-                                Select a pay schedule above to view payrolls for that frequency.
-                            @endif
+                            No payrolls match your current filter criteria. Try adjusting your filters or create a new payroll.
                         </p>
                     </div>
                     @endif
@@ -456,5 +448,193 @@
                 form.submit();
             }
         });
+
+        // Live filtering functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const filterSelects = document.querySelectorAll('.payroll-filter');
+            const payScheduleSelect = document.getElementById('pay_schedule');
+            const payPeriodSelect = document.getElementById('pay_period');
+
+            // Function to update pay periods based on selected schedule
+            function updatePayPeriods(schedule) {
+                // Clear existing options
+                payPeriodSelect.innerHTML = '<option value="">All Periods</option>';
+                
+                if (!schedule) return;
+
+                // Fetch pay periods for the selected schedule
+                fetch(`{{ route('payrolls.index') }}?action=get_periods&schedule=${schedule}`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.periods) {
+                        data.periods.forEach(period => {
+                            const option = document.createElement('option');
+                            option.value = period.value;
+                            option.textContent = period.label;
+                            payPeriodSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => console.error('Error fetching periods:', error));
+            }
+
+            // Function to apply filters and reload page
+            function applyFilters() {
+                const params = new URLSearchParams();
+                
+                // Keep any existing parameters except page
+                const currentParams = new URLSearchParams(window.location.search);
+                filterSelects.forEach(select => {
+                    if (select.value) {
+                        params.set(select.name, select.value);
+                    }
+                });
+
+                // Copy over existing parameters that aren't filters
+                for (const [key, value] of currentParams) {
+                    if (!['pay_schedule', 'status', 'type', 'pay_period', 'page'].includes(key)) {
+                        params.set(key, value);
+                    }
+                }
+
+                // Reload page with new filters
+                window.location.href = `{{ route('payrolls.index') }}?${params.toString()}`;
+            }
+
+            // Add event listeners for live filtering
+            filterSelects.forEach(select => {
+                select.addEventListener('change', function() {
+                    if (this.id === 'pay_schedule') {
+                        updatePayPeriods(this.value);
+                    }
+                    applyFilters();
+                });
+            });
+
+            // Initialize pay periods on page load
+            if (payScheduleSelect.value) {
+                updatePayPeriods(payScheduleSelect.value);
+                // Set the selected pay period if it exists in URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const selectedPeriod = urlParams.get('pay_period');
+                if (selectedPeriod) {
+                    setTimeout(() => {
+                        payPeriodSelect.value = selectedPeriod;
+                    }, 500); // Wait for periods to load
+                }
+            }
+
+            // Generate Payroll Summary functionality
+            document.getElementById('generate_summary').addEventListener('click', function() {
+                // Show the export modal
+                document.getElementById('exportModal').classList.remove('hidden');
+            });
+
+            // Modal functionality
+            document.getElementById('closeModal').addEventListener('click', function() {
+                document.getElementById('exportModal').classList.add('hidden');
+            });
+
+            // Close modal when clicking outside
+            document.getElementById('exportModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.classList.add('hidden');
+                }
+            });
+
+            // PDF Export
+            document.getElementById('exportPDF').addEventListener('click', function() {
+                generateSummary('pdf');
+                document.getElementById('exportModal').classList.add('hidden');
+            });
+
+            // Excel Export
+            document.getElementById('exportExcel').addEventListener('click', function() {
+                generateSummary('excel');
+                document.getElementById('exportModal').classList.add('hidden');
+            });
+
+            // Function to generate summary
+            function generateSummary(format) {
+                const currentFilters = new URLSearchParams(window.location.search);
+                
+                // Add export format to parameters
+                currentFilters.set('export', format);
+                currentFilters.set('action', 'generate_summary');
+
+                // Create form and submit for file download
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{{ route("payrolls.generate-summary") }}';
+                
+                // Add CSRF token
+                const csrfToken = document.createElement('input');
+                csrfToken.type = 'hidden';
+                csrfToken.name = '_token';
+                csrfToken.value = '{{ csrf_token() }}';
+                form.appendChild(csrfToken);
+
+                // Add all current filter parameters
+                for (const [key, value] of currentFilters) {
+                    if (key !== 'page') { // Exclude pagination
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = key;
+                        input.value = value;
+                        form.appendChild(input);
+                    }
+                }
+
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+            }
+
+            // Reset filters functionality
+            document.getElementById('reset_filters').addEventListener('click', function() {
+                window.location.href = '{{ route("payrolls.index") }}';
+            });
+        });
     </script>
+
+    <!-- Export Format Modal -->
+    <div id="exportModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                    <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mt-4">Choose Export Format</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p class="text-sm text-gray-500">
+                        Select the format for your payroll summary export:
+                    </p>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="exportPDF" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 mb-3">
+                        <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"></path>
+                        </svg>
+                        Export as PDF
+                    </button>
+                    <button id="exportExcel" class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 mb-3">
+                        <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm4 2a1 1 0 000 2h4a1 1 0 100-2H8zm0 3a1 1 0 000 2h4a1 1 0 100-2H8zm0 3a1 1 0 000 2h4a1 1 0 100-2H8z" clip-rule="evenodd"></path>
+                        </svg>
+                        Export as Excel
+                    </button>
+                    <button id="closeModal" class="px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </x-app-layout>

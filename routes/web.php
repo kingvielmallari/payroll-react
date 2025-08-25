@@ -88,7 +88,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Payroll Management
     Route::middleware('can:view payrolls')->group(function () {
         // View All Payrolls - shows all payrolls from different periods
-        Route::get('payrolls', [PayrollController::class, 'indexAll'])->name('payrolls.index');
+        Route::get('payrolls', [PayrollController::class, 'index'])->name('payrolls.index');
 
         // Automated Payroll - schedule selection and auto-creation for active employees
         Route::get('payrolls/automation', [PayrollController::class, 'automationIndex'])->name('payrolls.automation.index');
@@ -125,6 +125,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('payrolls/generate-from-dtr', [PayrollController::class, 'generateFromDTR'])
             ->name('payrolls.generate-from-dtr')
             ->middleware('can:create payrolls');
+        Route::post('payrolls/generate-summary', [PayrollController::class, 'generateSummary'])
+            ->name('payrolls.generate-summary')
+            ->middleware('can:view payrolls');
         Route::post('payrolls/{payroll}/approve', [PayrollController::class, 'approve'])
             ->name('payrolls.approve')
             ->middleware('can:approve payrolls');

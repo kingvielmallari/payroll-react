@@ -68,56 +68,405 @@ class PayrollController extends Controller
     {
         $this->authorize('view payrolls');
 
-        // Get the selected pay schedule filter
-        $selectedSchedule = $request->input('schedule');
-
-        // If no schedule is selected, show schedule selection page
-        if (!$selectedSchedule) {
-            // Get all payroll schedule settings for selection (including disabled ones)
-            $scheduleSettings = \App\Models\PayScheduleSetting::systemDefaults()
-                ->orderBy('sort_order')
-                ->get();
-
-            // Calculate current periods for each schedule to display
-            foreach ($scheduleSettings as $setting) {
-                $currentPeriods = $this->getCurrentPeriodDisplayForSchedule($setting);
-                $setting->current_period_display = $currentPeriods;
-            }
-
-            return view('payrolls.schedule-selection', [
-                'scheduleSettings' => $scheduleSettings
-            ]);
+        // Handle AJAX request for pay periods
+        if ($request->ajax() && $request->input('action') === 'get_periods') {
+            return $this->getPayPeriods($request);
         }
 
-        // Show payrolls for selected schedule
+        // Show all payrolls with filters
         $query = Payroll::with(['creator', 'approver', 'payrollDetails.employee'])
             ->withCount('payrollDetails')
-            ->where('pay_schedule', $selectedSchedule)
             ->orderBy('created_at', 'desc');
 
-        // Filter by status
+        // Filter by pay schedule
+        if ($request->filled('pay_schedule')) {
+            $query->where('pay_schedule', $request->pay_schedule);
+        }
+
+        // Filter by status - only allow processing and approved
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            $status = $request->status;
+            if (in_array($status, ['processing', 'approved'])) {
+                $query->where('status', $status);
+            }
+        } else {
+            // Default to only processing and approved payrolls (exclude drafts)
+            $query->whereIn('status', ['processing', 'approved']);
         }
 
-        // Filter by payroll type
+        // Filter by payroll type - only allow automated and manual
         if ($request->filled('type')) {
-            $query->where('payroll_type', $request->type);
+            $type = $request->type;
+            if (in_array($type, ['automated', 'manual'])) {
+                $query->where('payroll_type', $type);
+            }
         }
 
-        // Filter by date range
-        if ($request->filled('date_from') && $request->filled('date_to')) {
-            $query->whereBetween('period_start', [$request->date_from, $request->date_to]);
+        // Filter by pay period
+        if ($request->filled('pay_period')) {
+            $periodDates = explode('|', $request->pay_period);
+            if (count($periodDates) === 2) {
+                $startDate = Carbon::parse($periodDates[0]);
+                $endDate = Carbon::parse($periodDates[1]);
+                $query->where('period_start', $startDate)
+                    ->where('period_end', $endDate);
+            }
         }
 
         $payrolls = $query->paginate(15)->withQueryString();
 
-        // Get the schedule setting for display
+        return view('payrolls.index', compact('payrolls'));
+    }
+
+    /**
+     * Get pay periods for AJAX request
+     */
+    private function getPayPeriods(Request $request)
+    {
+        $schedule = $request->input('schedule');
+        if (!$schedule) {
+            return response()->json(['periods' => []]);
+        }
+
+        // Get the schedule setting
         $scheduleSetting = \App\Models\PayScheduleSetting::systemDefaults()
-            ->where('code', $selectedSchedule)
+            ->where('code', $schedule)
             ->first();
 
-        return view('payrolls.index', compact('payrolls', 'selectedSchedule', 'scheduleSetting'));
+        if (!$scheduleSetting) {
+            return response()->json(['periods' => []]);
+        }
+
+        // Get existing payroll periods from database for this schedule
+        $existingPeriods = Payroll::where('pay_schedule', $schedule)
+            ->whereIn('status', ['processing', 'approved'])
+            ->select('period_start', 'period_end')
+            ->distinct()
+            ->orderBy('period_start', 'desc')
+            ->limit(12) // Show last 12 periods
+            ->get();
+
+        $periods = [];
+        foreach ($existingPeriods as $period) {
+            $label = $period->period_start->format('M j') . ' - ' . $period->period_end->format('M j, Y');
+            $value = $period->period_start->format('Y-m-d') . '|' . $period->period_end->format('Y-m-d');
+
+            $periods[] = [
+                'label' => $label,
+                'value' => $value
+            ];
+        }
+
+        return response()->json(['periods' => $periods]);
+    }
+
+    /**
+     * Generate payroll summary
+     */
+    public function generateSummary(Request $request)
+    {
+        $this->authorize('view payrolls');
+
+        $format = $request->input('export', 'pdf');
+
+        // Build query based on filters
+        $query = Payroll::with(['payrollDetails.employee', 'snapshots'])
+            ->whereIn('status', ['processing', 'approved']);
+
+        // Apply filters
+        if ($request->filled('pay_schedule')) {
+            $query->where('pay_schedule', $request->pay_schedule);
+        }
+
+        if ($request->filled('status') && in_array($request->status, ['processing', 'approved'])) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('type') && in_array($request->type, ['automated', 'manual'])) {
+            $query->where('payroll_type', $request->type);
+        }
+
+        if ($request->filled('pay_period')) {
+            $periodDates = explode('|', $request->pay_period);
+            if (count($periodDates) === 2) {
+                $startDate = Carbon::parse($periodDates[0]);
+                $endDate = Carbon::parse($periodDates[1]);
+                $query->where('period_start', $startDate)
+                    ->where('period_end', $endDate);
+            }
+        }
+
+        $payrolls = $query->orderBy('created_at', 'desc')->get();
+
+        if ($format === 'excel') {
+            return $this->exportPayrollSummaryExcel($payrolls);
+        } else {
+            return $this->exportPayrollSummaryPDF($payrolls);
+        }
+    }
+
+    /**
+     * Export payroll summary as Excel
+     */
+    private function exportPayrollSummaryExcel($payrolls)
+    {
+        $fileName = 'payroll_summary_' . date('Y-m-d_H-i-s') . '.csv';
+
+        // Create CSV content with proper headers
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control' => 'max-age=0',
+        ];
+
+        return response()->streamDownload(function () use ($payrolls) {
+            $output = fopen('php://output', 'w');
+
+            // Headers
+            fputcsv($output, [
+                'Payroll Number',
+                'Employee',
+                'Employee Number',
+                'Period Start',
+                'Period End',
+                'Pay Date',
+                'Type',
+                'Status',
+                'Basic Pay',
+                'Holiday Pay',
+                'Rest Day Pay',
+                'Overtime Pay',
+                'Night Differential',
+                'Allowances',
+                'Bonuses',
+                'Total Gross',
+                'Total Deductions',
+                'Total Net'
+            ]);
+
+            // Data rows - use snapshots for accurate data
+            foreach ($payrolls as $payroll) {
+                $snapshots = $payroll->snapshots; // Use snapshots instead of payrollDetails
+
+                if ($snapshots->isEmpty()) {
+                    // Fallback to payroll details if no snapshots
+                    foreach ($payroll->payrollDetails as $detail) {
+                        // Calculate correct Holiday and Overtime pay from breakdown data
+                        $correctHolidayPay = $this->calculateCorrectHolidayPay($detail, $payroll);
+                        $correctOvertimePay = $this->calculateCorrectOvertimePay($detail, $payroll);
+
+                        fputcsv($output, [
+                            $payroll->payroll_number,
+                            $detail->employee->full_name,
+                            $detail->employee->employee_number,
+                            $payroll->period_start->format('Y-m-d'),
+                            $payroll->period_end->format('Y-m-d'),
+                            $payroll->pay_date->format('Y-m-d'),
+                            ucfirst($payroll->payroll_type),
+                            ucfirst($payroll->status),
+                            number_format($detail->basic_pay ?? 0, 2),
+                            number_format($correctHolidayPay, 2),
+                            number_format($detail->rest_day_pay ?? 0, 2),
+                            number_format($correctOvertimePay, 2),
+                            number_format($detail->night_differential ?? 0, 2),
+                            number_format($detail->allowances_total ?? 0, 2),
+                            number_format($detail->bonuses_total ?? 0, 2),
+                            number_format($detail->gross_pay ?? 0, 2),
+                            number_format($detail->total_deductions ?? 0, 2),
+                            number_format($detail->net_pay ?? 0, 2)
+                        ]);
+                    }
+                } else {
+                    foreach ($snapshots as $snapshot) {
+                        // Calculate correct Holiday and Overtime pay from breakdown data
+                        $correctHolidayPay = $this->calculateCorrectHolidayPayFromSnapshot($snapshot);
+                        $correctOvertimePay = $this->calculateCorrectOvertimePayFromSnapshot($snapshot);
+
+                        fputcsv($output, [
+                            $payroll->payroll_number,
+                            $snapshot->employee_name,
+                            $snapshot->employee_number,
+                            $payroll->period_start->format('Y-m-d'),
+                            $payroll->period_end->format('Y-m-d'),
+                            $payroll->pay_date->format('Y-m-d'),
+                            ucfirst($payroll->payroll_type),
+                            ucfirst($payroll->status),
+                            number_format($snapshot->regular_pay ?? 0, 2),
+                            number_format($correctHolidayPay, 2),
+                            number_format(0, 2), // Rest day pay - calculate from breakdown if needed
+                            number_format($correctOvertimePay, 2),
+                            number_format($snapshot->night_differential_pay ?? 0, 2),
+                            number_format($snapshot->allowances_total ?? 0, 2),
+                            number_format($snapshot->bonuses_total ?? 0, 2),
+                            number_format($snapshot->gross_pay ?? 0, 2),
+                            number_format($snapshot->total_deductions ?? 0, 2),
+                            number_format($snapshot->net_pay ?? 0, 2)
+                        ]);
+                    }
+                }
+            }
+
+            fclose($output);
+        }, $fileName, $headers);
+    }
+
+    /**
+     * Export payroll summary as PDF
+     */
+    private function exportPayrollSummaryPDF($payrolls)
+    {
+        $fileName = 'payroll_summary_' . date('Y-m-d_H-i-s') . '.pdf';
+
+        // Create HTML content for PDF
+        $html = '
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Payroll Summary</title>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 10px; margin: 20px; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .header h1 { margin: 0; color: #333; font-size: 18px; }
+                .header p { margin: 5px 0; color: #666; font-size: 12px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 9px; }
+                th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+                th { background-color: #f8f9fa; font-weight: bold; }
+                .text-right { text-align: right; }
+                .total-row { background-color: #f8f9fa; font-weight: bold; }
+                .currency { text-align: right; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Payroll Summary Report</h1>
+                <p>Generated on: ' . date('F j, Y g:i A') . '</p>
+                <p>Total Payrolls: ' . $payrolls->count() . '</p>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Payroll #</th>
+                        <th>Employee</th>
+                        <th>Period</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th class="currency">Basic Pay</th>
+                        <th class="currency">Holiday Pay</th>
+                        <th class="currency">Overtime</th>
+                        <th class="currency">Gross Pay</th>
+                        <th class="currency">Deductions</th>
+                        <th class="currency">Net Pay</th>
+                    </tr>
+                </thead>
+                <tbody>';
+
+        $totalBasic = 0;
+        $totalHoliday = 0;
+        $totalOvertime = 0;
+        $totalGross = 0;
+        $totalDeductions = 0;
+        $totalNet = 0;
+
+        foreach ($payrolls as $payroll) {
+            $snapshots = $payroll->snapshots;
+
+            if ($snapshots->isEmpty()) {
+                // Fallback to payroll details
+                foreach ($payroll->payrollDetails as $detail) {
+                    $basicPay = $detail->basic_pay ?? 0;
+                    $holidayPay = $this->calculateCorrectHolidayPay($detail, $payroll);
+                    $overtimePay = $this->calculateCorrectOvertimePay($detail, $payroll);
+                    $grossPay = $detail->gross_pay ?? 0;
+                    $deductions = $detail->total_deductions ?? 0;
+                    $netPay = $detail->net_pay ?? 0;
+
+                    $totalBasic += $basicPay;
+                    $totalHoliday += $holidayPay;
+                    $totalOvertime += $overtimePay;
+                    $totalGross += $grossPay;
+                    $totalDeductions += $deductions;
+                    $totalNet += $netPay;
+
+                    $html .= '
+                        <tr>
+                            <td>' . $payroll->payroll_number . '</td>
+                            <td>' . $detail->employee->full_name . '</td>
+                            <td>' . $payroll->period_start->format('M j') . ' - ' . $payroll->period_end->format('M j, Y') . '</td>
+                            <td>' . ucfirst($payroll->payroll_type) . '</td>
+                            <td>' . ucfirst($payroll->status) . '</td>
+                            <td class="currency">₱' . number_format($basicPay, 2) . '</td>
+                            <td class="currency">₱' . number_format($holidayPay, 2) . '</td>
+                            <td class="currency">₱' . number_format($overtimePay, 2) . '</td>
+                            <td class="currency">₱' . number_format($grossPay, 2) . '</td>
+                            <td class="currency">₱' . number_format($deductions, 2) . '</td>
+                            <td class="currency">₱' . number_format($netPay, 2) . '</td>
+                        </tr>';
+                }
+            } else {
+                foreach ($snapshots as $snapshot) {
+                    $basicPay = $snapshot->regular_pay ?? 0;
+                    $holidayPay = $this->calculateCorrectHolidayPayFromSnapshot($snapshot);
+                    $overtimePay = $this->calculateCorrectOvertimePayFromSnapshot($snapshot);
+                    $grossPay = $snapshot->gross_pay ?? 0;
+                    $deductions = $snapshot->total_deductions ?? 0;
+                    $netPay = $snapshot->net_pay ?? 0;
+
+                    $totalBasic += $basicPay;
+                    $totalHoliday += $holidayPay;
+                    $totalOvertime += $overtimePay;
+                    $totalGross += $grossPay;
+                    $totalDeductions += $deductions;
+                    $totalNet += $netPay;
+
+                    $html .= '
+                        <tr>
+                            <td>' . $payroll->payroll_number . '</td>
+                            <td>' . $snapshot->employee_name . '</td>
+                            <td>' . $payroll->period_start->format('M j') . ' - ' . $payroll->period_end->format('M j, Y') . '</td>
+                            <td>' . ucfirst($payroll->payroll_type) . '</td>
+                            <td>' . ucfirst($payroll->status) . '</td>
+                            <td class="currency">₱' . number_format($basicPay, 2) . '</td>
+                            <td class="currency">₱' . number_format($holidayPay, 2) . '</td>
+                            <td class="currency">₱' . number_format($overtimePay, 2) . '</td>
+                            <td class="currency">₱' . number_format($grossPay, 2) . '</td>
+                            <td class="currency">₱' . number_format($deductions, 2) . '</td>
+                            <td class="currency">₱' . number_format($netPay, 2) . '</td>
+                        </tr>';
+                }
+            }
+        }
+
+        $html .= '
+                    <tr class="total-row">
+                        <td colspan="5"><strong>TOTAL</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalBasic, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalHoliday, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalOvertime, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalGross, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalDeductions, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalNet, 2) . '</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </body>
+        </html>';
+
+        // Use DomPDF to generate proper PDF
+        try {
+            $pdf = app('dompdf.wrapper');
+            $pdf->loadHTML($html);
+            $pdf->setPaper('A4', 'landscape');
+
+            return $pdf->download($fileName);
+        } catch (\Exception $e) {
+            // Fallback to simple HTML if DomPDF is not available
+            return response($html, 200, [
+                'Content-Type' => 'text/html',
+                'Content-Disposition' => 'attachment; filename="' . str_replace('.pdf', '_report.html', $fileName) . '"',
+            ]);
+        }
     }
 
     /**
@@ -6301,5 +6650,101 @@ class PayrollController extends Controller
         }
 
         return $breakdown;
+    }
+
+    /**
+     * Calculate correct Holiday Pay from PayrollDetail
+     */
+    private function calculateCorrectHolidayPay($detail, $payroll)
+    {
+        // Get the breakdown data that matches the payroll summary calculation
+        if (isset($detail->earnings_breakdown)) {
+            $earningsBreakdown = is_string($detail->earnings_breakdown)
+                ? json_decode($detail->earnings_breakdown, true)
+                : $detail->earnings_breakdown;
+
+            if (is_array($earningsBreakdown) && isset($earningsBreakdown['holiday'])) {
+                $holidayTotal = 0;
+                foreach ($earningsBreakdown['holiday'] as $holidayData) {
+                    $holidayTotal += is_array($holidayData) ? ($holidayData['amount'] ?? $holidayData) : $holidayData;
+                }
+                return $holidayTotal;
+            }
+        }
+
+        // Fallback to regular holiday_pay if no breakdown
+        return $detail->holiday_pay ?? 0;
+    }
+
+    /**
+     * Calculate correct Overtime Pay from PayrollDetail
+     */
+    private function calculateCorrectOvertimePay($detail, $payroll)
+    {
+        // Get the breakdown data that matches the payroll summary calculation
+        if (isset($detail->earnings_breakdown)) {
+            $earningsBreakdown = is_string($detail->earnings_breakdown)
+                ? json_decode($detail->earnings_breakdown, true)
+                : $detail->earnings_breakdown;
+
+            if (is_array($earningsBreakdown) && isset($earningsBreakdown['overtime'])) {
+                $overtimeTotal = 0;
+                foreach ($earningsBreakdown['overtime'] as $overtimeData) {
+                    $overtimeTotal += is_array($overtimeData) ? ($overtimeData['amount'] ?? $overtimeData) : $overtimeData;
+                }
+                return $overtimeTotal;
+            }
+        }
+
+        // Fallback to regular overtime_pay if no breakdown
+        return $detail->overtime_pay ?? 0;
+    }
+
+    /**
+     * Calculate correct Holiday Pay from PayrollSnapshot
+     */
+    private function calculateCorrectHolidayPayFromSnapshot($snapshot)
+    {
+        // Get the breakdown data from snapshot
+        if (isset($snapshot->holiday_breakdown)) {
+            $holidayBreakdown = is_string($snapshot->holiday_breakdown)
+                ? json_decode($snapshot->holiday_breakdown, true)
+                : $snapshot->holiday_breakdown;
+
+            if (is_array($holidayBreakdown)) {
+                $holidayTotal = 0;
+                foreach ($holidayBreakdown as $type => $data) {
+                    $holidayTotal += $data['amount'] ?? 0;
+                }
+                return $holidayTotal;
+            }
+        }
+
+        // Fallback to regular holiday_pay if no breakdown
+        return $snapshot->holiday_pay ?? 0;
+    }
+
+    /**
+     * Calculate correct Overtime Pay from PayrollSnapshot
+     */
+    private function calculateCorrectOvertimePayFromSnapshot($snapshot)
+    {
+        // Get the breakdown data from snapshot
+        if (isset($snapshot->overtime_breakdown)) {
+            $overtimeBreakdown = is_string($snapshot->overtime_breakdown)
+                ? json_decode($snapshot->overtime_breakdown, true)
+                : $snapshot->overtime_breakdown;
+
+            if (is_array($overtimeBreakdown)) {
+                $overtimeTotal = 0;
+                foreach ($overtimeBreakdown as $type => $data) {
+                    $overtimeTotal += $data['amount'] ?? 0;
+                }
+                return $overtimeTotal;
+            }
+        }
+
+        // Fallback to regular overtime_pay if no breakdown
+        return $snapshot->overtime_pay ?? 0;
     }
 }

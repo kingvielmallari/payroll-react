@@ -83,7 +83,22 @@
                     
                 // Use snapshot values if available, otherwise fall back to detail values
                 $actualBasicPay = $employeeSnapshot ? $employeeSnapshot->regular_pay : $detail->regular_pay;
-                $actualHolidayPay = $employeeSnapshot ? $employeeSnapshot->holiday_pay : $detail->holiday_pay;
+                
+                // Calculate holiday pay from holiday_breakdown JSON (same logic as summary)
+                $actualHolidayPay = 0;
+                if ($employeeSnapshot && $employeeSnapshot->holiday_breakdown) {
+                    $holidayBreakdown = is_string($employeeSnapshot->holiday_breakdown) ? 
+                        json_decode($employeeSnapshot->holiday_breakdown, true) : 
+                        $employeeSnapshot->holiday_breakdown;
+                    if (is_array($holidayBreakdown)) {
+                        foreach ($holidayBreakdown as $type => $data) {
+                            $actualHolidayPay += $data['amount'] ?? 0;
+                        }
+                    }
+                } else {
+                    // Fallback to raw value if no breakdown available
+                    $actualHolidayPay = $employeeSnapshot ? $employeeSnapshot->holiday_pay : $detail->holiday_pay;
+                }
                 
                 // Calculate rest pay from rest_breakdown JSON
                 $actualRestPay = 0;
@@ -98,7 +113,21 @@
                     }
                 }
                 
-                $actualOvertimePay = $employeeSnapshot ? $employeeSnapshot->overtime_pay : $detail->overtime_pay;
+                // Calculate overtime pay from overtime_breakdown JSON (same logic as summary)
+                $actualOvertimePay = 0;
+                if ($employeeSnapshot && $employeeSnapshot->overtime_breakdown) {
+                    $overtimeBreakdown = is_string($employeeSnapshot->overtime_breakdown) ? 
+                        json_decode($employeeSnapshot->overtime_breakdown, true) : 
+                        $employeeSnapshot->overtime_breakdown;
+                    if (is_array($overtimeBreakdown)) {
+                        foreach ($overtimeBreakdown as $type => $data) {
+                            $actualOvertimePay += $data['amount'] ?? 0;
+                        }
+                    }
+                } else {
+                    // Fallback to raw value if no breakdown available
+                    $actualOvertimePay = $employeeSnapshot ? $employeeSnapshot->overtime_pay : $detail->overtime_pay;
+                }
                 
                 // Get allowances and bonuses from payroll detail
                 $actualAllowances = $detail->allowances ?? 0;
