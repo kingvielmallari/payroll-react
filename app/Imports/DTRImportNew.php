@@ -317,7 +317,18 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         $regularHours = $totalHours - $overtimeHours;
         $regularHours = min($regularHours, $standardHours);
 
-        // STEP 9: Undertime is not calculated as we only count actual work time
+        // STEP 9: Calculate night differential for regular hours
+        $nightDiffRegularHours = 0;
+        if ($regularHours > 0) {
+            $regularWorkEndTime = $workStartTime->copy()->addHours($regularHours);
+            $nightDiffRegularBreakdown = $this->calculateNightDifferentialForRegularHours($workStartTime, $regularWorkEndTime);
+            $nightDiffRegularHours = $nightDiffRegularBreakdown['night_diff_regular_hours'];
+
+            // Adjust regular hours to exclude ND hours (they're tracked separately)
+            $regularHours = $regularHours - $nightDiffRegularHours;
+        }
+
+        // STEP 10: Undertime is not calculated as we only count actual work time
         $undertimeHours = 0;
 
         $lateHours = $lateMinutes / 60;
@@ -325,6 +336,7 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         return [
             'total_hours' => round($totalHours, 2),
             'regular_hours' => round($regularHours, 2),
+            'night_diff_regular_hours' => round($nightDiffRegularHours, 2),
             'overtime_hours' => round($overtimeHours, 2),
             'regular_overtime_hours' => round($regularOvertimeHours, 2),
             'night_diff_overtime_hours' => round($nightDifferentialOvertimeHours, 2),
@@ -334,86 +346,25 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     }
 
     /**
-     * Calculate working hours with automatic break deduction (Legacy method)
+     * Calculate working hours with automatic break deduction (Legacy method - DEPRECATED)
+     * Note: This method is deprecated and not used. Use calculateDynamicWorkingHours instead.
      */
+    /*
     private function calculateWorkingHours($timeIn, $timeOut, $breakIn, $breakOut)
     {
-        if (!$timeIn || !$timeOut) {
-            return [
-                'total_hours' => 0,
-                'regular_hours' => 0,
-                'overtime_hours' => 0,
-                'late_hours' => 0,
-                'undertime_hours' => 0,
-            ];
-        }
-
-        $timeInCarbon = Carbon::parse($timeIn);
-        $timeOutCarbon = Carbon::parse($timeOut);
-
-        // Handle next day time out
-        if ($timeOutCarbon->lt($timeInCarbon)) {
-            $timeOutCarbon->addDay();
-        }
-
-        $totalMinutes = $timeOutCarbon->diffInMinutes($timeInCarbon);
-
-        // Deduct break time
-        if ($breakIn && $breakOut) {
-            $breakInCarbon = Carbon::parse($breakIn);
-            $breakOutCarbon = Carbon::parse($breakOut);
-
-            if ($breakOutCarbon->gt($breakInCarbon)) {
-                $breakMinutes = $breakOutCarbon->diffInMinutes($breakInCarbon);
-                $totalMinutes -= $breakMinutes;
-            }
-        } else {
-            // If no break times provided, automatically deduct 1 hour (60 minutes)
-            $totalMinutes -= 60;
-        }
-
-        $totalHours = max(0, $totalMinutes / 60); // Ensure no negative hours
-
-        // Standard work hours (8 hours)
-        $standardHours = 8;
-
-        $regularHours = min($totalHours, $standardHours);
-        $overtimeHours = max(0, $totalHours - $standardHours);
-
-        // Calculate late hours (assuming standard start time is 8:00 AM)
-        $standardStartTime = Carbon::parse('08:00:00');
-        $lateMinutes = max(0, $timeInCarbon->diffInMinutes($standardStartTime));
-        $lateHours = $lateMinutes / 60;
-
-        // Calculate undertime hours with grace period
-        $undertimeHours = 0;
-        if ($timeSchedule) {
-            $schedEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->end_time->format('H:i'));
-            $actualTimeOut = $adjustedWorkEndTime ?? $workEndTime;
-
-            // Check if employee left early
-            if ($actualTimeOut->lt($schedEnd)) {
-                $earlyMinutes = $actualTimeOut->diffInMinutes($schedEnd);
-
-                // Apply undertime grace period
-                if ($earlyMinutes > $undertimeGracePeriodMinutes) {
-                    $shortfallMinutes = $earlyMinutes - $undertimeGracePeriodMinutes;
-                    $undertimeHours = $shortfallMinutes / 60;
-                }
-            }
-        } else {
-            // Fallback: calculate undertime based on standard hours
-            $undertimeHours = max(0, $standardHours - $totalHours);
-        }
-
+        // This legacy method is deprecated - use calculateDynamicWorkingHours instead
         return [
-            'total_hours' => round($totalHours, 2),
-            'regular_hours' => round($regularHours, 2),
-            'overtime_hours' => round($overtimeHours, 2),
-            'late_hours' => round($lateHours, 2),
-            'undertime_hours' => round($undertimeHours, 2),
+            'total_hours' => 0,
+            'regular_hours' => 0,
+            'night_diff_regular_hours' => 0,
+            'overtime_hours' => 0,
+            'regular_overtime_hours' => 0,
+            'night_diff_overtime_hours' => 0,
+            'late_hours' => 0,
+            'undertime_hours' => 0,
         ];
     }
+    */
 
     /**
      * Parse time string into H:i:s format - supports AM/PM and 24-hour format
@@ -488,6 +439,43 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     public function getErrorCount()
     {
         return $this->errorCount;
+    }
+
+    /**
+     * Calculate night differential hours breakdown for regular hours
+     */
+    private function calculateNightDifferentialForRegularHours($workStartTime, $workEndTime)
+    {
+        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+
+        if (!$nightDiffSetting || !$nightDiffSetting->is_active) {
+            // No night differential configured
+            return [
+                'night_diff_regular_hours' => 0
+            ];
+        }
+
+        // Get night differential time period
+        $nightStart = \Carbon\Carbon::parse($workStartTime->format('Y-m-d') . ' ' . $nightDiffSetting->start_time);
+        $nightEnd = \Carbon\Carbon::parse($workStartTime->format('Y-m-d') . ' ' . $nightDiffSetting->end_time);
+
+        // Handle next day end time (e.g., 10 PM to 5 AM next day)
+        if ($nightEnd->lte($nightStart)) {
+            $nightEnd->addDay();
+        }
+
+        // Calculate overlap between regular work period and night differential period
+        $overlapStart = $workStartTime->greaterThan($nightStart) ? $workStartTime : $nightStart;
+        $overlapEnd = $workEndTime->lessThan($nightEnd) ? $workEndTime : $nightEnd;
+
+        $nightDiffRegularHours = 0;
+        if ($overlapStart->lessThan($overlapEnd)) {
+            $nightDiffRegularHours = $overlapEnd->diffInHours($overlapStart, true);
+        }
+
+        return [
+            'night_diff_regular_hours' => $nightDiffRegularHours
+        ];
     }
 
     /**

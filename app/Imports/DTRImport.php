@@ -449,7 +449,18 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         $regularHours = $totalHours - $overtimeHours;
         $regularHours = min($regularHours, $standardHours);
 
-        // STEP 8: Calculate undertime hours with grace period
+        // STEP 8: Calculate night differential for regular hours
+        $nightDiffRegularHours = 0;
+        if ($regularHours > 0) {
+            $regularWorkEndTime = $workStartTime->copy()->addHours($regularHours);
+            $nightDiffRegularBreakdown = $this->calculateNightDifferentialForRegularHours($workStartTime, $regularWorkEndTime);
+            $nightDiffRegularHours = $nightDiffRegularBreakdown['night_diff_regular_hours'];
+
+            // Adjust regular hours to exclude ND hours (they're tracked separately)
+            $regularHours = $regularHours - $nightDiffRegularHours;
+        }
+
+        // STEP 9: Calculate undertime hours with grace period
         $undertimeHours = 0;
         if ($timeSchedule) {
             $actualTimeOut = $adjustedWorkEndTime ?? $workEndTime;
@@ -471,11 +482,49 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         return [
             'total_hours' => round($totalHours, 2),
             'regular_hours' => round($regularHours, 2),
+            'night_diff_regular_hours' => round($nightDiffRegularHours, 2),
             'overtime_hours' => round($overtimeHours, 2),
             'regular_overtime_hours' => round($regularOvertimeHours, 2),
             'night_diff_overtime_hours' => round($nightDifferentialOvertimeHours, 2),
             'late_hours' => round($lateHours, 2),
             'undertime_hours' => round($undertimeHours, 2),
+        ];
+    }
+
+    /**
+     * Calculate night differential hours breakdown for regular hours
+     */
+    private function calculateNightDifferentialForRegularHours($workStartTime, $workEndTime)
+    {
+        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+
+        if (!$nightDiffSetting || !$nightDiffSetting->is_active) {
+            // No night differential configured
+            return [
+                'night_diff_regular_hours' => 0
+            ];
+        }
+
+        // Get night differential time period
+        $nightStart = \Carbon\Carbon::parse($workStartTime->format('Y-m-d') . ' ' . $nightDiffSetting->start_time);
+        $nightEnd = \Carbon\Carbon::parse($workStartTime->format('Y-m-d') . ' ' . $nightDiffSetting->end_time);
+
+        // Handle next day end time (e.g., 10 PM to 5 AM next day)
+        if ($nightEnd->lte($nightStart)) {
+            $nightEnd->addDay();
+        }
+
+        // Calculate overlap between regular work period and night differential period
+        $overlapStart = $workStartTime->greaterThan($nightStart) ? $workStartTime : $nightStart;
+        $overlapEnd = $workEndTime->lessThan($nightEnd) ? $workEndTime : $nightEnd;
+
+        $nightDiffRegularHours = 0;
+        if ($overlapStart->lessThan($overlapEnd)) {
+            $nightDiffRegularHours = $overlapEnd->diffInHours($overlapStart, true);
+        }
+
+        return [
+            'night_diff_regular_hours' => $nightDiffRegularHours
         ];
     }
 
@@ -528,7 +577,7 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         $totalOvertimeHours = $overtimeStart->diffInHours($workEndTime, true);
 
         // Regular overtime hours = total overtime - night diff overtime
-        $regularOvertimeHours = max(0, $totalOvertimeHours - $nightDifferentialOvertimeHours);
+        $regularOvertimeHours = max(0, $totalOvertimeHours - $nightDiffOvertimeHours);
 
         return [
             'regular_overtime' => $regularOvertimeHours,

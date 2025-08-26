@@ -2767,7 +2767,8 @@ class PayrollController extends Controller
         $regularHours = 0;
         $overtimeHours = 0;
         $holidayHours = 0;
-        $nightDifferentialHours = 0;
+        $nightDifferentialRegularHours = 0;
+        $nightDifferentialOvertimeHours = 0;
         $lateHours = 0;
         $undertimeHours = 0;
 
@@ -2779,14 +2780,13 @@ class PayrollController extends Controller
             $lateHours += $timeLog->late_hours ?? 0;
             $undertimeHours += $timeLog->undertime_hours ?? 0;
 
+            // Add night differential hours
+            $nightDifferentialRegularHours += $timeLog->night_diff_regular_hours ?? 0;
+            $nightDifferentialOvertimeHours += $timeLog->night_diff_overtime_hours ?? 0;
+
             // Check if it's a holiday or rest day for premium calculations
             if ($timeLog->is_holiday) {
                 $holidayHours += $timeLog->total_hours ?? 0;
-            }
-
-            // Night differential calculation (10PM - 6AM)
-            if ($timeLog->time_in && $timeLog->time_out) {
-                $nightDifferentialHours += $this->calculateNightDifferential($timeLog);
             }
         }
 
@@ -2824,7 +2824,14 @@ class PayrollController extends Controller
         $regularPay = $regularHours * $hourlyRate;
         $overtimePay = $overtimeHours * $hourlyRate * 1.25; // 25% overtime premium
         $holidayPay = $holidayHours * $hourlyRate * 2.0; // 100% holiday premium
-        $nightDifferentialPay = $nightDifferentialHours * $hourlyRate * 0.10; // 10% night differential
+
+        // Calculate night differential pay using dynamic rate
+        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+        $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+        $nightDiffBonus = $nightDiffMultiplier - 1; // e.g., 1.10 - 1 = 0.10 (10% bonus)
+
+        $nightDifferentialPay = ($nightDifferentialRegularHours + $nightDifferentialOvertimeHours) * $hourlyRate * $nightDiffBonus;
+        $totalNightDifferentialHours = $nightDifferentialRegularHours + $nightDifferentialOvertimeHours;
 
         // Calculate late and undertime deductions
         $lateDeductions = $lateHours * $hourlyRate;
@@ -2851,7 +2858,7 @@ class PayrollController extends Controller
                 'regular_hours' => $regularHours,
                 'overtime_hours' => $overtimeHours,
                 'holiday_hours' => $holidayHours,
-                'night_differential_hours' => $nightDifferentialHours,
+                'night_differential_hours' => $totalNightDifferentialHours,
                 'regular_pay' => $regularPay,
                 'overtime_pay' => $overtimePay,
                 'holiday_pay' => $holidayPay,
