@@ -1856,34 +1856,34 @@ class TimeLogController extends Controller
         }
         $standardHours = max(0, $standardWorkMinutes / 60);
 
-        // STEP 6: Calculate when regular working time actually ends (considering grace period)
-        // Regular work ends when employee completes their standard working hours
-        $actualRegularWorkEndTime = $workStartTime->copy()->addMinutes($standardWorkMinutes);
+        // STEP 6: Calculate regular and overtime hours based on actual hours worked
+        $actualHoursWorked = $totalHours;
+        $regularHours = min($actualHoursWorked, $standardHours);
 
-        // Adjust for break time - if break was taken, add break duration to regular end time
-        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
-            $actualRegularWorkEndTime->addMinutes($scheduledBreakMinutes);
-        }
-
-        $overtimeHours = 0;
+        // Calculate overtime (any hours worked beyond standard hours)
+        $overtimeHours = max(0, $actualHoursWorked - $standardHours);
         $regularOvertimeHours = 0;
         $nightDifferentialOvertimeHours = 0;
 
-        // Overtime starts AFTER the actual regular working time ends (e.g., 5:16 PM on Aug 20)
-        if ($adjustedWorkEndTime->gt($actualRegularWorkEndTime)) {
-            // Calculate overtime period from actual regular work end time to clock out time
-            $overtimeMinutes = $actualRegularWorkEndTime->diffInMinutes($adjustedWorkEndTime);
-            $overtimeHours = $overtimeMinutes / 60;
+        // If there's overtime, calculate night differential breakdown for overtime period
+        if ($overtimeHours > 0) {
+            // Calculate when overtime period starts (after completing standard work hours)
+            $regularWorkEndTime = $workStartTime->copy()->addHours($standardHours);
 
-            // Calculate night differential for the overtime period only
-            $nightDiffBreakdown = $this->calculateNightDifferentialHoursFixed($actualRegularWorkEndTime, $adjustedWorkEndTime);
+            // If break was scheduled and taken, adjust the regular work end time
+            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                $regularWorkEndTime->addMinutes($scheduledBreakMinutes);
+            }
+
+            // Calculate night differential for the overtime period
+            $overtimeStartTime = $regularWorkEndTime;
+            $overtimeEndTime = $adjustedWorkEndTime;
+
+            $nightDiffBreakdown = $this->calculateNightDifferentialHoursFixed($overtimeStartTime, $overtimeEndTime);
             $regularOvertimeHours = $nightDiffBreakdown['regular_overtime'];
             $nightDifferentialOvertimeHours = $nightDiffBreakdown['night_diff_overtime'];
         }
-
-        // STEP 7: Calculate regular hours (standard 8 working hours)
-        $regularHours = $standardHours;
 
         // STEP 8: Calculate night differential for regular hours
         $nightDiffRegularHours = 0;
