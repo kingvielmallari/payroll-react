@@ -6861,11 +6861,11 @@ class PayrollController extends Controller
 
             if ($rateConfig) {
                 $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
-                
+
                 // Get night differential settings for dynamic rate
                 $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
                 $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
-                
+
                 // Rest Day OT (without ND)
                 if ($regularOvertimeHours > 0) {
                     $actualMinutes = $regularOvertimeHours * 60;
@@ -6880,7 +6880,7 @@ class PayrollController extends Controller
                         'amount' => $amount
                     ];
                 }
-                
+
                 // Rest Day OT + ND
                 if ($nightDiffOvertimeHours > 0) {
                     // Combined rate: overtime rate + night differential bonus
@@ -6913,7 +6913,7 @@ class PayrollController extends Controller
                         'amount' => $amount
                     ];
                 }
-                
+
                 // Rest Day OT + ND
                 if ($nightDiffOvertimeHours > 0) {
                     // Combined rate: 1.69 (OT) + 0.10 (ND) = 1.79

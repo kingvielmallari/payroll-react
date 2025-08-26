@@ -236,9 +236,10 @@ class TimeLog extends Model
     }
 
     /**
-     * Get detailed time period breakdown for display
+     * Get detailed breakdown of time periods for DTR display
+     * Returns array of time periods with start/end times and hours
      */
-    public function getTimePeriodBreakdown()
+    public function getTimePeriodBreakdown($forceDynamicValues = null)
     {
         if (!$this->time_in || !$this->time_out) {
             return [];
@@ -285,6 +286,12 @@ class TimeLog extends Model
 
         $breakdown = [];
 
+        // Use forced dynamic values if provided, otherwise check dynamic fields, then fallback to regular fields
+        $regularHours = $forceDynamicValues['regular_hours'] ?? $this->dynamic_regular_hours ?? $this->regular_hours ?? 0;
+        $regularOvertimeHours = $forceDynamicValues['regular_overtime_hours'] ?? $this->dynamic_regular_overtime_hours ?? $this->regular_overtime_hours ?? 0;
+        $nightDiffOvertimeHours = $forceDynamicValues['night_diff_overtime_hours'] ?? $this->dynamic_night_diff_overtime_hours ?? $this->night_diff_overtime_hours ?? 0;
+        $overtimeHours = $forceDynamicValues['overtime_hours'] ?? $this->dynamic_overtime_hours ?? $this->overtime_hours ?? 0;
+
         // Regular work period
         $regularEndTime = min($workEnd, $overtimeStartTime);
         if ($workStart->lt($regularEndTime)) {
@@ -293,16 +300,13 @@ class TimeLog extends Model
                 'label' => 'Regular Hours',
                 'start_time' => $workStart->format('g:i A'),
                 'end_time' => $regularEndTime->format('g:i A'),
-                'hours' => $this->dynamic_regular_hours ?? $this->regular_hours ?? 0,
+                'hours' => $regularHours,
                 'color_class' => 'text-green-600'
             ];
         }
 
         // Overtime periods
         if ($overtimeStartTime->lt($workEnd)) {
-            $regularOvertimeHours = $this->dynamic_regular_overtime_hours ?? $this->regular_overtime_hours ?? 0;
-            $nightDiffOvertimeHours = $this->dynamic_night_diff_overtime_hours ?? $this->night_diff_overtime_hours ?? 0;
-
             // If we have breakdown data and night differential is enabled
             if (($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) && $nightDiffSetting && $nightDiffSetting->is_active) {
                 // Night differential time boundaries
@@ -360,12 +364,9 @@ class TimeLog extends Model
                 }
             } else {
                 // Simple overtime display (no breakdown available or night diff not active)
-                $totalOvertimeHours = $this->dynamic_overtime_hours ?? $this->overtime_hours ?? 0;
+                $totalOvertimeHours = $overtimeHours;
 
                 // Try to get regular and night diff breakdown even if night diff not active
-                $regularOvertimeHours = $this->dynamic_regular_overtime_hours ?? $this->regular_overtime_hours ?? 0;
-                $nightDiffOvertimeHours = $this->dynamic_night_diff_overtime_hours ?? $this->night_diff_overtime_hours ?? 0;
-
                 if ($regularOvertimeHours > 0) {
                     $breakdown[] = [
                         'type' => 'regular_overtime',

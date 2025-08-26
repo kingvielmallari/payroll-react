@@ -2249,11 +2249,28 @@
                                                     
                                                     {{-- Display Night Differential Regular Hours --}}
                                                     @php
+                                                        // FOR DTR SUMMARY: Always use dynamic calculation for night differential regular hours
                                                         $nightDiffRegularHours = 0;
-                                                        if ($payroll->status === 'draft') {
-                                                            $nightDiffRegularHours = $timeLog->dynamic_night_diff_regular_hours ?? 0;
+                                                        if ($timeLog->time_in && $timeLog->time_out && $timeLog->remarks !== 'Incomplete Time Record') {
+                                                            // Use the dynamic calculation we already performed above
+                                                            if (isset($dynamicCalc)) {
+                                                                $nightDiffRegularHours = $dynamicCalc['night_diff_regular_hours'] ?? 0;
+                                                            } else {
+                                                                // Calculate dynamic values on-the-fly for DTR display
+                                                                $controller = app(App\Http\Controllers\PayrollController::class);
+                                                                $reflection = new ReflectionClass($controller);
+                                                                $method = $reflection->getMethod('calculateTimeLogHoursDynamically');
+                                                                $method->setAccessible(true);
+                                                                $tempDynamicCalc = $method->invoke($controller, $timeLog);
+                                                                $nightDiffRegularHours = $tempDynamicCalc['night_diff_regular_hours'] ?? 0;
+                                                            }
                                                         } else {
-                                                            $nightDiffRegularHours = $timeLog->night_diff_regular_hours ?? 0;
+                                                            // Fallback for incomplete records
+                                                            if ($payroll->status === 'draft') {
+                                                                $nightDiffRegularHours = $timeLog->dynamic_night_diff_regular_hours ?? 0;
+                                                            } else {
+                                                                $nightDiffRegularHours = $timeLog->night_diff_regular_hours ?? 0;
+                                                            }
                                                         }
                                                     @endphp
                                                     @if($nightDiffRegularHours > 0)
@@ -2391,24 +2408,45 @@
                                                 
                                                     @if($displayOvertimeHours > 0)
                                                     @php
-                                                        // Get detailed time period breakdown
-                                                        $timePeriodBreakdown = $timeLog->getTimePeriodBreakdown();
-                                                        
-                                                        // Get night differential breakdown for DTR display
-                                                        $regularOvertimeHours = 0;
-                                                        $nightDiffOvertimeHours = 0;
-                                                        
-                                                        if ($payroll->status === 'draft') {
-                                                            $regularOvertimeHours = $timeLog->dynamic_regular_overtime_hours ?? 0;
-                                                            $nightDiffOvertimeHours = $timeLog->dynamic_night_diff_overtime_hours ?? 0;
+                                                        // For DTR Summary, we need to calculate overtime breakdown consistently
+                                                        // Force dynamic calculation for all payroll statuses to ensure consistency
+                                                        if ($timeLog->time_in && $timeLog->time_out && $timeLog->remarks !== 'Incomplete Time Record') {
+                                                            // Calculate dynamic values on-the-fly for DTR display
+                                                            $controller = app(App\Http\Controllers\PayrollController::class);
+                                                            $reflection = new ReflectionClass($controller);
+                                                            $method = $reflection->getMethod('calculateTimeLogHoursDynamically');
+                                                            $method->setAccessible(true);
+                                                            $dynamicCalc = $method->invoke($controller, $timeLog);
+                                                            
+                                                            // Use dynamic calculation results for overtime breakdown
+                                                            $forceDynamicValues = [
+                                                                'regular_hours' => $dynamicCalc['regular_hours'] ?? 0,
+                                                                'overtime_hours' => $dynamicCalc['overtime_hours'] ?? 0,
+                                                                'regular_overtime_hours' => $dynamicCalc['regular_overtime_hours'] ?? 0,
+                                                                'night_diff_overtime_hours' => $dynamicCalc['night_diff_overtime_hours'] ?? 0,
+                                                            ];
+                                                            
+                                                            // Get detailed time period breakdown with forced dynamic values
+                                                            $timePeriodBreakdown = $timeLog->getTimePeriodBreakdown($forceDynamicValues);
+                                                            
+                                                            $regularOvertimeHours = $dynamicCalc['regular_overtime_hours'] ?? 0;
+                                                            $nightDiffOvertimeHours = $dynamicCalc['night_diff_overtime_hours'] ?? 0;
                                                         } else {
-                                                            $regularOvertimeHours = $timeLog->regular_overtime_hours ?? 0;
-                                                            $nightDiffOvertimeHours = $timeLog->night_diff_overtime_hours ?? 0;
+                                                            // Fallback for incomplete records
+                                                            $timePeriodBreakdown = $timeLog->getTimePeriodBreakdown();
+                                                            
+                                                            if ($payroll->status === 'draft') {
+                                                                $regularOvertimeHours = $timeLog->dynamic_regular_overtime_hours ?? 0;
+                                                                $nightDiffOvertimeHours = $timeLog->dynamic_night_diff_overtime_hours ?? 0;
+                                                            } else {
+                                                                $regularOvertimeHours = $timeLog->regular_overtime_hours ?? 0;
+                                                                $nightDiffOvertimeHours = $timeLog->night_diff_overtime_hours ?? 0;
+                                                            }
                                                         }
                                                         
                                                         // If breakdown not available, show total
                                                         if ($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0) {
-                                                            $regularOvertimeHours = $overtimeHours;
+                                                            $regularOvertimeHours = $displayOvertimeHours;
                                                         }
                                                     @endphp
                                                     
