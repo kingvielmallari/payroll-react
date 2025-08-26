@@ -1889,6 +1889,33 @@
                         </div>
                     </div>
                     
+                    <!-- DTR Summary Legends -->
+                    <div class="mb-4 p-3 bg-gray-50 rounded-lg">
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">Time Period Legend:</h4>
+                        <div class="flex flex-wrap gap-4 text-xs">
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-green-600 mr-2"></div>
+                                <span class="text-green-600 font-medium">Regular Hours</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-orange-600 mr-2"></div>
+                                <span class="text-orange-600 font-medium">Regular OT Hours</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-purple-600 mr-2"></div>
+                                <span class="text-purple-600 font-medium">OT + ND Hours</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-blue-600 mr-2"></div>
+                                <span class="text-blue-600 font-medium">Regular + ND Hours</span>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-red-600 mr-2"></div>
+                                <span class="text-red-600 font-medium">Break Time</span>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="overflow-x-auto">
                         <style>
                             .dtr-table {

@@ -70,8 +70,8 @@
                                     @foreach($payrolls as $payroll)
                                         <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
                                            oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ \Carbon\Carbon::parse($payroll->period_start)->format('M d') }} - {{ \Carbon\Carbon::parse($payroll->period_end)->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $scheduleCode }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : "" }}')"
-                                           onclick="window.location.href='{{ $payroll->payrollDetails->count() == 1 ? route('payrolls.automation.show', ['schedule' => $scheduleCode, 'employee' => $payroll->payrollDetails->first()->employee_id]) : route('payrolls.show', $payroll) }}'"
-                                           title="Right-click for actions">
+                                           onclick="window.open('{{ $payroll->payrollDetails->count() == 1 ? route('payrolls.automation.show', ['schedule' => $scheduleCode, 'employee' => $payroll->payrollDetails->first()->employee_id]) : route('payrolls.show', $payroll) }}', '_blank')"
+                                           title="Right-click for actions | Click to view in new tab">
                                             <td class="px-6 py-4 whitespace-nowrap">
                                                 <div class="text-sm font-medium text-gray-900">{{ $payroll->payroll_number }}</div>
                                                 <div class="text-sm text-gray-500">

@@ -6575,10 +6575,11 @@ class PayrollController extends Controller
         $breakdown = [];
         $hourlyRate = $employee->hourly_rate ?? 0;
 
-        // Regular workday overtime
-        if (isset($timeBreakdown['regular_workday']) && $timeBreakdown['regular_workday']['overtime_hours'] > 0) {
+        // Regular workday overtime - SPLIT into regular OT and OT+ND
+        if (isset($timeBreakdown['regular_workday'])) {
             $regularData = $timeBreakdown['regular_workday'];
-            $overtimeHours = $regularData['overtime_hours'];
+            $regularOvertimeHours = $regularData['regular_overtime_hours'] ?? 0;
+            $nightDiffOvertimeHours = $regularData['night_diff_overtime_hours'] ?? 0;
             // Get rate config from the time breakdown (same as draft calculation)
             $rateConfig = $regularData['rate_config'] ?? null;
 
@@ -6590,45 +6591,355 @@ class PayrollController extends Controller
             }
 
             if ($rateConfig) {
-                $multiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
-                // Calculate per-minute amount with rounding (same as draft payroll)
-                $actualMinutes = $overtimeHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = ($hourlyRate * $multiplier) / 60;
-                $amount = $roundedMinutes * $ratePerMinute;
+                $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
 
-                $breakdown['Regular Workday OT'] = [
-                    'hours' => $overtimeHours,
-                    'rate' => number_format($hourlyRate, 2),
-                    'multiplier' => $multiplier,
-                    'amount' => $amount
-                ];
+                // Get night differential settings for dynamic rate
+                $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+
+                // Regular Workday OT (without ND)
+                if ($regularOvertimeHours > 0) {
+                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    $actualMinutes = $regularOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Regular Workday OT'] = [
+                        'hours' => $regularOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $overtimeMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+
+                // Regular Workday OT + ND
+                if ($nightDiffOvertimeHours > 0) {
+                    // Combined rate: overtime rate + night differential bonus
+                    $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    $actualMinutes = $nightDiffOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Regular Workday OT+ND'] = [
+                        'hours' => $nightDiffOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
+                        'amount' => $amount
+                    ];
+                }
             } else {
-                // Ultimate fallback to hardcoded multiplier if no config found
-                // Calculate per-minute amount with rounding (same as draft payroll)
-                $actualMinutes = $overtimeHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = ($hourlyRate * 1.25) / 60;
-                $amount = $roundedMinutes * $ratePerMinute;
+                // Ultimate fallback to hardcoded multipliers if no config found
+                // Regular Workday OT (without ND)
+                if ($regularOvertimeHours > 0) {
+                    $actualMinutes = $regularOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * 1.25) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
 
-                $breakdown['Regular Workday OT'] = [
-                    'hours' => $overtimeHours,
-                    'rate' => number_format($hourlyRate, 2),
-                    'multiplier' => 1.25,
-                    'amount' => $amount
-                ];
+                    $breakdown['Regular Workday OT'] = [
+                        'hours' => $regularOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => 1.25,
+                        'amount' => $amount
+                    ];
+                }
+
+                // Regular Workday OT + ND
+                if ($nightDiffOvertimeHours > 0) {
+                    // Combined rate: 1.25 (OT) + 0.10 (ND) = 1.35
+                    $combinedMultiplier = 1.25 + 0.10;
+                    $actualMinutes = $nightDiffOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Regular Workday OT+ND'] = [
+                        'hours' => $nightDiffOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
+                        'amount' => $amount
+                    ];
+                }
             }
         }
 
-        // Holiday overtime - use dynamic multipliers from rate configs
-        $holidayOvertimeTypes = [
-            'special_holiday' => 'Special Holiday OT',
-            'regular_holiday' => 'Regular Holiday OT',
+        // Special holiday overtime - SPLIT into regular OT and OT+ND
+        if (isset($timeBreakdown['special_holiday'])) {
+            $specialData = $timeBreakdown['special_holiday'];
+            $regularOvertimeHours = $specialData['regular_overtime_hours'] ?? 0;
+            $nightDiffOvertimeHours = $specialData['night_diff_overtime_hours'] ?? 0;
+            // Get rate config from the time breakdown (same as draft calculation)
+            $rateConfig = $specialData['rate_config'] ?? null;
+
+            // If rate config is not available, fetch from database as fallback
+            if (!$rateConfig) {
+                $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'special_holiday')
+                    ->where('is_active', true)
+                    ->first();
+            }
+
+            if ($rateConfig) {
+                $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+
+                // Get night differential settings for dynamic rate
+                $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+
+                // Special Holiday OT (without ND)
+                if ($regularOvertimeHours > 0) {
+                    $actualMinutes = $regularOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Special Holiday OT'] = [
+                        'hours' => $regularOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $overtimeMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+
+                // Special Holiday OT + ND
+                if ($nightDiffOvertimeHours > 0) {
+                    // Combined rate: overtime rate + night differential bonus
+                    $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+                    $actualMinutes = $nightDiffOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Special Holiday OT+ND'] = [
+                        'hours' => $nightDiffOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+            } else {
+                // Ultimate fallback to hardcoded multipliers if no config found
+                // Special Holiday OT (without ND)
+                if ($regularOvertimeHours > 0) {
+                    $actualMinutes = $regularOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * 1.69) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Special Holiday OT'] = [
+                        'hours' => $regularOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => 1.69,
+                        'amount' => $amount
+                    ];
+                }
+
+                // Special Holiday OT + ND
+                if ($nightDiffOvertimeHours > 0) {
+                    // Combined rate: 1.69 (OT) + 0.10 (ND) = 1.79
+                    $combinedMultiplier = 1.69 + 0.10;
+                    $actualMinutes = $nightDiffOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Special Holiday OT+ND'] = [
+                        'hours' => $nightDiffOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+            }
+        }
+
+        // Regular holiday overtime - SPLIT into regular OT and OT+ND
+        if (isset($timeBreakdown['regular_holiday'])) {
+            $regularHolidayData = $timeBreakdown['regular_holiday'];
+            $regularOvertimeHours = $regularHolidayData['regular_overtime_hours'] ?? 0;
+            $nightDiffOvertimeHours = $regularHolidayData['night_diff_overtime_hours'] ?? 0;
+            // Get rate config from the time breakdown (same as draft calculation)
+            $rateConfig = $regularHolidayData['rate_config'] ?? null;
+
+            // If rate config is not available, fetch from database as fallback
+            if (!$rateConfig) {
+                $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'regular_holiday')
+                    ->where('is_active', true)
+                    ->first();
+            }
+
+            if ($rateConfig) {
+                $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 2.6;
+
+                // Get night differential settings for dynamic rate
+                $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+
+                // Regular Holiday OT (without ND)
+                if ($regularOvertimeHours > 0) {
+                    $actualMinutes = $regularOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Regular Holiday OT'] = [
+                        'hours' => $regularOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $overtimeMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+
+                // Regular Holiday OT + ND
+                if ($nightDiffOvertimeHours > 0) {
+                    // Combined rate: overtime rate + night differential bonus
+                    $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+                    $actualMinutes = $nightDiffOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Regular Holiday OT+ND'] = [
+                        'hours' => $nightDiffOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+            } else {
+                // Ultimate fallback to hardcoded multipliers if no config found
+                // Regular Holiday OT (without ND)
+                if ($regularOvertimeHours > 0) {
+                    $actualMinutes = $regularOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * 2.6) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Regular Holiday OT'] = [
+                        'hours' => $regularOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => 2.6,
+                        'amount' => $amount
+                    ];
+                }
+
+                // Regular Holiday OT + ND
+                if ($nightDiffOvertimeHours > 0) {
+                    // Combined rate: 2.6 (OT) + 0.10 (ND) = 2.7
+                    $combinedMultiplier = 2.6 + 0.10;
+                    $actualMinutes = $nightDiffOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Regular Holiday OT+ND'] = [
+                        'hours' => $nightDiffOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+            }
+        }
+
+        // Rest day overtime - SPLIT into regular OT and OT+ND
+        if (isset($timeBreakdown['rest_day'])) {
+            $restData = $timeBreakdown['rest_day'];
+            $regularOvertimeHours = $restData['regular_overtime_hours'] ?? 0;
+            $nightDiffOvertimeHours = $restData['night_diff_overtime_hours'] ?? 0;
+            // Get rate config from the time breakdown (same as draft calculation)
+            $rateConfig = $restData['rate_config'] ?? null;
+
+            // If rate config is not available, fetch from database as fallback
+            if (!$rateConfig) {
+                $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'rest_day')
+                    ->where('is_active', true)
+                    ->first();
+            }
+
+            if ($rateConfig) {
+                $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
+                
+                // Get night differential settings for dynamic rate
+                $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+                
+                // Rest Day OT (without ND)
+                if ($regularOvertimeHours > 0) {
+                    $actualMinutes = $regularOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Rest Day OT'] = [
+                        'hours' => $regularOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $overtimeMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+                
+                // Rest Day OT + ND
+                if ($nightDiffOvertimeHours > 0) {
+                    // Combined rate: overtime rate + night differential bonus
+                    $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+                    $actualMinutes = $nightDiffOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Rest Day OT+ND'] = [
+                        'hours' => $nightDiffOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+            } else {
+                // Ultimate fallback to hardcoded multipliers if no config found
+                // Rest Day OT (without ND)
+                if ($regularOvertimeHours > 0) {
+                    $actualMinutes = $regularOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * 1.69) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Rest Day OT'] = [
+                        'hours' => $regularOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => 1.69,
+                        'amount' => $amount
+                    ];
+                }
+                
+                // Rest Day OT + ND
+                if ($nightDiffOvertimeHours > 0) {
+                    // Combined rate: 1.69 (OT) + 0.10 (ND) = 1.79
+                    $combinedMultiplier = 1.69 + 0.10;
+                    $actualMinutes = $nightDiffOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Rest Day OT+ND'] = [
+                        'hours' => $nightDiffOvertimeHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+            }
+        }
+
+        // Rest day + holiday overtime - use total overtime hours
+        $restHolidayOvertimeTypes = [
             'rest_day_special_holiday' => 'Rest Day Special Holiday OT',
             'rest_day_regular_holiday' => 'Rest Day Regular Holiday OT'
         ];
 
-        foreach ($holidayOvertimeTypes as $type => $name) {
+        foreach ($restHolidayOvertimeTypes as $type => $name) {
             if (isset($timeBreakdown[$type]) && $timeBreakdown[$type]['overtime_hours'] > 0) {
                 $data = $timeBreakdown[$type];
                 $overtimeHours = $data['overtime_hours'];
@@ -6659,8 +6970,6 @@ class PayrollController extends Controller
                 } else {
                     // Ultimate fallback to hardcoded multipliers if no config found
                     $fallbackMultipliers = [
-                        'special_holiday' => 1.69,
-                        'regular_holiday' => 2.6,
                         'rest_day_special_holiday' => 1.95,
                         'rest_day_regular_holiday' => 3.38
                     ];
@@ -6681,44 +6990,10 @@ class PayrollController extends Controller
             }
         }
 
-        // Rest day overtime
-        if (isset($timeBreakdown['rest_day']) && $timeBreakdown['rest_day']['overtime_hours'] > 0) {
-            $restData = $timeBreakdown['rest_day'];
-            $overtimeHours = $restData['overtime_hours'];
-            // Get rate config from the time breakdown (same as draft calculation)
-            $rateConfig = $restData['rate_config'] ?? null;
+        return $breakdown;
+    }
 
-            // If rate config is not available, fetch from database as fallback
-            if (!$rateConfig) {
-                $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'rest_day')
-                    ->where('is_active', true)
-                    ->first();
-            }
-
-            if ($rateConfig) {
-                $multiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
-                // Calculate per-minute amount with rounding (same as draft payroll)
-                $actualMinutes = $overtimeHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = ($hourlyRate * $multiplier) / 60;
-                $amount = $roundedMinutes * $ratePerMinute;
-
-                $breakdown['Rest Day OT'] = [
-                    'hours' => $overtimeHours,
-                    'rate' => number_format($hourlyRate, 2),
-                    'multiplier' => $multiplier,
-                    'amount' => $amount
-                ];
-            } else {
-                // Ultimate fallback to hardcoded multiplier if no config found
-                // Calculate per-minute amount with rounding (same as draft payroll)
-                $actualMinutes = $overtimeHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = ($hourlyRate * 1.69) / 60;
-                $amount = $roundedMinutes * $ratePerMinute;
-
-                $breakdown['Rest Day OT'] = [
-                    'hours' => $overtimeHours,
+    /**
                     'rate' => number_format($hourlyRate, 2),
                     'multiplier' => 1.69,
                     'amount' => $amount
