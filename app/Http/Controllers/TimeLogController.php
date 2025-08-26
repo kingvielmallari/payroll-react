@@ -1856,28 +1856,34 @@ class TimeLogController extends Controller
         }
         $standardHours = max(0, $standardWorkMinutes / 60);
 
-        // STEP 6: Calculate overtime based on EMPLOYEE SCHEDULE, not fixed threshold
+        // STEP 6: Calculate when regular working time actually ends (considering grace period)
+        // Regular work ends when employee completes their standard working hours
+        $actualRegularWorkEndTime = $workStartTime->copy()->addMinutes($standardWorkMinutes);
+
+        // Adjust for break time - if break was taken, add break duration to regular end time
+        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+            $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+            $actualRegularWorkEndTime->addMinutes($scheduledBreakMinutes);
+        }
+
         $overtimeHours = 0;
         $regularOvertimeHours = 0;
         $nightDifferentialOvertimeHours = 0;
 
-        // Use employee's actual scheduled working hours as overtime threshold
-        // This ensures overtime calculation is based on their specific schedule
-        $employeeOvertimeThreshold = $standardHours; // Use calculated standard hours as threshold
+        // Overtime starts AFTER the actual regular working time ends (e.g., 5:16 PM on Aug 20)
+        if ($adjustedWorkEndTime->gt($actualRegularWorkEndTime)) {
+            // Calculate overtime period from actual regular work end time to clock out time
+            $overtimeMinutes = $actualRegularWorkEndTime->diffInMinutes($adjustedWorkEndTime);
+            $overtimeHours = $overtimeMinutes / 60;
 
-        if ($totalHours > $employeeOvertimeThreshold) {
-            // Everything over employee's scheduled hours is overtime
-            $overtimeHours = $totalHours - $employeeOvertimeThreshold;
-
-            // Calculate night differential period for overtime hours only
-            $nightDiffBreakdown = $this->calculateNightDifferentialHours($workStartTime, $adjustedWorkEndTime, $employeeOvertimeThreshold);
+            // Calculate night differential for the overtime period only
+            $nightDiffBreakdown = $this->calculateNightDifferentialHoursFixed($actualRegularWorkEndTime, $adjustedWorkEndTime);
             $regularOvertimeHours = $nightDiffBreakdown['regular_overtime'];
             $nightDifferentialOvertimeHours = $nightDiffBreakdown['night_diff_overtime'];
         }
 
-        // STEP 7: Calculate regular hours (total - overtime, capped at standard)
-        $regularHours = $totalHours - $overtimeHours;
-        $regularHours = min($regularHours, $standardHours);
+        // STEP 7: Calculate regular hours (standard 8 working hours)
+        $regularHours = $standardHours;
 
         // STEP 8: Calculate night differential for regular hours
         $nightDiffRegularHours = 0;
@@ -2004,6 +2010,49 @@ class TimeLogController extends Controller
 
         // Total overtime hours
         $totalOvertimeHours = $overtimeStart->diffInHours($workEndTime, true);
+
+        // Regular overtime hours = total overtime - night diff overtime
+        $regularOvertimeHours = max(0, $totalOvertimeHours - $nightDiffOvertimeHours);
+
+        return [
+            'regular_overtime' => $regularOvertimeHours,
+            'night_diff_overtime' => $nightDiffOvertimeHours
+        ];
+    }
+
+    private function calculateNightDifferentialHoursFixed($overtimeStart, $overtimeEnd)
+    {
+        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+
+        if (!$nightDiffSetting || !$nightDiffSetting->is_active) {
+            // No night differential configured, all overtime is regular
+            $totalOvertimeHours = $overtimeStart->diffInHours($overtimeEnd, true);
+            return [
+                'regular_overtime' => $totalOvertimeHours,
+                'night_diff_overtime' => 0
+            ];
+        }
+
+        // Get night differential time period (10 PM to 5 AM)
+        $nightStart = \Carbon\Carbon::parse($overtimeStart->format('Y-m-d') . ' ' . $nightDiffSetting->start_time);
+        $nightEnd = \Carbon\Carbon::parse($overtimeStart->format('Y-m-d') . ' ' . $nightDiffSetting->end_time);
+
+        // Handle next day end time (e.g., 10 PM to 5 AM next day)
+        if ($nightEnd->lte($nightStart)) {
+            $nightEnd->addDay();
+        }
+
+        // Calculate overlap between overtime period and night differential period
+        $overlapStart = max($overtimeStart, $nightStart);
+        $overlapEnd = min($overtimeEnd, $nightEnd);
+
+        $nightDiffOvertimeHours = 0;
+        if ($overlapStart->lt($overlapEnd)) {
+            $nightDiffOvertimeHours = $overlapStart->diffInHours($overlapEnd, true);
+        }
+
+        // Total overtime hours
+        $totalOvertimeHours = $overtimeStart->diffInHours($overtimeEnd, true);
 
         // Regular overtime hours = total overtime - night diff overtime
         $regularOvertimeHours = max(0, $totalOvertimeHours - $nightDiffOvertimeHours);
