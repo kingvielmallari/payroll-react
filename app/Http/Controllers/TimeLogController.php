@@ -1791,9 +1791,11 @@ class TimeLogController extends Controller
         $totalWorkingMinutes = 0;
         $adjustedWorkEndTime = $workEndTime;
 
-        if ($timeLog->break_in && $timeLog->break_out && 
+        if (
+            $timeLog->break_in && $timeLog->break_out &&
             $timeLog->break_in !== null && $timeLog->break_out !== null &&
-            $timeLog->break_in !== '' && $timeLog->break_out !== '') {
+            $timeLog->break_in !== '' && $timeLog->break_out !== ''
+        ) {
             // Use actual logged break times when available
             try {
                 if (is_string($timeLog->break_in)) {
@@ -1812,15 +1814,15 @@ class TimeLogController extends Controller
                     // Calculate: (work start to break start) + (break end to work end)
                     $beforeBreak = 0;
                     $afterBreak = 0;
-                    
+
                     if ($workStartTime->lt($breakIn)) {
                         $beforeBreak = $workStartTime->diffInMinutes(min($breakIn, $workEndTime));
                     }
-                    
+
                     if ($workEndTime->gt($breakOut)) {
                         $afterBreak = max($breakOut, $workStartTime)->diffInMinutes($workEndTime);
                     }
-                    
+
                     $totalWorkingMinutes = $beforeBreak + $afterBreak;
                 } else {
                     // Invalid break times, just calculate normal work time
@@ -1834,23 +1836,23 @@ class TimeLogController extends Controller
             // Use scheduled break period and skip it completely
             $breakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
             $breakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
-            
+
             // Calculate: (work start to break start) + (break end to work end)
             $beforeBreak = 0;
             $afterBreak = 0;
-            
+
             // Time worked before break period
             if ($workStartTime->lt($breakStart)) {
                 $beforeBreakEnd = $workEndTime->lt($breakStart) ? $workEndTime : $breakStart;
                 $beforeBreak = $workStartTime->diffInMinutes($beforeBreakEnd);
             }
-            
+
             // Time worked after break period  
             if ($workEndTime->gt($breakEnd)) {
                 $afterBreakStart = $workStartTime->gt($breakEnd) ? $workStartTime : $breakEnd;
                 $afterBreak = $afterBreakStart->diffInMinutes($workEndTime);
             }
-            
+
             $totalWorkingMinutes = $beforeBreak + $afterBreak;
         } else {
             // No break period, calculate normal work time
