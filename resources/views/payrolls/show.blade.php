@@ -499,7 +499,6 @@
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Use ACTUAL DTR hours instead of timeBreakdowns aggregated data
                                                 $actualRegularWorkdayHours = 0;
-                                                $actualNightDiffRegularHours = 0;
                                                 
                                                 // Calculate actual regular workday hours from DTR data
                                                 if (isset($dtrData[$detail->employee_id])) {
@@ -509,61 +508,68 @@
                                                             
                                                             // Check if this is a regular workday and has valid hours
                                                             $logType = $timeLog->log_type ?? null;
-                                                            if ($logType === 'regular_workday') {
-                                                                // Collect regular hours (non-night differential)
-                                                                if (isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
-                                                                    $actualHours = isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : $timeLog->regular_hours;
-                                                                    $actualRegularWorkdayHours += $actualHours;
-                                                                }
-                                                                
-                                                                // Collect night differential hours separately
-                                                                if (isset($timeLog->night_diff_regular_hours) && $timeLog->night_diff_regular_hours > 0) {
-                                                                    $actualNightDiffRegularHours += $timeLog->night_diff_regular_hours;
-                                                                }
+                                                            if ($logType === 'regular_workday' && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
+                                                                // Use dynamic hours for draft mode, stored hours for processing mode
+                                                                $actualHours = isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : $timeLog->regular_hours;
+                                                                $actualRegularWorkdayHours += $actualHours;
                                                             }
                                                         }
                                                     }
                                                 }
                                                 
-                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                                $basicPay = 0;
-                                                
-                                                // Add Regular Workday breakdown (non-night differential hours)
+                                                // Use actual DTR hours for calculation
                                                 if ($actualRegularWorkdayHours > 0) {
+                                                    $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                    
                                                     // Convert hours to minutes for precise calculation
                                                     $actualMinutes = $actualRegularWorkdayHours * 60;
+                                                    
+                                                    // Round to nearest minute for payroll accuracy
                                                     $roundedMinutes = round($actualMinutes);
+                                                    
                                                     $ratePerMinute = $hourlyRate / 60;
                                                     $regularAmount = $roundedMinutes * $ratePerMinute;
+                                                    
+                                                    // // Debug: Show exact calculation
+                                                    // $debugInfo = "Debug: {$actualRegularWorkdayHours}h = {$actualMinutes}min → {$roundedMinutes}min × ₱{$ratePerMinute}/min = ₱{$regularAmount}";
                                                     
                                                     $basicBreakdownData['Regular Workday'] = [
                                                         'hours' => $actualRegularWorkdayHours,
                                                         'rate' => $hourlyRate,
                                                         'amount' => $regularAmount,
+                                                        // 'debug' => $debugInfo
                                                     ];
-                                                    $basicRegularHours += $actualRegularWorkdayHours;
-                                                    $basicPay += $regularAmount;
-                                                }
-                                                
-                                                // Add Night Differential for Regular Workday
-                                                if ($actualNightDiffRegularHours > 0) {
-                                                    // Get night differential settings
-                                                    $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
-                                                    $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10; // Default 10%
+                                                    $basicRegularHours = $actualRegularWorkdayHours;
+                                                    $basicPay = $regularAmount; // Use calculated amount
                                                     
-                                                    $nightDiffMinutes = $actualNightDiffRegularHours * 60;
-                                                    $roundedNDMinutes = round($nightDiffMinutes);
-                                                    $ndRatePerMinute = ($hourlyRate * $nightDiffMultiplier) / 60;
-                                                    $ndAmount = $roundedNDMinutes * $ndRatePerMinute;
+                                                    // Add Night Differential for Regular Workday
+                                                    $actualNightDiffRegularHours = 0;
+                                                    foreach ($dtrData[$detail->employee_id] as $date => $timeLogData) {
+                                                        if ($timeLogData) {
+                                                            $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
+                                                            $logType = $timeLog->log_type ?? null;
+                                                            if ($logType === 'regular_workday' && isset($timeLog->night_diff_regular_hours) && $timeLog->night_diff_regular_hours > 0) {
+                                                                $actualNightDiffRegularHours += $timeLog->night_diff_regular_hours;
+                                                            }
+                                                        }
+                                                    }
                                                     
-                                                    $basicBreakdownData['Regular Workday+ND'] = [
-                                                        'hours' => $actualNightDiffRegularHours,
-                                                        'rate' => $hourlyRate,
-                                                        'multiplier' => $nightDiffMultiplier,
-                                                        'amount' => $ndAmount,
-                                                    ];
-                                                    $basicRegularHours += $actualNightDiffRegularHours;
-                                                    $basicPay += $ndAmount;
+                                                    if ($actualNightDiffRegularHours > 0) {
+                                                        // Get night differential settings
+                                                        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                                                        $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10; // Default 10%
+                                                        
+                                                        $nightDiffAmount = ($actualNightDiffRegularHours * $hourlyRate * $nightDiffMultiplier) - ($actualNightDiffRegularHours * $hourlyRate);
+                                                        
+                                                        $basicBreakdownData['Regular Workday+ND'] = [
+                                                            'hours' => $actualNightDiffRegularHours,
+                                                            'rate' => $hourlyRate,
+                                                            'multiplier' => $nightDiffMultiplier,
+                                                            'amount' => $actualNightDiffRegularHours * $hourlyRate * $nightDiffMultiplier,
+                                                        ];
+                                                        $basicRegularHours += $actualNightDiffRegularHours;
+                                                        $basicPay += $actualNightDiffRegularHours * $hourlyRate * $nightDiffMultiplier;
+                                                    }
                                                 }
                                             } else {
                                                 // PROCESSING/APPROVED: Use breakdown data from snapshot
@@ -617,6 +623,7 @@
                                             
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Calculate holiday breakdown using ACTUAL DTR hours, not aggregated breakdown
+                                                $actualHolidayHours = 0;
                                                 
                                                 // Calculate actual holiday hours from DTR data
                                                 if (isset($dtrData[$detail->employee_id])) {
@@ -626,7 +633,7 @@
                                                             
                                                             // Check if this is a holiday and has valid hours
                                                             $logType = $timeLog->log_type ?? null;
-                                                            if (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                                                            if (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday']) && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
                                                                 // Get rate config for this specific holiday type
                                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
                                                                 if (isset($employeeBreakdown[$logType])) {
@@ -636,32 +643,34 @@
                                                                     $hourlyRate = $detail->employee->hourly_rate ?? 0;
                                                                     $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.3;
                                                                     
-                                                                    // Process regular holiday hours (non-night differential)
-                                                                    if (isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
-                                                                        $actualHours = isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : $timeLog->regular_hours;
-                                                                        $actualMinutes = $actualHours * 60;
-                                                                        $roundedMinutes = round($actualMinutes);
-                                                                        $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
-                                                                        $regularAmount = $roundedMinutes * $ratePerMinute;
-                                                                        $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
-                                                                        
-                                                                        if (isset($holidayBreakdown[$displayName])) {
-                                                                            $holidayBreakdown[$displayName]['hours'] += $actualHours;
-                                                                            $holidayBreakdown[$displayName]['amount'] += $regularAmount;
-                                                                        } else {
-                                                                            $holidayBreakdown[$displayName] = [
-                                                                                'hours' => $actualHours,
-                                                                                'amount' => $regularAmount,
-                                                                                'rate' => $hourlyRate,
-                                                                                'multiplier' => $regularMultiplier,
-                                                                                'percentage' => $percentageDisplay
-                                                                            ];
-                                                                        }
-                                                                        $totalHolidayRegularHours += $actualHours;
-                                                                        $holidayPay += $regularAmount;
-                                                                    }
+                                                                    // Convert hours to minutes for precise calculation
+                                                                    // Use dynamic hours for draft mode, stored hours for processing mode
+                                                                    $actualHours = isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : $timeLog->regular_hours;
+                                                                    $actualMinutes = $actualHours * 60;
                                                                     
-                                                                    // Process Night Differential holiday hours separately
+                                                                    // Round to nearest minute for payroll accuracy
+                                                                    $roundedMinutes = round($actualMinutes);
+                                                                    
+                                                                    $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
+                                                                    $regularAmount = $roundedMinutes * $ratePerMinute;
+                                                                    
+                                                                    $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
+                                                                    
+                                                                    if (isset($holidayBreakdown[$displayName])) {
+                                                                        $holidayBreakdown[$displayName]['hours'] += $actualHours;
+                                                                        $holidayBreakdown[$displayName]['amount'] += $regularAmount;
+                                                                    } else {
+                                                                        $holidayBreakdown[$displayName] = [
+                                                                            'hours' => $actualHours,
+                                                                            'amount' => $regularAmount,
+                                                                            'rate' => $hourlyRate * $regularMultiplier,
+                                                                            'percentage' => $percentageDisplay
+                                                                        ];
+                                                                    }
+                                                                    $totalHolidayRegularHours += $actualHours;
+                                                                    $holidayPay += $regularAmount; // Sum up all amounts
+                                                                    
+                                                                    // Add Night Differential for this holiday type
                                                                     if (isset($timeLog->night_diff_regular_hours) && $timeLog->night_diff_regular_hours > 0) {
                                                                         $nightDiffHours = $timeLog->night_diff_regular_hours;
                                                                         
@@ -671,12 +680,14 @@
                                                                         
                                                                         // Combined rate: holiday rate + night differential bonus
                                                                         $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
+                                                                        $combinedHourlyRate = $hourlyRate * $combinedMultiplier;
                                                                         $ndDisplayName = $displayName . '+ND';
                                                                         
                                                                         $nightDiffMinutes = $nightDiffHours * 60;
                                                                         $roundedNDMinutes = round($nightDiffMinutes);
-                                                                        $ndRatePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                                                                        $ndRatePerMinute = $combinedHourlyRate / 60;
                                                                         $ndAmount = $roundedNDMinutes * $ndRatePerMinute;
+                                                                        
                                                                         $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
                                                                         
                                                                         if (isset($holidayBreakdown[$ndDisplayName])) {
@@ -698,6 +709,7 @@
                                                             }
                                                         }
                                                     }
+                                                }
                                             } else {
                                                 // PROCESSING/APPROVED: Use breakdown data from snapshot
                                                 $holidayBreakdownData = [];
@@ -751,7 +763,6 @@
                                                 // DRAFT: Calculate rest day breakdown using ACTUAL DTR hours, not aggregated breakdown
                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
                                                 $actualRestDayHours = 0;
-                                                $actualNightDiffRestHours = 0;
                                                 
                                                 // Calculate actual rest day hours from DTR data
                                                 if (isset($dtrData[$detail->employee_id])) {
@@ -761,74 +772,85 @@
                                                             
                                                             // Check if this is a rest day and has valid hours
                                                             $logType = $timeLog->log_type ?? null;
-                                                            if ($logType === 'rest_day') {
-                                                                // Collect regular rest day hours (non-night differential)
-                                                                if (isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
-                                                                    $actualHours = isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : $timeLog->regular_hours;
-                                                                    $actualRestDayHours += $actualHours;
-                                                                }
-                                                                
-                                                                // Collect night differential rest day hours separately
-                                                                if (isset($timeLog->night_diff_regular_hours) && $timeLog->night_diff_regular_hours > 0) {
-                                                                    $actualNightDiffRestHours += $timeLog->night_diff_regular_hours;
-                                                                }
+                                                            if ($logType === 'rest_day' && isset($timeLog->regular_hours) && $timeLog->regular_hours > 0) {
+                                                                // Use dynamic hours for draft mode, stored hours for processing mode
+                                                                $actualHours = isset($timeLog->dynamic_regular_hours) ? $timeLog->dynamic_regular_hours : $timeLog->regular_hours;
+                                                                $actualRestDayHours += $actualHours;
                                                             }
                                                         }
                                                     }
                                                 }
                                                 
-                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
-                                                
-                                                // Get the rest day rate config for multiplier
-                                                $rateConfig = null;
-                                                if (isset($employeeBreakdown['rest_day']['rate_config'])) {
-                                                    $rateConfig = $employeeBreakdown['rest_day']['rate_config'];
-                                                }
-                                                $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.2; // Default to 120%
-                                                
-                                                // Add regular Rest Day breakdown (non-night differential hours)
+                                                // If we found actual DTR hours, use them
                                                 if ($actualRestDayHours > 0) {
+                                                    $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                    
+                                                    // Get the rest day rate config for multiplier
+                                                    $rateConfig = null;
+                                                    if (isset($employeeBreakdown['rest_day']['rate_config'])) {
+                                                        $rateConfig = $employeeBreakdown['rest_day']['rate_config'];
+                                                    }
+                                                    
+                                                    $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.2; // Default to 120%
+                                                    
+                                                    // Convert hours to minutes for precise calculation
                                                     $actualMinutes = $actualRestDayHours * 60;
+                                                    
+                                                    // Round to nearest minute for payroll accuracy
                                                     $roundedMinutes = round($actualMinutes);
+                                                    
                                                     $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
                                                     $regularAmount = $roundedMinutes * $ratePerMinute;
+                                                    
                                                     $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                     
                                                     $restDayBreakdown['Rest Day'] = [
                                                         'hours' => $actualRestDayHours,
                                                         'amount' => $regularAmount,
-                                                        'rate' => $hourlyRate,
-                                                        'multiplier' => $regularMultiplier,
+                                                        'rate' => $hourlyRate * $regularMultiplier,
                                                         'percentage' => $percentageDisplay
                                                     ];
-                                                    $totalRestRegularHours += $actualRestDayHours;
-                                                    $restDayPay += $regularAmount;
-                                                }
-                                                
-                                                // Add Night Differential for Rest Day
-                                                if ($actualNightDiffRestHours > 0) {
-                                                    // Get night differential settings
-                                                    $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
-                                                    $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10; // Default 10%
+                                                    $totalRestRegularHours = $actualRestDayHours;
+                                                    $restDayPay = $regularAmount; // Use calculated amount
                                                     
-                                                    // Combined rate: rest day rate + night differential bonus
-                                                    $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
+                                                    // Add Night Differential for Rest Day
+                                                    $actualNightDiffRestHours = 0;
+                                                    foreach ($dtrData[$detail->employee_id] as $date => $timeLogData) {
+                                                        if ($timeLogData) {
+                                                            $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
+                                                            $logType = $timeLog->log_type ?? null;
+                                                            if ($logType === 'rest_day' && isset($timeLog->night_diff_regular_hours) && $timeLog->night_diff_regular_hours > 0) {
+                                                                $actualNightDiffRestHours += $timeLog->night_diff_regular_hours;
+                                                            }
+                                                        }
+                                                    }
                                                     
-                                                    $nightDiffMinutes = $actualNightDiffRestHours * 60;
-                                                    $roundedNDMinutes = round($nightDiffMinutes);
-                                                    $ndRatePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                                                    $ndAmount = $roundedNDMinutes * $ndRatePerMinute;
-                                                    $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
-                                                    
-                                                    $restDayBreakdown['Rest Day+ND'] = [
-                                                        'hours' => $actualNightDiffRestHours,
-                                                        'amount' => $ndAmount,
-                                                        'rate' => $hourlyRate,
-                                                        'multiplier' => $combinedMultiplier,
-                                                        'percentage' => $ndPercentageDisplay
-                                                    ];
-                                                    $totalRestRegularHours += $actualNightDiffRestHours;
-                                                    $restDayPay += $ndAmount;
+                                                    if ($actualNightDiffRestHours > 0) {
+                                                        // Get night differential settings
+                                                        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                                                        $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10; // Default 10%
+                                                        
+                                                        // Combined rate: rest day rate + night differential bonus
+                                                        $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
+                                                        $combinedHourlyRate = $hourlyRate * $combinedMultiplier;
+                                                        
+                                                        $nightDiffMinutes = $actualNightDiffRestHours * 60;
+                                                        $roundedNDMinutes = round($nightDiffMinutes);
+                                                        $ndRatePerMinute = $combinedHourlyRate / 60;
+                                                        $ndAmount = $roundedNDMinutes * $ndRatePerMinute;
+                                                        
+                                                        $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
+                                                        
+                                                        $restDayBreakdown['Rest Day+ND'] = [
+                                                            'hours' => $actualNightDiffRestHours,
+                                                            'amount' => $ndAmount,
+                                                            'rate' => $hourlyRate,
+                                                            'multiplier' => $combinedMultiplier,
+                                                            'percentage' => $ndPercentageDisplay
+                                                        ];
+                                                        $totalRestRegularHours += $actualNightDiffRestHours;
+                                                        $restDayPay += $ndAmount;
+                                                    }
                                                 } else {
                                                     // Fallback to breakdown calculation if no DTR data
                                                     $restDayTypes = ['rest_day'];
@@ -915,7 +937,7 @@
                                                 
                                                 <div class="text-xs border-t pt-1">
                                                     <div class="text-gray-500">Total: {{ number_format($totalRestRegularHours, 2) }} hrs</div>
-                                                    {{-- <div class="font-bold text-cyan-600">₱{{ number_format($restDayPay, 2) }}</div> --}}
+                                                   
                                                 </div>
                                             @else
                                                 @if($totalRestRegularHours > 0)
