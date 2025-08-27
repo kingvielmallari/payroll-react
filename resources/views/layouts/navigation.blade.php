@@ -370,7 +370,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                     </svg>
                                     <div class="flex-1">
-                                        <div class="font-medium text-blue-700">Time Logs</div>
+                                        <div class="font-medium text-blue-700">Time Schedules</div>
                                         <div class="text-xs text-blue-600 mt-1">Schedule, Break period, Grace period</div>
                                     </div>
                                 </a>

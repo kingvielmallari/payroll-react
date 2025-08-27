@@ -2084,6 +2084,7 @@ class PayrollController extends Controller
                             'overtime_hours' => 0,
                             'regular_overtime_hours' => 0,
                             'night_diff_overtime_hours' => 0,
+                            'night_diff_regular_hours' => 0, // ADD: Missing night differential regular hours
                             'total_hours' => 0,
                             'days_count' => 0,
                             'display_name' => '',
@@ -2098,12 +2099,14 @@ class PayrollController extends Controller
                     $overtimeHours = $dynamicCalculation['overtime_hours'];
                     $regularOvertimeHours = $dynamicCalculation['regular_overtime_hours'] ?? 0;
                     $nightDiffOvertimeHours = $dynamicCalculation['night_diff_overtime_hours'] ?? 0;
+                    $nightDiffRegularHours = $dynamicCalculation['night_diff_regular_hours'] ?? 0; // ADD: Extract night diff regular hours
                     $totalHours = $dynamicCalculation['total_hours'];
 
                     $employeeBreakdown[$logType]['regular_hours'] += $regularHours;
                     $employeeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
                     $employeeBreakdown[$logType]['regular_overtime_hours'] += $regularOvertimeHours;
                     $employeeBreakdown[$logType]['night_diff_overtime_hours'] += $nightDiffOvertimeHours;
+                    $employeeBreakdown[$logType]['night_diff_regular_hours'] += $nightDiffRegularHours; // ADD: Store night diff regular hours
                     $employeeBreakdown[$logType]['total_hours'] += $totalHours;
                     $employeeBreakdown[$logType]['days_count']++;
 
@@ -6196,6 +6199,7 @@ class PayrollController extends Controller
                         'overtime_hours' => 0,
                         'regular_overtime_hours' => 0,
                         'night_diff_overtime_hours' => 0,
+                        'night_diff_regular_hours' => 0, // ADD: Missing night differential regular hours
                         'total_hours' => 0,
                         'days_count' => 0,
                         'display_name' => '',
@@ -6209,12 +6213,14 @@ class PayrollController extends Controller
                 $overtimeHours = $dynamicCalculation['overtime_hours'];
                 $regularOvertimeHours = $dynamicCalculation['regular_overtime_hours'] ?? 0;
                 $nightDiffOvertimeHours = $dynamicCalculation['night_diff_overtime_hours'] ?? 0;
+                $nightDiffRegularHours = $dynamicCalculation['night_diff_regular_hours'] ?? 0; // ADD: Extract night diff regular hours
                 $totalHours = $dynamicCalculation['total_hours'];
 
                 $employeeBreakdown[$logType]['regular_hours'] += $regularHours;
                 $employeeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
                 $employeeBreakdown[$logType]['regular_overtime_hours'] += $regularOvertimeHours;
                 $employeeBreakdown[$logType]['night_diff_overtime_hours'] += $nightDiffOvertimeHours;
+                $employeeBreakdown[$logType]['night_diff_regular_hours'] += $nightDiffRegularHours; // ADD: Store night diff regular hours
                 $employeeBreakdown[$logType]['total_hours'] += $totalHours;
                 $employeeBreakdown[$logType]['days_count']++;
 
