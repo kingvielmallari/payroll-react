@@ -4741,6 +4741,7 @@ class PayrollController extends Controller
                     if (!isset($employeeBreakdown[$logType])) {
                         $employeeBreakdown[$logType] = [
                             'regular_hours' => 0,
+                            'night_diff_regular_hours' => 0,
                             'overtime_hours' => 0,
                             'regular_overtime_hours' => 0,
                             'night_diff_overtime_hours' => 0,
@@ -4754,12 +4755,14 @@ class PayrollController extends Controller
                     // Calculate dynamically using current grace periods
                     $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
                     $regularHours = $dynamicCalculation['regular_hours'];
+                    $nightDiffRegularHours = $dynamicCalculation['night_diff_regular_hours'] ?? 0;
                     $overtimeHours = $dynamicCalculation['overtime_hours'];
                     $regularOvertimeHours = $dynamicCalculation['regular_overtime_hours'] ?? 0;
                     $nightDiffOvertimeHours = $dynamicCalculation['night_diff_overtime_hours'] ?? 0;
                     $totalHours = $dynamicCalculation['total_hours'];
 
                     $employeeBreakdown[$logType]['regular_hours'] += $regularHours;
+                    $employeeBreakdown[$logType]['night_diff_regular_hours'] += $nightDiffRegularHours;
                     $employeeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
                     $employeeBreakdown[$logType]['regular_overtime_hours'] += $regularOvertimeHours;
                     $employeeBreakdown[$logType]['night_diff_overtime_hours'] += $nightDiffOvertimeHours;
@@ -6369,7 +6372,10 @@ class PayrollController extends Controller
             return [
                 'total_hours' => $timeLog->total_hours ?? 0,
                 'regular_hours' => $timeLog->regular_hours ?? 0,
+                'night_diff_regular_hours' => $timeLog->night_diff_regular_hours ?? 0,
                 'overtime_hours' => $timeLog->overtime_hours ?? 0,
+                'regular_overtime_hours' => $timeLog->regular_overtime_hours ?? 0,
+                'night_diff_overtime_hours' => $timeLog->night_diff_overtime_hours ?? 0,
                 'late_hours' => $timeLog->late_hours ?? 0,
                 'undertime_hours' => $timeLog->undertime_hours ?? 0,
             ];
@@ -6416,19 +6422,43 @@ class PayrollController extends Controller
         if (isset($timeBreakdown['regular_workday'])) {
             $regularData = $timeBreakdown['regular_workday'];
             $regularHours = $regularData['regular_hours'];
+            $nightDiffRegularHours = $regularData['night_diff_regular_hours'] ?? 0;
 
-            // Calculate per-minute amount with rounding (same as draft payroll)
-            $actualMinutes = $regularHours * 60;
-            $roundedMinutes = round($actualMinutes);
-            $ratePerMinute = $hourlyRate / 60;
-            $amount = $roundedMinutes * $ratePerMinute;
+            // Regular Workday (without night differential)
+            if ($regularHours > 0) {
+                // Calculate per-minute amount with rounding (same as draft payroll)
+                $actualMinutes = $regularHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = $hourlyRate / 60;
+                $amount = $roundedMinutes * $ratePerMinute;
 
-            $breakdown['Regular Workday'] = [
-                'hours' => $regularHours,
-                'rate' => $hourlyRate,
-                'multiplier' => 1.0,
-                'amount' => $amount
-            ];
+                $breakdown['Regular Workday'] = [
+                    'hours' => $regularHours,
+                    'rate' => $hourlyRate,
+                    'multiplier' => 1.0,
+                    'amount' => $amount
+                ];
+            }
+
+            // Regular Workday + Night Differential
+            if ($nightDiffRegularHours > 0) {
+                // Get night differential settings for rate calculation
+                $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+
+                // Calculate per-minute amount with rounding (same as draft payroll)
+                $actualMinutes = $nightDiffRegularHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = ($hourlyRate * $nightDiffMultiplier) / 60;
+                $amount = $roundedMinutes * $ratePerMinute;
+
+                $breakdown['Regular Workday+ND'] = [
+                    'hours' => $nightDiffRegularHours,
+                    'rate' => $hourlyRate,
+                    'multiplier' => $nightDiffMultiplier,
+                    'amount' => $amount
+                ];
+            }
         }
 
         return $breakdown;
@@ -6454,20 +6484,24 @@ class PayrollController extends Controller
         foreach ($holidayTypes as $type => $name) {
             if (isset($timeBreakdown[$type])) {
                 $data = $timeBreakdown[$type];
-                $regularHours = $data['regular_hours']; // Only use regular hours for holiday pay (same as draft)
-                if ($regularHours > 0) {
-                    // Get rate config from the time breakdown (same as draft calculation)
-                    $rateConfig = $data['rate_config'] ?? null;
+                $regularHours = $data['regular_hours']; // Regular hours for holiday pay
+                $nightDiffRegularHours = $data['night_diff_regular_hours'] ?? 0; // Night differential hours for holiday pay
 
-                    // If rate config is not available, fetch from database as fallback
-                    if (!$rateConfig) {
-                        $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $type)
-                            ->where('is_active', true)
-                            ->first();
-                    }
+                // Get rate config from the time breakdown (same as draft calculation)
+                $rateConfig = $data['rate_config'] ?? null;
 
-                    if ($rateConfig) {
-                        $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                // If rate config is not available, fetch from database as fallback
+                if (!$rateConfig) {
+                    $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $type)
+                        ->where('is_active', true)
+                        ->first();
+                }
+
+                if ($rateConfig) {
+                    $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+
+                    // Regular holiday hours (without ND)
+                    if ($regularHours > 0) {
                         // Calculate per-minute amount with rounding (same as draft payroll)
                         $actualMinutes = $regularHours * 60;
                         $roundedMinutes = round($actualMinutes);
@@ -6480,15 +6514,42 @@ class PayrollController extends Controller
                             'multiplier' => $multiplier,
                             'amount' => $amount
                         ];
-                    } else {
-                        // Ultimate fallback to hardcoded multipliers if no config found
-                        $fallbackMultipliers = [
-                            'special_holiday' => 1.3,
-                            'regular_holiday' => 2.0,
-                            'rest_day_special_holiday' => 1.5,
-                            'rest_day_regular_holiday' => 2.6
+                    }
+
+                    // Holiday hours + Night Differential
+                    if ($nightDiffRegularHours > 0) {
+                        // Get night differential settings for rate calculation
+                        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                        $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+
+                        // Combined rate: holiday rate + night differential bonus
+                        $combinedMultiplier = $multiplier + ($nightDiffMultiplier - 1);
+
+                        // Calculate per-minute amount with rounding (same as draft payroll)
+                        $actualMinutes = $nightDiffRegularHours * 60;
+                        $roundedMinutes = round($actualMinutes);
+                        $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                        $amount = $roundedMinutes * $ratePerMinute;
+
+                        $breakdown[$name . '+ND'] = [
+                            'hours' => $nightDiffRegularHours,
+                            'rate' => number_format($hourlyRate, 2),
+                            'multiplier' => $combinedMultiplier,
+                            'amount' => $amount
                         ];
-                        $multiplier = $fallbackMultipliers[$type] ?? 1.0;
+                    }
+                } else {
+                    // Ultimate fallback to hardcoded multipliers if no config found
+                    $fallbackMultipliers = [
+                        'special_holiday' => 1.3,
+                        'regular_holiday' => 2.0,
+                        'rest_day_special_holiday' => 1.5,
+                        'rest_day_regular_holiday' => 2.6
+                    ];
+                    $multiplier = $fallbackMultipliers[$type] ?? 1.0;
+
+                    // Regular holiday hours (without ND)
+                    if ($regularHours > 0) {
                         // Calculate per-minute amount with rounding (same as draft payroll)
                         $actualMinutes = $regularHours * 60;
                         $roundedMinutes = round($actualMinutes);
@@ -6499,6 +6560,25 @@ class PayrollController extends Controller
                             'hours' => $regularHours,
                             'rate' => number_format($hourlyRate, 2),
                             'multiplier' => $multiplier,
+                            'amount' => $amount
+                        ];
+                    }
+
+                    // Holiday hours + Night Differential
+                    if ($nightDiffRegularHours > 0) {
+                        // Combined rate: holiday rate + night differential bonus (10%)
+                        $combinedMultiplier = $multiplier + 0.10;
+
+                        // Calculate per-minute amount with rounding (same as draft payroll)
+                        $actualMinutes = $nightDiffRegularHours * 60;
+                        $roundedMinutes = round($actualMinutes);
+                        $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                        $amount = $roundedMinutes * $ratePerMinute;
+
+                        $breakdown[$name . '+ND'] = [
+                            'hours' => $nightDiffRegularHours,
+                            'rate' => number_format($hourlyRate, 2),
+                            'multiplier' => $combinedMultiplier,
                             'amount' => $amount
                         ];
                     }
@@ -6520,20 +6600,24 @@ class PayrollController extends Controller
         // Only include rest day breakdown
         if (isset($timeBreakdown['rest_day'])) {
             $restData = $timeBreakdown['rest_day'];
-            $regularHours = $restData['regular_hours']; // Only use regular hours for rest day pay (same as draft)
-            if ($regularHours > 0) {
-                // Get rate config from the time breakdown (same as draft calculation)
-                $rateConfig = $restData['rate_config'] ?? null;
+            $regularHours = $restData['regular_hours']; // Regular hours for rest day pay
+            $nightDiffRegularHours = $restData['night_diff_regular_hours'] ?? 0; // Night differential hours for rest day pay
 
-                // If rate config is not available, fetch from database as fallback
-                if (!$rateConfig) {
-                    $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'rest_day')
-                        ->where('is_active', true)
-                        ->first();
-                }
+            // Get rate config from the time breakdown (same as draft calculation)
+            $rateConfig = $restData['rate_config'] ?? null;
 
-                if ($rateConfig) {
-                    $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+            // If rate config is not available, fetch from database as fallback
+            if (!$rateConfig) {
+                $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'rest_day')
+                    ->where('is_active', true)
+                    ->first();
+            }
+
+            if ($rateConfig) {
+                $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+
+                // Regular rest day hours (without ND)
+                if ($regularHours > 0) {
                     // Calculate per-minute amount with rounding (same as draft payroll)
                     $actualMinutes = $regularHours * 60;
                     $roundedMinutes = round($actualMinutes);
@@ -6546,8 +6630,35 @@ class PayrollController extends Controller
                         'multiplier' => $multiplier,
                         'amount' => $amount
                     ];
-                } else {
-                    // Ultimate fallback to hardcoded multiplier if no config found
+                }
+
+                // Rest day hours + Night Differential
+                if ($nightDiffRegularHours > 0) {
+                    // Get night differential settings for rate calculation
+                    $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                    $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+
+                    // Combined rate: rest day rate + night differential bonus
+                    $combinedMultiplier = $multiplier + ($nightDiffMultiplier - 1);
+
+                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    $actualMinutes = $nightDiffRegularHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Rest Day+ND'] = [
+                        'hours' => $nightDiffRegularHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
+                        'amount' => $amount
+                    ];
+                }
+            } else {
+                // Ultimate fallback to hardcoded multiplier if no config found
+
+                // Regular rest day hours (without ND)
+                if ($regularHours > 0) {
                     // Calculate per-minute amount with rounding (same as draft payroll)
                     $actualMinutes = $regularHours * 60;
                     $roundedMinutes = round($actualMinutes);
@@ -6558,6 +6669,25 @@ class PayrollController extends Controller
                         'hours' => $regularHours,
                         'rate' => number_format($hourlyRate, 2),
                         'multiplier' => 1.3,
+                        'amount' => $amount
+                    ];
+                }
+
+                // Rest day hours + Night Differential
+                if ($nightDiffRegularHours > 0) {
+                    // Combined rate: rest day rate + night differential bonus (10%)
+                    $combinedMultiplier = 1.3 + 0.10; // 1.4
+
+                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    $actualMinutes = $nightDiffRegularHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $amount = $roundedMinutes * $ratePerMinute;
+
+                    $breakdown['Rest Day+ND'] = [
+                        'hours' => $nightDiffRegularHours,
+                        'rate' => number_format($hourlyRate, 2),
+                        'multiplier' => $combinedMultiplier,
                         'amount' => $amount
                     ];
                 }

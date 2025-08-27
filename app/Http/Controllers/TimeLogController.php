@@ -1856,39 +1856,53 @@ class TimeLogController extends Controller
         }
         $standardHours = max(0, $standardWorkMinutes / 60);
 
-        // STEP 6: Calculate regular and overtime hours based on actual hours worked
+        // STEP 6: Calculate regular and overtime hours 
+        // Priority: Employee's assigned schedule takes precedence over overtime threshold
         $actualHoursWorked = $totalHours;
-        $regularHours = min($actualHoursWorked, $standardHours);
+        $overtimeThresholdHours = $overtimeThresholdMinutes / 60; // Convert minutes to hours
 
-        // Calculate overtime (any hours worked beyond standard hours)
-        $overtimeHours = max(0, $actualHoursWorked - $standardHours);
+        // Determine the boundary for regular vs overtime hours
+        // Use the LARGER of: assigned schedule hours OR overtime threshold
+        // This ensures employees get credit for their full assigned schedule as regular hours
+        $regularHoursBoundary = max($standardHours, $overtimeThresholdHours);
+
+        // Regular hours = actual hours worked, but capped at the regular hours boundary
+        $regularHours = min($actualHoursWorked, $regularHoursBoundary);
+
+        // Overtime = any hours worked beyond the regular hours boundary
+        $overtimeHours = max(0, $actualHoursWorked - $regularHoursBoundary);
         $regularOvertimeHours = 0;
         $nightDifferentialOvertimeHours = 0;
 
         // If there's overtime, calculate night differential breakdown for overtime period
         if ($overtimeHours > 0) {
-            // Calculate when overtime period starts (after completing standard work hours)
-            $regularWorkEndTime = $workStartTime->copy()->addHours($standardHours);
+            // Calculate when overtime period starts (after completing regular hours boundary)
+            $overtimeStartTime = $workStartTime->copy()->addHours($regularHoursBoundary);
 
-            // If break was scheduled and taken, adjust the regular work end time
+            // If break was scheduled and taken, adjust the overtime start time
             if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
                 $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
-                $regularWorkEndTime->addMinutes($scheduledBreakMinutes);
+                $overtimeStartTime->addMinutes($scheduledBreakMinutes);
             }
 
             // Calculate night differential for the overtime period
-            $overtimeStartTime = $regularWorkEndTime;
             $overtimeEndTime = $adjustedWorkEndTime;
 
             $nightDiffBreakdown = $this->calculateNightDifferentialHoursFixed($overtimeStartTime, $overtimeEndTime);
             $regularOvertimeHours = $nightDiffBreakdown['regular_overtime'];
             $nightDifferentialOvertimeHours = $nightDiffBreakdown['night_diff_overtime'];
-        }
-
-        // STEP 8: Calculate night differential for regular hours
+        }        // STEP 8: Calculate night differential for regular hours
         $nightDiffRegularHours = 0;
         if ($regularHours > 0) {
+            // Calculate the actual time period for regular hours (considering breaks)
             $regularWorkEndTime = $workStartTime->copy()->addHours($regularHours);
+
+            // If break was scheduled and taken during regular hours, adjust the end time
+            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                $regularWorkEndTime->addMinutes($scheduledBreakMinutes);
+            }
+
             $nightDiffRegularBreakdown = $this->calculateNightDifferentialForRegularHours($workStartTime, $regularWorkEndTime);
             $nightDiffRegularHours = $nightDiffRegularBreakdown['night_diff_regular_hours'];
 
