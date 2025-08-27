@@ -554,7 +554,8 @@
                                                         : $employeeSnapshot->basic_breakdown;
                                                 }
                                                 $basicRegularHours = array_sum(array_column($basicBreakdownData, 'hours'));
-                                                $basicPay = $detail->regular_pay ?? 0; // Use snapshot basic pay amount
+                                                // Use calculated total from breakdown instead of stored regular_pay
+                                                $basicPay = array_sum(array_column($basicBreakdownData, 'amount'));
                                             }
                                         @endphp
                                         
@@ -692,8 +693,31 @@
                                         
                                         <div>
                                             @if(!empty($holidayBreakdown))
-                                                <!-- Show individual holiday type breakdowns -->
-                                                @foreach($holidayBreakdown as $type => $data)
+                                                <!-- Show individual holiday type breakdowns in consistent order -->
+                                                @php
+                                                    // Define consistent display order to match draft mode: Special Holiday first, then Regular Holiday
+                                                    $orderedHolidayTypes = [
+                                                        'Special Holiday',
+                                                        'Special Holiday+ND', 
+                                                        'Regular Holiday',
+                                                        'Regular Holiday+ND'
+                                                    ];
+                                                    
+                                                    // Sort breakdown by the defined order
+                                                    $sortedHolidayBreakdown = [];
+                                                    foreach ($orderedHolidayTypes as $type) {
+                                                        if (isset($holidayBreakdown[$type])) {
+                                                            $sortedHolidayBreakdown[$type] = $holidayBreakdown[$type];
+                                                        }
+                                                    }
+                                                    // Add any remaining types not in the ordered list
+                                                    foreach ($holidayBreakdown as $type => $data) {
+                                                        if (!isset($sortedHolidayBreakdown[$type])) {
+                                                            $sortedHolidayBreakdown[$type] = $data;
+                                                        }
+                                                    }
+                                                @endphp
+                                                @foreach($sortedHolidayBreakdown as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
                                                         <span>{{ $type }}: {{ number_format($data['hours'], 2) }}h</span>
                                                         <div class="text-xs text-gray-600">
