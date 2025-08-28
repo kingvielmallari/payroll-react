@@ -3128,39 +3128,25 @@ class PayrollController extends Controller
     private function calculateCashAdvanceDeductions(Employee $employee, Payroll $payroll)
     {
         try {
-            // For semi-monthly employees, only deduct on the last cutoff period (usually 2nd cutoff)
-            if ($employee->pay_schedule === 'semi_monthly') {
-                // Check if this is the last cutoff of the month
-                $isLastCutoff = $payroll->pay_period_end->day >= 28 || $payroll->pay_period_end->isLastOfMonth();
-
-                if (!$isLastCutoff) {
-                    return 0; // Don't deduct on first cutoff
-                }
-            }
-
             // Get active cash advances for this employee that should start deduction
             $cashAdvances = \App\Models\CashAdvance::where('employee_id', $employee->id)
                 ->where('status', 'approved')
                 ->where('outstanding_balance', '>', 0)
-                ->where(function ($query) use ($payroll) {
-                    // Check if this payroll period matches the selected payroll_id for cash advance
-                    $query->where('payroll_id', $payroll->id)
-                        ->orWhere(function ($q) use ($payroll) {
-                            // Fallback for older cash advances without payroll_id
-                            $q->whereNull('payroll_id')
-                                ->where('first_deduction_date', '<=', $payroll->pay_period_end);
-                        });
-                })
                 ->get();
 
             $totalDeductions = 0;
 
             foreach ($cashAdvances as $cashAdvance) {
-                // Use installment amount which includes interest
-                $deductionAmount = min(
-                    $cashAdvance->installment_amount ?? 0,
-                    $cashAdvance->outstanding_balance
-                );
+                // Check if this cash advance should be deducted in this payroll period
+                if (!$this->shouldDeductCashAdvance($cashAdvance, $employee, $payroll)) {
+                    continue;
+                }
+
+                // Calculate deduction amount based on frequency
+                $deductionAmount = $this->calculateCashAdvanceDeductionAmount($cashAdvance, $employee, $payroll);
+
+                // Ensure we don't deduct more than outstanding balance
+                $deductionAmount = min($deductionAmount, $cashAdvance->outstanding_balance);
 
                 if ($deductionAmount > 0) {
                     $totalDeductions += $deductionAmount;
@@ -3180,6 +3166,112 @@ class PayrollController extends Controller
             // If there's an error (like missing table), return 0
             Log::warning('Cash advance calculation failed: ' . $e->getMessage());
             return 0;
+        }
+    }
+
+    /**
+     * Check if a cash advance should be deducted in this payroll period
+     */
+    private function shouldDeductCashAdvance(\App\Models\CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
+    {
+        // Check if enough payroll periods have passed since the cash advance was approved
+        if (!$this->hasReachedStartingPayrollPeriod($cashAdvance, $employee, $payroll)) {
+            return false;
+        }
+
+        // For per_payroll frequency, deduct every payroll after reaching the starting period
+        if ($cashAdvance->deduction_frequency === 'per_payroll') {
+            return true;
+        }
+
+        // For monthly frequency, check timing based on employee pay schedule
+        if ($cashAdvance->deduction_frequency === 'monthly') {
+            return $this->isCorrectMonthlyPayrollForDeduction($cashAdvance, $employee, $payroll);
+        }
+
+        // Default to old behavior for backward compatibility
+        if ($employee->pay_schedule === 'semi_monthly') {
+            // Check if this is the last cutoff of the month
+            return $payroll->pay_period_end->day >= 28 || $payroll->pay_period_end->isLastOfMonth();
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if enough payroll periods have passed to start deductions
+     */
+    private function hasReachedStartingPayrollPeriod(\App\Models\CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
+    {
+        // If no starting_payroll_period is set, use the old logic
+        if (!$cashAdvance->starting_payroll_period) {
+            return true; // Default to allowing deductions
+        }
+
+        // Get the approval date of the cash advance
+        $approvalDate = $cashAdvance->approved_date ?? $cashAdvance->requested_date;
+
+        // Count how many payroll periods have occurred since approval for this employee
+        $payrollsSinceApproval = \App\Models\Payroll::where('employee_id', $employee->id)
+            ->where('pay_period_start', '>=', $approvalDate)
+            ->where('pay_period_start', '<=', $payroll->pay_period_start)
+            ->count();
+
+        // Check if we've reached the starting payroll period
+        // (starting_payroll_period: 1=current, 2=next, 3=2nd next, 4=3rd next)
+        return $payrollsSinceApproval >= $cashAdvance->starting_payroll_period;
+    }
+    /**
+     * Check if this is the correct payroll for monthly cash advance deduction
+     */
+    private function isCorrectMonthlyPayrollForDeduction(\App\Models\CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
+    {
+        $payPeriodEnd = Carbon::parse($payroll->pay_period_end);
+        $payPeriodStart = Carbon::parse($payroll->pay_period_start);
+
+        // For monthly employees, there's only one payroll per month
+        if ($employee->pay_schedule === 'monthly') {
+            return true;
+        }
+
+        // For semi-monthly employees
+        if ($employee->pay_schedule === 'semi_monthly') {
+            if ($cashAdvance->monthly_deduction_timing === 'first_payroll') {
+                // First cutoff: payroll that starts in first half of month (1st-15th)
+                return $payPeriodStart->day <= 15;
+            } else {
+                // Last cutoff: payroll that ends in second half of month (16th-end)
+                return $payPeriodEnd->day >= 16;
+            }
+        }
+
+        // For weekly employees
+        if ($employee->pay_schedule === 'weekly') {
+            if ($cashAdvance->monthly_deduction_timing === 'first_payroll') {
+                // First payroll of month: payroll that includes the 1st day of the month
+                return $payPeriodStart->day <= 7;
+            } else {
+                // Last payroll of month: payroll that includes the last week of the month
+                $lastDayOfMonth = $payPeriodEnd->copy()->endOfMonth();
+                return $payPeriodEnd->diffInDays($lastDayOfMonth) <= 6;
+            }
+        }
+
+        return true; // Default behavior
+    }
+
+    /**
+     * Calculate the deduction amount for a cash advance
+     */
+    private function calculateCashAdvanceDeductionAmount(\App\Models\CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
+    {
+        if ($cashAdvance->deduction_frequency === 'monthly') {
+            // For monthly deductions, use total amount divided by monthly installments
+            $monthlyInstallments = $cashAdvance->monthly_installments ?? 1;
+            return $cashAdvance->total_amount / $monthlyInstallments;
+        } else {
+            // For per_payroll deductions, use the regular installment amount
+            return $cashAdvance->installment_amount ?? 0;
         }
     }
 

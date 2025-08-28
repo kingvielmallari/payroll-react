@@ -21,6 +21,7 @@ class CashAdvance extends Model
         'outstanding_balance',
         'status',
         'installments',
+        'monthly_installments',
         'installment_amount',
         'interest_rate',
         'interest_amount',
@@ -30,7 +31,9 @@ class CashAdvance extends Model
         'requested_date',
         'approved_date',
         'first_deduction_date',
-        'deduction_period',
+        'starting_payroll_period',
+        'deduction_frequency',
+        'monthly_deduction_timing',
         'requested_by',
         'approved_by',
     ];

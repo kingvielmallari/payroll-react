@@ -83,6 +83,29 @@ class CashAdvanceController extends Controller
     }
 
     /**
+     * Get employee pay schedule information (AJAX endpoint)
+     */
+    public function getEmployeePaySchedule(Request $request)
+    {
+        $employeeId = $request->input('employee_id');
+
+        if (!$employeeId) {
+            return response()->json(['error' => 'Employee ID is required'], 400);
+        }
+
+        $employee = Employee::find($employeeId);
+        if (!$employee) {
+            return response()->json(['error' => 'Employee not found'], 404);
+        }
+
+        return response()->json([
+            'pay_schedule' => $employee->pay_schedule, // weekly, semi_monthly, monthly
+            'full_name' => $employee->full_name,
+            'basic_salary' => $employee->basic_salary,
+        ]);
+    }
+
+    /**
      * Get payroll periods for an employee (AJAX endpoint)
      */
     public function getEmployeePayrollPeriods(Request $request)
@@ -93,42 +116,208 @@ class CashAdvanceController extends Controller
             return response()->json(['error' => 'Employee ID is required'], 400);
         }
 
-        // Get current and next payroll periods for this employee
-        $currentPayroll = \App\Models\Payroll::where('employee_id', $employeeId)
-            ->whereIn('status', ['draft', 'in_progress'])
-            ->orderBy('pay_period_end', 'desc')
-            ->first();
-
-        // Get next payroll period (if any)
-        $nextPayroll = \App\Models\Payroll::where('employee_id', $employeeId)
-            ->where('status', 'draft')
-            ->where('pay_period_start', '>', $currentPayroll?->pay_period_end ?? now())
-            ->orderBy('pay_period_start', 'asc')
-            ->first();
-
-        $periods = [];
-
-        if ($currentPayroll) {
-            $periods[] = [
-                'value' => 'current',
-                'label' => 'Current Payroll Period (' . $currentPayroll->pay_period_start->format('M d') . ' - ' . $currentPayroll->pay_period_end->format('M d, Y') . ')',
-                'start_date' => $currentPayroll->pay_period_start->format('Y-m-d'),
-                'payroll_id' => $currentPayroll->id
-            ];
+        $employee = Employee::find($employeeId);
+        if (!$employee) {
+            return response()->json(['error' => 'Employee not found'], 404);
         }
 
-        if ($nextPayroll) {
-            $periods[] = [
-                'value' => 'next',
-                'label' => 'Next Payroll Period (' . $nextPayroll->pay_period_start->format('M d') . ' - ' . $nextPayroll->pay_period_end->format('M d, Y') . ')',
-                'start_date' => $nextPayroll->pay_period_start->format('Y-m-d'),
-                'payroll_id' => $nextPayroll->id
-            ];
+        // Get the schedule setting for this employee's pay schedule
+        $scheduleSetting = \App\Models\PayScheduleSetting::where('code', $employee->pay_schedule)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$scheduleSetting) {
+            return response()->json(['error' => 'Pay schedule setting not found'], 404);
         }
 
-        return response()->json(['periods' => $periods]);
+        // Get timing preference for semi-monthly employees with monthly frequency
+        $monthlyTiming = $request->input('monthly_deduction_timing');
+        $deductionFrequency = $request->input('deduction_frequency');
+
+        // Calculate the next 3 payroll periods for this employee
+        $periods = $this->calculateNextPayrollPeriods($scheduleSetting, 3, $monthlyTiming, $deductionFrequency);
+
+        return response()->json([
+            'periods' => $periods,
+            'employee_pay_schedule' => $employee->pay_schedule
+        ]);
     }
 
+    /**
+     * Calculate the next N payroll periods for a given schedule
+     */
+    private function calculateNextPayrollPeriods($scheduleSetting, $count = 3, $monthlyTiming = null, $deductionFrequency = null)
+    {
+        $periods = [];
+        $currentDate = \Carbon\Carbon::now();
+
+        for ($i = 0; $i < $count; $i++) {
+            $periodData = $this->calculatePayrollPeriodForOffset($scheduleSetting, $currentDate, $i, $monthlyTiming, $deductionFrequency);
+
+            $label = $i === 0 ? 'Current' : ($i === 1 ? '2nd' : '3rd');
+
+            $periods[] = [
+                'value' => $i + 1,
+                'label' => "{$periodData['display']} ({$label})",
+                'description' => "Pay period: {$periodData['display']}",
+                'is_default' => $i === 0
+            ];
+        }
+
+        return $periods;
+    }
+    /**
+     * Calculate payroll period for a specific offset from current date
+     */
+    private function calculatePayrollPeriodForOffset($scheduleSetting, $baseDate, $offset = 0, $monthlyTiming = null, $deductionFrequency = null)
+    {
+        switch ($scheduleSetting->code) {
+            case 'semi_monthly':
+                return $this->calculateSemiMonthlyPeriodForOffset($scheduleSetting, $baseDate, $offset, $monthlyTiming, $deductionFrequency);
+            case 'weekly':
+                return $this->calculateWeeklyPeriodForOffset($scheduleSetting, $baseDate, $offset);
+            case 'monthly':
+                return $this->calculateMonthlyPeriodForOffset($scheduleSetting, $baseDate, $offset);
+            default:
+                return $this->calculateSemiMonthlyPeriodForOffset($scheduleSetting, $baseDate, $offset, $monthlyTiming, $deductionFrequency);
+        }
+    }
+
+    /**
+     * Calculate semi-monthly periods with offset
+     */
+    private function calculateSemiMonthlyPeriodForOffset($scheduleSetting, $baseDate, $offset, $monthlyTiming = null, $deductionFrequency = null)
+    {
+        $cutoffPeriods = $scheduleSetting->cutoff_periods;
+        if (is_string($cutoffPeriods)) {
+            $cutoffPeriods = json_decode($cutoffPeriods, true);
+        }
+        if (empty($cutoffPeriods) || count($cutoffPeriods) < 2) {
+            // Default semi-monthly cutoffs
+            $cutoffPeriods = [
+                ['start_day' => 1, 'end_day' => 15],
+                ['start_day' => 16, 'end_day' => 31]
+            ];
+        }
+
+        $currentDay = $baseDate->day;
+        $currentMonth = $baseDate->copy();
+
+        // Determine the ACTUAL current period based on today's date
+        $isFirstHalf = $currentDay <= 15;
+
+        if ($deductionFrequency === 'monthly' && $monthlyTiming) {
+            // For monthly frequency with timing preference
+            if ($monthlyTiming === 'first_payroll') {
+                // Show only 1st cutoff periods across months
+                $preferredPeriodIndex = 0;
+                $targetMonth = $currentMonth->copy();
+
+                // If we're currently in 2nd half and user wants 1st cutoff, start from next month
+                if (!$isFirstHalf) {
+                    $targetMonth->addMonth();
+                }
+
+                // Apply offset by adding months (stay on same cutoff type)
+                $targetMonth->addMonths($offset);
+                $targetPeriodIndex = $preferredPeriodIndex;
+            } else {
+                // Show only 2nd cutoff periods across months
+                $preferredPeriodIndex = 1;
+                $targetMonth = $currentMonth->copy();
+
+                // If we're currently in 1st half and user wants 2nd cutoff, use current month's 2nd cutoff
+                if ($isFirstHalf) {
+                    // Stay in current month for 2nd cutoff (current month's Aug 16-31)
+                } else {
+                    // If in 2nd half, this IS the current "last payroll", so start here
+                    // No need to move to next month for offset 0
+                }
+
+                // Apply offset by adding months (stay on same cutoff type)
+                $targetMonth->addMonths($offset);
+                $targetPeriodIndex = $preferredPeriodIndex;
+            }
+        } else {
+            // For per-payroll frequency, show both cutoffs alternating
+            // Start from the CURRENT active period
+            $targetPeriodIndex = $isFirstHalf ? 0 : 1;
+            $targetMonth = $currentMonth->copy();
+
+            // Apply offset with alternating cutoffs
+            for ($i = 0; $i < $offset; $i++) {
+                $targetPeriodIndex++;
+                if ($targetPeriodIndex >= 2) {
+                    $targetPeriodIndex = 0;
+                    $targetMonth->addMonth();
+                }
+            }
+        }
+
+        $cutoff = $cutoffPeriods[$targetPeriodIndex];
+        $startDay = (int) $cutoff['start_day'];
+        $endDay = (int) $cutoff['end_day'];
+
+        $startDate = $targetMonth->copy()->day($startDay);
+        $endDate = $endDay == 31 ? $targetMonth->copy()->endOfMonth() : $targetMonth->copy()->day($endDay);
+
+        return [
+            'start' => $startDate,
+            'end' => $endDate,
+            'display' => $startDate->format('M d') . ' - ' . $endDate->format('d, Y')
+        ];
+    }
+    /**
+     * Calculate weekly periods with offset
+     */
+    private function calculateWeeklyPeriodForOffset($scheduleSetting, $baseDate, $offset)
+    {
+        $cutoffPeriods = $scheduleSetting->cutoff_periods;
+        if (is_string($cutoffPeriods)) {
+            $cutoffPeriods = json_decode($cutoffPeriods, true);
+        }
+        if (empty($cutoffPeriods)) {
+            $cutoffPeriods = [['start_day' => 'monday', 'end_day' => 'friday']];
+        }
+
+        $cutoff = $cutoffPeriods[0];
+        $startDayName = $cutoff['start_day'];
+
+        // Get the start of current week based on start day
+        $startDate = $baseDate->copy()->startOfWeek();
+        if ($startDayName !== 'monday') {
+            // Adjust for different start days
+            $dayMap = ['sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6];
+            $targetDay = $dayMap[$startDayName] ?? 1;
+            $startDate = $baseDate->copy()->startOfWeek()->addDays($targetDay - 1);
+        }
+
+        // Apply offset in weeks
+        $startDate->addWeeks($offset);
+        $endDate = $startDate->copy()->addDays(6); // 7-day week
+
+        return [
+            'start' => $startDate,
+            'end' => $endDate,
+            'display' => $startDate->format('M d') . ' - ' . $endDate->format('d, Y')
+        ];
+    }
+
+    /**
+     * Calculate monthly periods with offset
+     */
+    private function calculateMonthlyPeriodForOffset($scheduleSetting, $baseDate, $offset)
+    {
+        $targetMonth = $baseDate->copy()->addMonths($offset);
+        $startDate = $targetMonth->copy()->startOfMonth();
+        $endDate = $targetMonth->copy()->endOfMonth();
+
+        return [
+            'start' => $startDate,
+            'end' => $endDate,
+            'display' => $startDate->format('M d') . ' - ' . $endDate->format('d, Y')
+        ];
+    }
     /**
      * Store a newly created cash advance.
      */
@@ -136,16 +325,28 @@ class CashAdvanceController extends Controller
     {
         $this->authorize('create cash advances');
 
-        $validated = $request->validate([
+        // Base validation rules
+        $validationRules = [
             'employee_id' => 'required|exists:employees,id',
             'requested_amount' => 'required|numeric|min:100|max:50000',
-            'installments' => 'required|integer|min:1|max:12',
+            'deduction_frequency' => 'required|in:per_payroll,monthly',
+            'monthly_deduction_timing' => 'nullable|in:first_payroll,last_payroll',
             'interest_rate' => 'nullable|numeric|min:0|max:100',
             'reason' => 'required|string|max:500',
-            'first_deduction_date' => 'nullable|date',
-            'deduction_period' => 'required|in:current,next',
-            'payroll_id' => 'required|exists:payrolls,id',
-        ]);
+            'starting_payroll_period' => 'required|integer|min:1|max:4',
+        ];
+
+        // Add frequency-specific validation rules
+        if ($request->deduction_frequency === 'monthly') {
+            $validationRules['monthly_installments'] = 'required|integer|min:1|max:12';
+            $validationRules['installments'] = 'nullable|integer|min:1|max:12';
+            $validationRules['monthly_deduction_timing'] = 'required|in:first_payroll,last_payroll';
+        } else {
+            $validationRules['installments'] = 'required|integer|min:1|max:12';
+            $validationRules['monthly_installments'] = 'nullable|integer|min:1|max:12';
+        }
+
+        $validated = $request->validate($validationRules);
 
         // Additional validation for employee users
         if (Auth::user()->hasRole('employee')) {
@@ -168,10 +369,13 @@ class CashAdvanceController extends Controller
         try {
             DB::beginTransaction();
 
-            // Calculate first deduction date based on deduction period
-            $firstDeductionDate = $validated['first_deduction_date'] ?? now();
-            if ($validated['deduction_period'] === 'next') {
-                $firstDeductionDate = now()->addMonth();
+            // Calculate first deduction date based on starting payroll period
+            // This is just for reference, actual deduction logic uses starting_payroll_period
+            $firstDeductionDate = now();
+            if ($validated['starting_payroll_period'] > 1) {
+                // Add some estimated time for delayed periods (this is just for display)
+                $daysToAdd = ($validated['starting_payroll_period'] - 1) * 14; // Rough estimate
+                $firstDeductionDate = now()->addDays($daysToAdd);
             }
 
             $cashAdvance = CashAdvance::create([
@@ -179,12 +383,15 @@ class CashAdvanceController extends Controller
                 'reference_number' => CashAdvance::generateReferenceNumber(),
                 'requested_amount' => $validated['requested_amount'],
                 'installments' => $validated['installments'],
+                'monthly_installments' => $validated['monthly_installments'] ?? null,
+                'deduction_frequency' => $validated['deduction_frequency'],
+                'monthly_deduction_timing' => $validated['monthly_deduction_timing'] ?? null,
+                'starting_payroll_period' => $validated['starting_payroll_period'],
                 'interest_rate' => $validated['interest_rate'] ?? 0,
                 'reason' => $validated['reason'],
                 'requested_date' => now(),
-                'first_deduction_date' => $validated['first_deduction_date'],
-                'deduction_period' => $validated['deduction_period'],
-                'payroll_id' => $validated['payroll_id'], // Store the associated payroll ID
+                'first_deduction_date' => $firstDeductionDate,
+                'payroll_id' => null, // No longer tied to specific payroll
                 'requested_by' => Auth::id(),
                 'status' => 'pending',
             ]);

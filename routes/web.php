@@ -178,6 +178,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('cash-advances/employee-periods', [CashAdvanceController::class, 'getEmployeePayrollPeriods'])
             ->name('cash-advances.employee-periods');
 
+        // AJAX route for getting employee pay schedule
+        Route::post('cash-advances/employee-schedule', [CashAdvanceController::class, 'getEmployeePaySchedule'])
+            ->name('cash-advances.employee-schedule');
+
         Route::resource('cash-advances', CashAdvanceController::class);
 
         // Additional cash advance routes

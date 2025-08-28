@@ -72,7 +72,7 @@
                                            class="block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 @error('requested_amount') border-red-300 @enderror" 
                                            id="requested_amount" name="requested_amount" 
                                            value="{{ old('requested_amount') }}" 
-                                           step="0.01" min="100" max="50000" required
+                                           step="0.01" required
                                            onchange="calculateInstallment()">
                                 </div>
                                 @error('requested_amount')
@@ -81,21 +81,23 @@
                                 <p class="mt-1 text-sm text-gray-500">Minimum: ₱100, Maximum: ₱50,000</p>
                             </div>
 
-                            <!-- Number of Installments -->
+                            <!-- Deduction Frequency -->
                             <div>
-                                <label for="installments" class="block text-sm font-medium text-gray-700">Number of Installments *</label>
-                                <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('installments') border-red-300 @enderror" 
-                                        id="installments" name="installments" required onchange="calculateInstallment()">
-                                    <option value="">Select Installments</option>
-                                    @for($i = 1; $i <= 12; $i++)
-                                    <option value="{{ $i }}" {{ old('installments') == $i ? 'selected' : '' }}>
-                                        {{ $i }} month{{ $i > 1 ? 's' : '' }}
+                                <label for="deduction_frequency" class="block text-sm font-medium text-gray-700">Deduction Frequency *</label>
+                                <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('deduction_frequency') border-red-300 @enderror" 
+                                        id="deduction_frequency" name="deduction_frequency" required onchange="toggleInstallmentFields()">
+                                    <option value="">Select Frequency</option>
+                                    <option value="per_payroll" {{ old('deduction_frequency') == 'per_payroll' ? 'selected' : '' }}>
+                                        Per Pay Period (Regular)
                                     </option>
-                                    @endfor
+                                    <option value="monthly" {{ old('deduction_frequency') == 'monthly' ? 'selected' : '' }}>
+                                        Monthly
+                                    </option>
                                 </select>
-                                @error('installments')
+                                @error('deduction_frequency')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
+                                <p class="mt-1 text-sm text-gray-500">Choose deduction frequency</p>
                             </div>
 
                             <!-- Interest Rate -->
@@ -112,6 +114,62 @@
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                                 <p class="mt-1 text-sm text-gray-500">Leave 0 for no interest</p>
+                            </div>
+                        </div>
+
+                        <!-- Installment Options Row -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <!-- Number of Payroll Installments (for per_payroll frequency) -->
+                            <div id="payroll_installments_field">
+                                <label for="installments" class="block text-sm font-medium text-gray-700">Number of Pay Period Installments *</label>
+                                <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('installments') border-red-300 @enderror" 
+                                        id="installments" name="installments" onchange="calculateInstallment()">
+                                    <option value="">Select Installments</option>
+                                    @for($i = 1; $i <= 12; $i++)
+                                    <option value="{{ $i }}" {{ old('installments') == $i ? 'selected' : '' }}>
+                                        {{ $i }} pay period{{ $i > 1 ? 's' : '' }}
+                                    </option>
+                                    @endfor
+                                </select>
+                                @error('installments')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <!-- Number of Monthly Installments (for monthly frequency) -->
+                            <div id="monthly_installments_field" style="display: none;">
+                                <label for="monthly_installments" class="block text-sm font-medium text-gray-700">Number of Monthly Installments *</label>
+                                <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('monthly_installments') border-red-300 @enderror" 
+                                        id="monthly_installments" name="monthly_installments" onchange="calculateInstallment()">
+                                    <option value="">Select Months</option>
+                                    @for($i = 1; $i <= 12; $i++)
+                                    <option value="{{ $i }}" {{ old('monthly_installments') == $i ? 'selected' : '' }}>
+                                        {{ $i }} month{{ $i > 1 ? 's' : '' }}
+                                    </option>
+                                    @endfor
+                                </select>
+                                @error('monthly_installments')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <!-- Monthly Deduction Timing (for monthly frequency) -->
+                            <div id="monthly_timing_field" style="display: none;">
+                                <label for="monthly_deduction_timing" class="block text-sm font-medium text-gray-700">Monthly Deduction Timing *</label>
+                                <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('monthly_deduction_timing') border-red-300 @enderror" 
+                                        id="monthly_deduction_timing" name="monthly_deduction_timing" onchange="onMonthlyTimingChange()">
+                                    <option value="">Select Timing</option>
+                                    <option value="first_payroll" {{ old('monthly_deduction_timing') == 'first_payroll' ? 'selected' : '' }}>
+                                        First Payroll of Month
+                                    </option>
+                                    <option value="last_payroll" {{ old('monthly_deduction_timing') == 'last_payroll' ? 'selected' : '' }}>
+                                        Last Payroll of Month
+                                    </option>
+                                </select>
+                                @error('monthly_deduction_timing')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                                <p class="mt-1 text-sm text-gray-500" id="timing_help_text">For weekly/semi-monthly employees</p>
                             </div>
                         </div>
 
@@ -135,27 +193,17 @@
                         </div>
 
                         <div class="grid grid-cols-1 gap-6">
-                            <!-- Deduction Period -->
+                            <!-- Starting Payroll Period -->
                             <div>
-                                <label for="deduction_period" class="block text-sm font-medium text-gray-700">Deduction Period *</label>
-                                <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('deduction_period') border-red-300 @enderror" 
-                                        id="deduction_period" name="deduction_period" required onchange="updateDeductionDate()" disabled>
+                                <label for="starting_payroll_period" class="block text-sm font-medium text-gray-700">Deduction Payroll Period *</label>
+                                <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('starting_payroll_period') border-red-300 @enderror" 
+                                        id="starting_payroll_period" name="starting_payroll_period" required disabled>
                                     <option value="">{{ !$employee ? 'Select an employee first' : 'Loading payroll periods...' }}</option>
                                 </select>
-                                @error('deduction_period')
+                                @error('starting_payroll_period')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-sm text-gray-500">Choose when deductions should start</p>
-                                
-                                <!-- Hidden field for actual date -->
-                                <input type="hidden" 
-                                       id="first_deduction_date" name="first_deduction_date" 
-                                       value="{{ old('first_deduction_date') }}">
-                                       
-                                <!-- Hidden field for payroll ID -->
-                                <input type="hidden" 
-                                       id="payroll_id" name="payroll_id" 
-                                       value="{{ old('payroll_id') }}">
+                                <p class="mt-1 text-sm text-gray-500">Choose the payroll period when deductions should start</p>
                             </div>
                         </div>
 
@@ -192,40 +240,119 @@
     </div>
 
     <script>
+    let employeePaySchedule = null;
+
+    // Toggle installment fields based on deduction frequency
+    function toggleInstallmentFields() {
+        const frequency = document.getElementById('deduction_frequency').value;
+        const payrollInstallmentsField = document.getElementById('payroll_installments_field');
+        const monthlyInstallmentsField = document.getElementById('monthly_installments_field');
+        const monthlyTimingField = document.getElementById('monthly_timing_field');
+        const installmentsSelect = document.getElementById('installments');
+        const monthlyInstallmentsSelect = document.getElementById('monthly_installments');
+        const monthlyTimingSelect = document.getElementById('monthly_deduction_timing');
+
+        if (frequency === 'monthly') {
+            payrollInstallmentsField.style.display = 'none';
+            monthlyInstallmentsField.style.display = 'block';
+            
+            // Clear and disable payroll installments
+            installmentsSelect.value = '';
+            installmentsSelect.removeAttribute('required');
+            installmentsSelect.disabled = true; // Disable so it's not sent
+            
+            // Enable monthly fields
+            monthlyInstallmentsSelect.setAttribute('required', 'required');
+            monthlyInstallmentsSelect.disabled = false;
+            
+        } else {
+            payrollInstallmentsField.style.display = 'block';
+            monthlyInstallmentsField.style.display = 'none';
+            
+            // Clear and disable monthly fields
+            monthlyInstallmentsSelect.value = '';
+            monthlyInstallmentsSelect.removeAttribute('required');
+            monthlyInstallmentsSelect.disabled = true; // Disable so it's not sent
+            
+            // Enable payroll installments
+            installmentsSelect.setAttribute('required', 'required');
+            installmentsSelect.disabled = false;
+        }
+
+        // Show Monthly Deduction Timing field only for semi-monthly employees with monthly frequency
+        if (employeePaySchedule === 'semi_monthly' && frequency === 'monthly') {
+            monthlyTimingField.style.display = 'block';
+            monthlyTimingSelect.setAttribute('required', 'required');
+            updateTimingHelpText();
+            // Reset periods when frequency changes
+            resetStartingPayrollPeriods();
+        } else {
+            monthlyTimingField.style.display = 'none';
+            monthlyTimingSelect.removeAttribute('required');
+            monthlyTimingSelect.value = '';
+            // Load periods immediately for non-monthly frequency or non-semi-monthly employees
+            if (employeePaySchedule) {
+                loadEmployeePayrollPeriods();
+            }
+        }
+        
+        calculateInstallment();
+    }
+
+    function updateTimingHelpText() {
+        const helpText = document.getElementById('timing_help_text');
+        if (employeePaySchedule) {
+            switch (employeePaySchedule) {
+                case 'weekly':
+                    helpText.textContent = 'For weekly employees: First = 1st week of month, Last = Last week of month';
+                    break;
+                case 'semi_monthly':
+                    helpText.textContent = 'Required for semi-monthly employees: First = 1st cutoff (1-15), Last = 2nd cutoff (16-31)';
+                    break;
+                case 'monthly':
+                    helpText.textContent = 'For monthly employees: Only one payroll per month';
+                    break;
+                default:
+                    helpText.textContent = 'Choose when to deduct during the month';
+            }
+        }
+    }
+
     function calculateInstallment() {
         const amount = parseFloat(document.getElementById('requested_amount').value) || 0;
-        const installments = parseInt(document.getElementById('installments').value) || 1;
+        const frequency = document.getElementById('deduction_frequency').value;
         const interestRate = parseFloat(document.getElementById('interest_rate').value) || 0;
         
+        let installments = 1;
+        let deductionLabel = 'Deduction';
+
+        if (frequency === 'monthly') {
+            installments = parseInt(document.getElementById('monthly_installments').value) || 1;
+            deductionLabel = 'Monthly Deduction';
+        } else {
+            installments = parseInt(document.getElementById('installments').value) || 1;
+            deductionLabel = 'Per-Payroll Deduction';
+        }
+        
         const interestAmount = (amount * interestRate / 100);
-        const totalAmount = amount; // Just the requested amount, no interest added
-        const monthlyDeduction = amount / installments; // Monthly deduction based on requested amount only
+        const totalAmount = amount + interestAmount;
+        const installmentAmount = totalAmount / installments;
         
         document.getElementById('interest-amount').textContent = '₱' + interestAmount.toFixed(2);
         document.getElementById('total-amount').textContent = '₱' + totalAmount.toFixed(2);
-        document.getElementById('monthly-deduction').textContent = '₱' + monthlyDeduction.toFixed(2);
+        document.getElementById('monthly-deduction').textContent = '₱' + installmentAmount.toFixed(2);
+        document.querySelector('#monthly-deduction').nextElementSibling.textContent = deductionLabel;
     }
 
-    // Load payroll periods for selected employee
-    async function loadEmployeePayrollPeriods() {
-        const employeeId = document.getElementById('employee_id').value;
-        const deductionPeriodSelect = document.getElementById('deduction_period');
-        const deductionDateInput = document.getElementById('first_deduction_date');
-        const payrollIdInput = document.getElementById('payroll_id');
-        
-        // Reset fields
-        deductionPeriodSelect.innerHTML = '<option value="">Loading...</option>';
-        deductionPeriodSelect.disabled = true;
-        deductionDateInput.value = '';
-        payrollIdInput.value = '';
-        
+    // Load employee pay schedule information
+    async function loadEmployeePaySchedule(employeeId) {
         if (!employeeId) {
-            deductionPeriodSelect.innerHTML = '<option value="">Select an employee first</option>';
+            employeePaySchedule = null;
             return;
         }
 
         try {
-            const response = await fetch('{{ route('cash-advances.employee-periods') }}', {
+            const response = await fetch('{{ route('cash-advances.employee-schedule') }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -237,29 +364,94 @@
             });
             const data = await response.json();
             
+            if (!data.error) {
+                employeePaySchedule = data.pay_schedule;
+                updateTimingHelpText();
+            }
+        } catch (error) {
+            console.error('Error loading employee pay schedule:', error);
+        }
+    }
+
+    // Load payroll periods for selected employee
+    async function loadEmployeePayrollPeriods() {
+        const employeeId = document.getElementById('employee_id').value;
+        const frequency = document.getElementById('deduction_frequency').value;
+        const startingPayrollSelect = document.getElementById('starting_payroll_period');
+        
+        // Reset fields
+        startingPayrollSelect.innerHTML = '<option value="">Loading...</option>';
+        startingPayrollSelect.disabled = true;
+        
+        if (!employeeId) {
+            startingPayrollSelect.innerHTML = '<option value="">Select an employee first</option>';
+            return;
+        }
+
+        // Load employee pay schedule first
+        await loadEmployeePaySchedule(employeeId);
+
+        // For semi-monthly employees with monthly frequency, require timing selection first
+        if (employeePaySchedule === 'semi_monthly' && frequency === 'monthly') {
+            const timing = document.getElementById('monthly_deduction_timing').value;
+            if (!timing) {
+                startingPayrollSelect.innerHTML = '<option value="">Select monthly timing first</option>';
+                startingPayrollSelect.disabled = true;
+                return;
+            }
+        }
+
+        // Prepare request body
+        const requestBody = {
+            employee_id: employeeId,
+            deduction_frequency: frequency
+        };
+
+        // Add timing for semi-monthly employees with monthly frequency
+        if (employeePaySchedule === 'semi_monthly' && frequency === 'monthly') {
+            requestBody.monthly_deduction_timing = document.getElementById('monthly_deduction_timing').value;
+        }
+
+        try {
+            const response = await fetch('{{ route('cash-advances.employee-periods') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify(requestBody)
+            });
+            const data = await response.json();
+            
             if (data.error) {
-                deductionPeriodSelect.innerHTML = '<option value="">Error loading periods</option>';
+                startingPayrollSelect.innerHTML = '<option value="">Error loading periods</option>';
                 return;
             }
             
-            deductionPeriodSelect.innerHTML = '<option value="">Select deduction period</option>';
+            startingPayrollSelect.innerHTML = '<option value="">Select starting payroll period</option>';
             
             if (data.periods && data.periods.length > 0) {
-                data.periods.forEach(period => {
+                data.periods.forEach((period) => {
                     const option = document.createElement('option');
                     option.value = period.value;
                     option.textContent = period.label;
-                    option.dataset.startDate = period.start_date;
-                    option.dataset.payrollId = period.payroll_id;
-                    deductionPeriodSelect.appendChild(option);
+                    option.title = period.description;
+                    
+                    // Auto-select the default option (current period)
+                    if (period.is_default) {
+                        option.selected = true;
+                    }
+                    
+                    startingPayrollSelect.appendChild(option);
                 });
-                deductionPeriodSelect.disabled = false;
+                
+                startingPayrollSelect.disabled = false;
             } else {
-                deductionPeriodSelect.innerHTML = '<option value="">No active payroll periods available</option>';
+                startingPayrollSelect.innerHTML = '<option value="">No payroll periods available</option>';
             }
         } catch (error) {
             console.error('Error loading payroll periods:', error);
-            deductionPeriodSelect.innerHTML = '<option value="">Error loading periods</option>';
+            startingPayrollSelect.innerHTML = '<option value="">Error loading periods</option>';
         }
     }
 
@@ -269,30 +461,12 @@
         const amountInput = document.getElementById('requested_amount');
         
         if (employeeId) {
-            // Simulate eligibility check - in real app, this would be an AJAX call
-            amountInput.max = 50000;
+            // Employee selected - enable calculation
             calculateInstallment();
-        } else {
-            amountInput.max = 0;
         }
+        // Remove max attribute manipulation - validation handled server-side
     }
     @endif
-
-    // Update deduction date and payroll ID based on selected period
-    function updateDeductionDate() {
-        const deductionPeriodSelect = document.getElementById('deduction_period');
-        const selectedOption = deductionPeriodSelect.options[deductionPeriodSelect.selectedIndex];
-        const deductionDateInput = document.getElementById('first_deduction_date');
-        const payrollIdInput = document.getElementById('payroll_id');
-        
-        if (selectedOption && selectedOption.dataset.startDate) {
-            deductionDateInput.value = selectedOption.dataset.startDate;
-            payrollIdInput.value = selectedOption.dataset.payrollId;
-        } else {
-            deductionDateInput.value = '';
-            payrollIdInput.value = '';
-        }
-    }
 
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
@@ -300,18 +474,44 @@
         // For employee users, load their payroll periods immediately
         document.getElementById('employee_id').value = '{{ $employee->id }}';
         loadEmployeePayrollPeriods();
-        calculateInstallment();
         @else
         checkEligibility();
         @endif
+        
+        // Set default values for old input
+        const frequency = '{{ old('deduction_frequency') }}';
+        if (frequency) {
+            document.getElementById('deduction_frequency').value = frequency;
+            toggleInstallmentFields();
+        }
+
+        calculateInstallment();
     });
+
+    // Reset starting payroll periods dropdown
+    function resetStartingPayrollPeriods() {
+        const startingPayrollSelect = document.getElementById('starting_payroll_period');
+        startingPayrollSelect.innerHTML = '<option value="">Select an employee and frequency first</option>';
+        startingPayrollSelect.disabled = true;
+    }
+
+    // Handle monthly timing change for semi-monthly employees
+    function onMonthlyTimingChange() {
+        const employeeId = document.getElementById('employee_id').value;
+        const timing = document.getElementById('monthly_deduction_timing').value;
+        
+        // For semi-monthly employees, load periods when timing is selected
+        if (employeeId && employeePaySchedule === 'semi_monthly' && timing) {
+            loadEmployeePayrollPeriods();
+        }
+    }
 
     // Form submission validation
     document.getElementById('cashAdvanceForm').addEventListener('submit', function(e) {
         const amount = parseFloat(document.getElementById('requested_amount').value);
         const reason = document.getElementById('reason').value.trim();
-        const installments = document.getElementById('installments').value;
-        const deductionPeriod = document.getElementById('deduction_period').value;
+        const frequency = document.getElementById('deduction_frequency').value;
+        const startingPayrollPeriod = document.getElementById('starting_payroll_period').value;
         
         if (!amount || amount < 100) {
             e.preventDefault();
@@ -319,15 +519,42 @@
             return false;
         }
         
-        if (!installments) {
+        if (!frequency) {
             e.preventDefault();
-            alert('Please select number of installments.');
+            alert('Please select deduction frequency.');
             return false;
         }
         
-        if (!deductionPeriod) {
+        // Check timing requirement for semi-monthly employees with monthly frequency
+        if (employeePaySchedule === 'semi_monthly' && frequency === 'monthly') {
+            const monthlyTiming = document.getElementById('monthly_deduction_timing').value;
+            if (!monthlyTiming) {
+                e.preventDefault();
+                alert('Please select monthly deduction timing for semi-monthly employees.');
+                return false;
+            }
+        }
+        
+        if (frequency === 'monthly') {
+            const monthlyInstallments = document.getElementById('monthly_installments').value;
+            
+            if (!monthlyInstallments) {
+                e.preventDefault();
+                alert('Please select number of monthly installments.');
+                return false;
+            }
+        } else {
+            const installments = document.getElementById('installments').value;
+            if (!installments) {
+                e.preventDefault();
+                alert('Please select number of installments.');
+                return false;
+            }
+        }
+        
+        if (!startingPayrollPeriod) {
             e.preventDefault();
-            alert('Please select a deduction period.');
+            alert('Please select a starting payroll period.');
             return false;
         }
         
