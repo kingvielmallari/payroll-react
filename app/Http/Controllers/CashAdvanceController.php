@@ -378,11 +378,16 @@ class CashAdvanceController extends Controller
                 $firstDeductionDate = now()->addDays($daysToAdd);
             }
 
+            // Determine installments value based on frequency
+            $installmentsValue = ($validated['deduction_frequency'] === 'monthly')
+                ? ($validated['monthly_installments'] ?? 1)
+                : ($validated['installments'] ?? 1);
+
             $cashAdvance = CashAdvance::create([
                 'employee_id' => $validated['employee_id'],
                 'reference_number' => CashAdvance::generateReferenceNumber(),
                 'requested_amount' => $validated['requested_amount'],
-                'installments' => $validated['installments'],
+                'installments' => $installmentsValue,
                 'monthly_installments' => $validated['monthly_installments'] ?? null,
                 'deduction_frequency' => $validated['deduction_frequency'],
                 'monthly_deduction_timing' => $validated['monthly_deduction_timing'] ?? null,
