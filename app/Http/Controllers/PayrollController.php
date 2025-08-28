@@ -301,12 +301,28 @@ class PayrollController extends Controller
                         $correctOvertimePay = $this->calculateCorrectOvertimePayFromSnapshot($snapshot);
                         $correctRestPay = $this->calculateCorrectRestPayFromSnapshot($snapshot);
 
-                        $basicPay = $snapshot->regular_pay ?? 0;
+                        // Calculate basic pay from breakdown data to match payroll view
+                        $basicPay = 0;
+                        if ($snapshot->basic_breakdown) {
+                            $basicBreakdown = is_string($snapshot->basic_breakdown) ?
+                                json_decode($snapshot->basic_breakdown, true) :
+                                $snapshot->basic_breakdown;
+                            if (is_array($basicBreakdown)) {
+                                foreach ($basicBreakdown as $type => $data) {
+                                    $basicPay += $data['amount'] ?? 0;
+                                }
+                            }
+                        } else {
+                            $basicPay = $snapshot->regular_pay ?? 0;
+                        }
+
                         $allowances = $snapshot->allowances_total ?? 0;
                         $bonuses = $snapshot->bonuses_total ?? 0;
-                        $grossPay = $snapshot->gross_pay ?? 0;
                         $deductions = $snapshot->total_deductions ?? 0;
-                        $netPay = $snapshot->net_pay ?? 0;
+
+                        // Calculate gross pay and net pay from corrected component values
+                        $grossPay = $basicPay + $correctHolidayPay + $correctRestPay + $correctOvertimePay + $allowances + $bonuses;
+                        $netPay = $grossPay - $deductions;
 
                         // Add to totals
                         $totalBasicExcel += $basicPay;
@@ -465,15 +481,31 @@ class PayrollController extends Controller
                 }
             } else {
                 foreach ($snapshots as $snapshot) {
-                    $basicPay = $snapshot->regular_pay ?? 0;
+                    // Calculate basic pay from breakdown data to match payroll view
+                    $basicPay = 0;
+                    if ($snapshot->basic_breakdown) {
+                        $basicBreakdown = is_string($snapshot->basic_breakdown) ?
+                            json_decode($snapshot->basic_breakdown, true) :
+                            $snapshot->basic_breakdown;
+                        if (is_array($basicBreakdown)) {
+                            foreach ($basicBreakdown as $type => $data) {
+                                $basicPay += $data['amount'] ?? 0;
+                            }
+                        }
+                    } else {
+                        $basicPay = $snapshot->regular_pay ?? 0;
+                    }
+
                     $holidayPay = $this->calculateCorrectHolidayPayFromSnapshot($snapshot);
                     $restPay = $this->calculateCorrectRestPayFromSnapshot($snapshot);
                     $overtimePay = $this->calculateCorrectOvertimePayFromSnapshot($snapshot);
                     $allowances = $snapshot->allowances_total ?? 0;
                     $bonuses = $snapshot->bonuses_total ?? 0;
-                    $grossPay = $snapshot->gross_pay ?? 0;
                     $deductions = $snapshot->total_deductions ?? 0;
-                    $netPay = $snapshot->net_pay ?? 0;
+
+                    // Calculate gross pay and net pay from corrected component values
+                    $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses;
+                    $netPay = $grossPay - $deductions;
 
                     $totalBasic += $basicPay;
                     $totalHoliday += $holidayPay;
@@ -2626,7 +2658,17 @@ class PayrollController extends Controller
     {
         $this->authorize('process payrolls');
 
+        Log::info("Process method called", [
+            'payroll_id' => $payroll->id,
+            'current_status' => $payroll->status,
+            'user_id' => Auth::id()
+        ]);
+
         if ($payroll->status !== 'draft') {
+            Log::warning("Attempted to process non-draft payroll", [
+                'payroll_id' => $payroll->id,
+                'status' => $payroll->status
+            ]);
             return redirect()->route('payrolls.show', $payroll)
                 ->with('error', 'Only draft payrolls can be processed.');
         }
@@ -2653,6 +2695,7 @@ class PayrollController extends Controller
 
             Log::info("Successfully processed payroll", [
                 'payroll_id' => $payroll->id,
+                'new_status' => $payroll->fresh()->status,
                 'snapshot_count' => $payroll->snapshots()->count()
             ]);
 
@@ -4812,6 +4855,16 @@ class PayrollController extends Controller
                 $roundedMinutes = round($actualMinutes);
                 $ratePerMinute = $hourlyRate / 60;
                 $regularPayAmount = $roundedMinutes * $ratePerMinute * $regularMultiplier;
+
+                // Calculate night differential regular hours pay separately
+                $nightDiffRegularPayAmount = 0;
+                $nightDiffRegularHours = $breakdown['night_diff_regular_hours'] ?? 0;
+                if ($nightDiffRegularHours > 0) {
+                    $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                    $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+                    $nightDiffRegularMinutes = round($nightDiffRegularHours * 60);
+                    $nightDiffRegularPayAmount = $nightDiffRegularMinutes * $ratePerMinute * $nightDiffMultiplier;
+                }
 
                 // Calculate overtime pay with night differential breakdown using PER-MINUTE precision
                 $overtimePayAmount = 0;

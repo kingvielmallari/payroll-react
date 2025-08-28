@@ -82,7 +82,21 @@
                     ->first();
                     
                 // Use snapshot values if available, otherwise fall back to detail values
-                $actualBasicPay = $employeeSnapshot ? $employeeSnapshot->regular_pay : $detail->regular_pay;
+                // Calculate basic pay from basic_breakdown JSON to match draft calculation
+                $actualBasicPay = 0;
+                if ($employeeSnapshot && $employeeSnapshot->basic_breakdown) {
+                    $basicBreakdown = is_string($employeeSnapshot->basic_breakdown) ? 
+                        json_decode($employeeSnapshot->basic_breakdown, true) : 
+                        $employeeSnapshot->basic_breakdown;
+                    if (is_array($basicBreakdown)) {
+                        foreach ($basicBreakdown as $type => $data) {
+                            $actualBasicPay += $data['amount'] ?? 0;
+                        }
+                    }
+                } else {
+                    // Fallback to raw value if no breakdown available
+                    $actualBasicPay = $employeeSnapshot ? $employeeSnapshot->regular_pay : $detail->regular_pay;
+                }
                 
                 // Calculate holiday pay from holiday_breakdown JSON (same logic as summary)
                 $actualHolidayPay = 0;

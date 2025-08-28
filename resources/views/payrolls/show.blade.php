@@ -476,13 +476,23 @@
                                                     'overtime_pay' => 0
                                                 ];
                                             } else {
-                                                // PROCESSING/APPROVED: Use stored static data from database
-                                                $payBreakdown = [
-                                                    'basic_pay' => $detail->regular_pay ?? 0, 
-                                                    'holiday_pay' => $detail->holiday_pay ?? 0,
-                                                    'rest_day_pay' => $detail->rest_day_pay ?? 0,
-                                                    'overtime_pay' => $detail->overtime_pay ?? 0
-                                                ];
+                                                // PROCESSING/APPROVED: Use stored data from snapshot first, fallback to database
+                                                if ($employeeSnapshot) {
+                                                    $payBreakdown = [
+                                                        'basic_pay' => $employeeSnapshot->regular_pay ?? 0, 
+                                                        'holiday_pay' => $employeeSnapshot->holiday_pay ?? 0,
+                                                        'rest_day_pay' => $employeeSnapshot->rest_day_pay ?? 0,
+                                                        'overtime_pay' => $employeeSnapshot->overtime_pay ?? 0
+                                                    ];
+                                                } else {
+                                                    // Fallback to database values
+                                                    $payBreakdown = [
+                                                        'basic_pay' => $detail->regular_pay ?? 0, 
+                                                        'holiday_pay' => $detail->holiday_pay ?? 0,
+                                                        'rest_day_pay' => $detail->rest_day_pay ?? 0,
+                                                        'overtime_pay' => $detail->overtime_pay ?? 0
+                                                    ];
+                                                }
                                             }
                                             
                                             // For draft mode, calculate basic pay from actual DTR data
@@ -2251,40 +2261,15 @@
                                                             // Always use the dynamic calculation for display hours
                                                             $displayRegularHours = $dynamicCalc['regular_hours'] ?? 0;
                                                             $displayOvertimeHours = $dynamicCalc['overtime_hours'] ?? 0;
+                                                            
+                                                            // FOR DTR SUMMARY: Always use dynamic calculation for night differential regular hours
+                                                            $nightDiffRegularHours = $dynamicCalc['night_diff_regular_hours'] ?? 0;
                                                         } else {
                                                             // Fallback for incomplete records
                                                             $displayRegularHours = $regularHours;
                                                             $displayOvertimeHours = $overtimeHours;
-                                                        }
-                                                    @endphp
-                                                    
-                                                    <div class="text-green-600 font-medium">
-                                                        {{ $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A' }} - {{ $regularPeriodEnd }}
-                                                        @if($displayRegularHours > 0)
-                                                            {{-- (regular hours period) --}}
-                                                        @endif
-                                                        ({{ number_format($displayRegularHours, 2) }}h)
-                                                    </div>
-                                                    
-                                                    {{-- Display Night Differential Regular Hours --}}
-                                                    @php
-                                                        // FOR DTR SUMMARY: Always use dynamic calculation for night differential regular hours
-                                                        $nightDiffRegularHours = 0;
-                                                        if ($timeLog->time_in && $timeLog->time_out && $timeLog->remarks !== 'Incomplete Time Record') {
-                                                            // Use the dynamic calculation we already performed above
-                                                            if (isset($dynamicCalc)) {
-                                                                $nightDiffRegularHours = $dynamicCalc['night_diff_regular_hours'] ?? 0;
-                                                            } else {
-                                                                // Calculate dynamic values on-the-fly for DTR display
-                                                                $controller = app(App\Http\Controllers\PayrollController::class);
-                                                                $reflection = new ReflectionClass($controller);
-                                                                $method = $reflection->getMethod('calculateTimeLogHoursDynamically');
-                                                                $method->setAccessible(true);
-                                                                $tempDynamicCalc = $method->invoke($controller, $timeLog);
-                                                                $nightDiffRegularHours = $tempDynamicCalc['night_diff_regular_hours'] ?? 0;
-                                                            }
-                                                        } else {
-                                                            // Fallback for incomplete records
+                                                            
+                                                            // Fallback for night differential regular hours
                                                             if ($payroll->status === 'draft') {
                                                                 $nightDiffRegularHours = $timeLog->dynamic_night_diff_regular_hours ?? 0;
                                                             } else {
@@ -2292,6 +2277,37 @@
                                                             }
                                                         }
                                                     @endphp
+                                                    
+                                                    <div class="text-green-600 font-medium">
+                                                        @php
+                                                            // FOR DTR SUMMARY: Display actual time periods based on employee's time in/out and ND boundaries
+                                                            $regularStart = $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A';
+                                                            $regularEnd = '';
+                                                            
+                                                            if ($timeLog->time_in && $timeLog->time_out) {
+                                                                // Get night differential settings to determine where regular hours end
+                                                                $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                                                                
+                                                                if ($nightDiffSetting && $nightDiffSetting->is_active && $nightDiffRegularHours > 0) {
+                                                                    // If employee works into ND period, regular hours end at ND start
+                                                                    $nightStart = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $nightDiffSetting->start_time);
+                                                                    $regularEnd = $nightStart->format('g:i A');
+                                                                } else {
+                                                                    // If no ND hours, regular period goes to employee's time out
+                                                                    $regularEnd = \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A');
+                                                                }
+                                                            } else {
+                                                                $regularEnd = $regularPeriodEnd;
+                                                            }
+                                                        @endphp
+                                                        {{ $regularStart }} - {{ $regularEnd }}
+                                                        @if($displayRegularHours > 0)
+                                                            {{-- (regular hours period) --}}
+                                                        @endif
+                                                        ({{ number_format($displayRegularHours, 2) }}h)
+                                                    </div>
+                                                    
+                                                    {{-- Display Night Differential Regular Hours --}}
                                                     @if($nightDiffRegularHours > 0)
                                                     @php
                                                         // Calculate night differential regular hours period
@@ -2347,7 +2363,22 @@
                                                     @endphp
                                                     @if($nightRegularStart && $nightRegularEnd)
                                                     <div class="text-blue-600 text-xs">
-                                                        {{ $nightRegularStart }} - {{ $nightRegularEnd }} ({{ number_format($nightDiffRegularHours, 2) }}h)
+                                                        @php
+                                                            // FOR DTR SUMMARY: Display actual ND period from ND start to employee time out
+                                                            $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                                                            $actualNDStart = '';
+                                                            $actualNDEnd = '';
+                                                            
+                                                            if ($nightDiffSetting && $nightDiffSetting->is_active && $timeLog->time_out) {
+                                                                $nightStart = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $nightDiffSetting->start_time);
+                                                                $actualNDStart = $nightStart->format('g:i A');
+                                                                $actualNDEnd = \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A');
+                                                            } else {
+                                                                $actualNDStart = $nightRegularStart;
+                                                                $actualNDEnd = $nightRegularEnd;
+                                                            }
+                                                        @endphp
+                                                        {{ $actualNDStart }} - {{ $actualNDEnd }} ({{ number_format($nightDiffRegularHours, 2) }}h)
                                                     </div>
                                                     {{-- <div class="text-blue-600 text-xs">
                                                         Regular Workday + ND
