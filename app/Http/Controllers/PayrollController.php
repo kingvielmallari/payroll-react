@@ -7,6 +7,8 @@ use App\Models\PayrollDetail;
 use App\Models\Employee;
 use App\Models\TimeLog;
 use App\Models\PayScheduleSetting;
+use App\Models\CashAdvance;
+use App\Models\CashAdvancePayment;
 use App\Http\Controllers\TimeLogController;
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -1214,10 +1216,14 @@ class PayrollController extends Controller
         $lateDeductions = $this->calculateLateDeductions($employee, $lateHours);
         $undertimeDeductions = $this->calculateUndertimeDeductions($employee, $undertimeHours);
 
+        // Calculate cash advance deductions for this period
+        $cashAdvanceData = CashAdvance::calculateDeductionForPeriod($employee->id, $periodStart, $periodEnd);
+        $cashAdvanceDeductions = $cashAdvanceData['total'];
+
         // Calculate deductions using dynamic settings
         $deductions = $this->calculateDeductions($employee, $totalGrossPay, $basicSalary, $overtimePay, $allowancesTotal, $bonusesTotal);
 
-        $netPay = $totalGrossPay - $deductions['total'] - $lateDeductions - $undertimeDeductions;
+        $netPay = $totalGrossPay - $deductions['total'] - $lateDeductions - $undertimeDeductions - $cashAdvanceDeductions;
 
         return [
             'basic_salary' => $basicSalary,  // Employee's base salary
@@ -1236,7 +1242,7 @@ class PayrollController extends Controller
             'pagibig_deduction' => $deductions['pagibig'],
             'other_deductions' => $deductions['other'],
             'deductions_details' => $deductions['details'],
-            'total_deductions' => $deductions['total'],
+            'total_deductions' => $deductions['total'] + $lateDeductions + $undertimeDeductions + $cashAdvanceDeductions,
             'net_pay' => $netPay,
             'hours_worked' => $hoursWorked,
             'days_worked' => $daysWorked,
@@ -1248,7 +1254,8 @@ class PayrollController extends Controller
             'undertime_hours' => $undertimeHours,
             'late_deductions' => $lateDeductions,
             'undertime_deductions' => $undertimeDeductions,
-            'cash_advance_deductions' => 0,  // TODO: Get from cash advances
+            'cash_advance_deductions' => $cashAdvanceDeductions,
+            'cash_advance_details' => $cashAdvanceData['details'],
         ];
     }
 
@@ -3136,7 +3143,7 @@ class PayrollController extends Controller
     {
         try {
             // Get active cash advances for this employee that should start deduction
-            $cashAdvances = \App\Models\CashAdvance::where('employee_id', $employee->id)
+            $cashAdvances = CashAdvance::where('employee_id', $employee->id)
                 ->where('status', 'approved')
                 ->where('outstanding_balance', '>', 0)
                 ->get();
@@ -3174,7 +3181,7 @@ class PayrollController extends Controller
     /**
      * Check if a cash advance should be deducted in this payroll period
      */
-    private function shouldDeductCashAdvance(\App\Models\CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
+    private function shouldDeductCashAdvance(CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
     {
         // Check if enough payroll periods have passed since the cash advance was approved
         if (!$this->hasReachedStartingPayrollPeriod($cashAdvance, $employee, $payroll)) {
@@ -3203,30 +3210,39 @@ class PayrollController extends Controller
     /**
      * Check if enough payroll periods have passed to start deductions
      */
-    private function hasReachedStartingPayrollPeriod(\App\Models\CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
+    private function hasReachedStartingPayrollPeriod(CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
     {
         // If no starting_payroll_period is set, use the old logic
         if (!$cashAdvance->starting_payroll_period) {
             return true; // Default to allowing deductions
         }
 
+        // Special case: If starting_payroll_period is 1 (current), 
+        // allow deduction immediately once approved
+        if ($cashAdvance->starting_payroll_period == 1) {
+            return true;
+        }
+
         // Get the approval date of the cash advance
         $approvalDate = $cashAdvance->approved_date ?? $cashAdvance->requested_date;
 
         // Count how many payroll periods have occurred since approval for this employee
-        $payrollsSinceApproval = \App\Models\Payroll::where('employee_id', $employee->id)
-            ->where('pay_period_start', '>=', $approvalDate)
-            ->where('pay_period_start', '<=', $payroll->pay_period_start)
+        $payrollsSinceApproval = \App\Models\Payroll::whereHas('payrollDetails', function ($query) use ($employee) {
+            $query->where('employee_id', $employee->id);
+        })
+            ->where('period_start', '>', $approvalDate)
+            ->where('period_start', '<=', $payroll->period_start)
             ->count();
 
         // Check if we've reached the starting payroll period
         // (starting_payroll_period: 1=current, 2=next, 3=2nd next, 4=3rd next)
-        return $payrollsSinceApproval >= $cashAdvance->starting_payroll_period;
+        // For periods > 1, we need to skip (starting_payroll_period - 1) periods
+        return $payrollsSinceApproval >= ($cashAdvance->starting_payroll_period - 1);
     }
     /**
      * Check if this is the correct payroll for monthly cash advance deduction
      */
-    private function isCorrectMonthlyPayrollForDeduction(\App\Models\CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
+    private function isCorrectMonthlyPayrollForDeduction(CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
     {
         $payPeriodEnd = Carbon::parse($payroll->pay_period_end);
         $payPeriodStart = Carbon::parse($payroll->pay_period_start);
@@ -3265,7 +3281,7 @@ class PayrollController extends Controller
     /**
      * Calculate the deduction amount for a cash advance
      */
-    private function calculateCashAdvanceDeductionAmount(\App\Models\CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
+    private function calculateCashAdvanceDeductionAmount(CashAdvance $cashAdvance, Employee $employee, Payroll $payroll)
     {
         if ($cashAdvance->deduction_frequency === 'monthly') {
             // For monthly deductions, use total amount divided by monthly installments
@@ -7564,30 +7580,33 @@ class PayrollController extends Controller
     {
         foreach ($payroll->payrollDetails as $detail) {
             if ($detail->cash_advance_deductions > 0) {
-                // Find approved cash advances for this employee
-                $activeCashAdvances = \App\Models\CashAdvance::where('employee_id', $detail->employee_id)
-                    ->where('status', 'approved')
-                    ->where('outstanding_balance', '>', 0)
-                    ->get();
+                // Get the cash advance calculation for this employee and period
+                $cashAdvanceData = CashAdvance::calculateDeductionForPeriod(
+                    $detail->employee_id,
+                    $payroll->period_start,
+                    $payroll->period_end
+                );
 
                 $remainingDeduction = $detail->cash_advance_deductions;
 
-                foreach ($activeCashAdvances as $cashAdvance) {
+                foreach ($cashAdvanceData['details'] as $deductionDetail) {
                     if ($remainingDeduction <= 0) break;
 
-                    // Calculate deduction for this cash advance
-                    $installmentAmount = $cashAdvance->total_amount / $cashAdvance->installments;
-                    $deductionAmount = min($installmentAmount, $cashAdvance->outstanding_balance, $remainingDeduction);
+                    $cashAdvance = CashAdvance::find($deductionDetail['cash_advance_id']);
+                    if ($cashAdvance) {
+                        $deductionAmount = min($deductionDetail['amount'], $remainingDeduction);
 
-                    if ($deductionAmount > 0) {
-                        // Record the payment
-                        $cashAdvance->recordPayment(
-                            $deductionAmount,
-                            $payroll->id,
-                            $detail->id
-                        );
+                        if ($deductionAmount > 0) {
+                            // Record the payment
+                            $cashAdvance->recordPayment(
+                                $deductionAmount,
+                                $payroll->id,
+                                $detail->id,
+                                'Payroll deduction for period ' . $payroll->period_start->format('M d') . ' - ' . $payroll->period_end->format('d, Y')
+                            );
 
-                        $remainingDeduction -= $deductionAmount;
+                            $remainingDeduction -= $deductionAmount;
+                        }
                     }
                 }
             }
@@ -7600,13 +7619,13 @@ class PayrollController extends Controller
     private function reverseCashAdvanceDeductions(Payroll $payroll)
     {
         // Find and reverse payments made from this payroll
-        $payments = \App\Models\CashAdvancePayment::where('payroll_id', $payroll->id)->get();
+        $payments = CashAdvancePayment::where('payroll_id', $payroll->id)->get();
 
         foreach ($payments as $payment) {
             $cashAdvance = $payment->cashAdvance;
             if ($cashAdvance) {
                 // Restore the outstanding balance
-                $cashAdvance->increment('outstanding_balance', $payment->amount);
+                $cashAdvance->increment('outstanding_balance', $payment->payment_amount ?? $payment->amount);
 
                 // If cash advance was marked as completed, revert to approved
                 if ($cashAdvance->status === 'completed' && $cashAdvance->outstanding_balance > 0) {

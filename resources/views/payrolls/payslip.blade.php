@@ -147,19 +147,40 @@
                 $actualAllowances = $detail->allowances ?? 0;
                 $actualBonuses = $detail->bonuses ?? 0;
                 
-                // Calculate total deductions (same logic as display section)
+                // Calculate total deductions (same logic as payroll show view)
                 $calculatedDeductionTotal = 0;
-                if($employeeSnapshot && isset($employeeSnapshot->deductions_breakdown) && is_array($employeeSnapshot->deductions_breakdown)) {
-                    foreach ($employeeSnapshot->deductions_breakdown as $deductionData) {
-                        $calculatedDeductionTotal += $deductionData['amount'] ?? 0;
+                $hasBreakdown = false;
+                
+                // Use the same conditional logic as the payroll view to avoid double-counting
+                if(isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown) && !empty($detail->deduction_breakdown)) {
+                    // Use detail breakdown if available
+                    $hasBreakdown = true;
+                    foreach($detail->deduction_breakdown as $code => $deductionData) {
+                        $amount = $deductionData['amount'] ?? $deductionData;
+                        $calculatedDeductionTotal += $amount;
                     }
+                } elseif($employeeSnapshot && isset($employeeSnapshot->deductions_breakdown) && $employeeSnapshot->deductions_breakdown) {
+                    // Use employee snapshot breakdown if available (handle both array and JSON string)
+                    $hasBreakdown = true;
+                    $deductionsBreakdown = is_string($employeeSnapshot->deductions_breakdown) 
+                        ? json_decode($employeeSnapshot->deductions_breakdown, true) 
+                        : $employeeSnapshot->deductions_breakdown;
+                    
+                    if (is_array($deductionsBreakdown)) {
+                        foreach ($deductionsBreakdown as $code => $deductionData) {
+                            $amount = $deductionData['amount'] ?? $deductionData;
+                            $calculatedDeductionTotal += $amount;
+                        }
+                    }
+                } else {
+                    // Fallback to individual fields
+                    $calculatedDeductionTotal += $detail->sss_contribution ?? 0;
+                    $calculatedDeductionTotal += $detail->philhealth_contribution ?? 0;
+                    $calculatedDeductionTotal += $detail->pagibig_contribution ?? 0;
+                    $calculatedDeductionTotal += $detail->withholding_tax ?? 0;
+                    $calculatedDeductionTotal += $detail->cash_advance_deductions ?? 0;
+                    $calculatedDeductionTotal += $detail->other_deductions ?? 0;
                 }
-                $calculatedDeductionTotal += $detail->sss_contribution ?? 0;
-                $calculatedDeductionTotal += $detail->philhealth_contribution ?? 0;
-                $calculatedDeductionTotal += $detail->pagibig_contribution ?? 0;
-                $calculatedDeductionTotal += $detail->withholding_tax ?? 0;
-                $calculatedDeductionTotal += $detail->cash_advance_deductions ?? 0;
-                $calculatedDeductionTotal += $detail->other_deductions ?? 0;
                 
                 // Use fallback to stored total if calculated is 0
                 $actualTotalDeductions = $calculatedDeductionTotal > 0 ? $calculatedDeductionTotal : ($detail->total_deductions ?? 0);

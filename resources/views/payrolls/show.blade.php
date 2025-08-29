@@ -466,7 +466,7 @@
                         @endif
                         @endcan
 
-                        @can('delete payrolls')
+                        {{-- @can('delete payrolls')
                         @if(!($payroll->payroll_type === 'automated' && in_array($payroll->status, ['draft', 'processing'])) && ($payroll->canBeEdited() || ($payroll->status === 'approved' && auth()->user()->can('delete approved payrolls'))))
                         <form method="POST" action="{{ route('payrolls.destroy', $payroll) }}" class="inline">
                             @csrf
@@ -481,7 +481,7 @@
                             </button>
                         </form>
                         @endif
-                        @endcan
+                        @endcan --}}
                     </div>
                 </div>
             </div>
@@ -1582,9 +1582,18 @@
                                                             <span>₱{{ number_format($calculatedAmount, 2) }}</span>
                                                         </div>
                                                     @endforeach
+                                                    
+                                                    <!-- Show Cash Advance Deductions for Dynamic Payroll -->
+                                                    @if($detail->cash_advance_deductions > 0)
+                                                        @php $calculatedDeductionTotal += $detail->cash_advance_deductions; @endphp
+                                                        <div class="text-xs text-gray-500">
+                                                            <span>CA:</span>
+                                                            <span>₱{{ number_format($detail->cash_advance_deductions, 2) }}</span>
+                                                        </div>
+                                                    @endif
                                                 @elseif(!isset($isDynamic) || !$isDynamic || $deductionSettings->isEmpty())
                                                     @php $hasBreakdown = true; @endphp
-                                                    <!-- Show Traditional Breakdown for snapshot/non-dynamic payrolls -->
+                                                    <!-- Show Traditional Breakdown for snapshot/non-dynamic payrolls or when no deduction settings -->
                                                     @if($detail->sss_contribution > 0)
                                                         @php $calculatedDeductionTotal += $detail->sss_contribution; @endphp
                                                         <div class="text-xs text-gray-500">
@@ -1829,17 +1838,33 @@
                                             // This ensures Net Pay breakdown shows SAME gross amount as Gross Pay column
                                             $calculatedGrossPayForNet = $calculatedGrossPay; // Use the SAME gross calculation from Gross Pay column
                                             
-                                            // For processing/approved payrolls with snapshots, use the snapshot deduction total
+                                            // For processing/approved payrolls with snapshots, use the EXACT SAME logic as deduction column
                                             if (!isset($isDynamic) || !$isDynamic) {
-                                                // Use snapshot data - same logic as deduction column
-                                                if (isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown)) {
+                                                // Use snapshot data - EXACT SAME logic as deduction column
+                                                if (isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown) && !empty($detail->deduction_breakdown)) {
                                                     // Sum up snapshot breakdown amounts
                                                     foreach ($detail->deduction_breakdown as $deduction) {
                                                         $detailDeductionTotal += $deduction['amount'] ?? 0;
                                                     }
+                                                } elseif($employeeSnapshot && $employeeSnapshot->deductions_breakdown) {
+                                                    // Use employee snapshot breakdown
+                                                    $deductionsBreakdown = is_string($employeeSnapshot->deductions_breakdown) 
+                                                        ? json_decode($employeeSnapshot->deductions_breakdown, true) 
+                                                        : $employeeSnapshot->deductions_breakdown;
+                                                    if (is_array($deductionsBreakdown)) {
+                                                        foreach($deductionsBreakdown as $code => $deductionData) {
+                                                            $amount = $deductionData['amount'] ?? $deductionData;
+                                                            $detailDeductionTotal += $amount;
+                                                        }
+                                                    }
                                                 } else {
-                                                    // Fallback to stored values
-                                                    $detailDeductionTotal = $detail->total_deductions ?? 0;
+                                                    // Fallback to individual fields - SAME as deduction column
+                                                    $detailDeductionTotal += $detail->sss_contribution ?? 0;
+                                                    $detailDeductionTotal += $detail->philhealth_contribution ?? 0;
+                                                    $detailDeductionTotal += $detail->pagibig_contribution ?? 0;
+                                                    $detailDeductionTotal += $detail->withholding_tax ?? 0;
+                                                    $detailDeductionTotal += $detail->cash_advance_deductions ?? 0;
+                                                    $detailDeductionTotal += $detail->other_deductions ?? 0;
                                                 }
                                             } elseif(isset($isDynamic) && $isDynamic && isset($deductionSettings) && $deductionSettings->isNotEmpty()) {
                                                 // Use dynamic calculation with SAME variables as deduction column
@@ -1860,9 +1885,16 @@
                                                     );
                                                     $detailDeductionTotal += $calculatedAmount;
                                                 }
+                                                // Add cash advance deductions for dynamic payrolls
+                                                $detailDeductionTotal += $detail->cash_advance_deductions ?? 0;
                                             } else {
-                                                // Use stored values for non-dynamic payrolls (excluding late/undertime as they're already accounted for in hours)
-                                                $detailDeductionTotal = $detail->sss_contribution + $detail->philhealth_contribution + $detail->pagibig_contribution + $detail->withholding_tax + $detail->cash_advance_deductions + $detail->other_deductions;
+                                                // Use stored values for non-dynamic payrolls - EXACT SAME logic as deduction column
+                                                $detailDeductionTotal += $detail->sss_contribution ?? 0;
+                                                $detailDeductionTotal += $detail->philhealth_contribution ?? 0;
+                                                $detailDeductionTotal += $detail->pagibig_contribution ?? 0;
+                                                $detailDeductionTotal += $detail->withholding_tax ?? 0;
+                                                $detailDeductionTotal += $detail->cash_advance_deductions ?? 0;
+                                                $detailDeductionTotal += $detail->other_deductions ?? 0;
                                             }
                                             
                                             $calculatedNetPay = $calculatedGrossPayForNet - $detailDeductionTotal;

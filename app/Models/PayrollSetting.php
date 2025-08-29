@@ -73,7 +73,7 @@ class PayrollSetting extends Model
     public function calculatePayrollPeriods($year, $month)
     {
         $periods = [];
-        
+
         switch ($this->payroll_frequency) {
             case 'semi_monthly':
                 $periods = $this->calculateSemiMonthlyPeriods($year, $month);
@@ -278,11 +278,11 @@ class PayrollSetting extends Model
     {
         $periods = [];
         $currentDate = Carbon::now();
-        
+
         for ($i = 0; $i < $months; $i++) {
             $targetDate = $currentDate->copy()->addMonths($i);
             $monthPeriods = $this->calculatePayrollPeriods($targetDate->year, $targetDate->month);
-            
+
             foreach ($monthPeriods as $period) {
                 $periods[] = [
                     'label' => $period['period_name'],
@@ -293,7 +293,15 @@ class PayrollSetting extends Model
                 ];
             }
         }
-        
+
         return $periods;
+    }
+
+    /**
+     * Get the default/active payroll setting
+     */
+    public static function getDefault()
+    {
+        return static::where('is_active', true)->first() ?? static::first();
     }
 }

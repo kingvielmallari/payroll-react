@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CashAdvance;
 use App\Models\Employee;
+use App\Models\PayrollSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -154,11 +155,9 @@ class CashAdvanceController extends Controller
         for ($i = 0; $i < $count; $i++) {
             $periodData = $this->calculatePayrollPeriodForOffset($scheduleSetting, $currentDate, $i, $monthlyTiming, $deductionFrequency);
 
-            $label = $i === 0 ? 'Current' : ($i === 1 ? '2nd' : '3rd');
-
             $periods[] = [
                 'value' => $i + 1,
-                'label' => "{$periodData['display']} ({$label})",
+                'label' => $periodData['display'],
                 'description' => "Pay period: {$periodData['display']}",
                 'is_default' => $i === 0
             ];
@@ -348,6 +347,13 @@ class CashAdvanceController extends Controller
 
         $validated = $request->validate($validationRules);
 
+        // Clean up monthly_deduction_timing - convert empty string to null for per_payroll frequency
+        if ($validated['deduction_frequency'] === 'per_payroll') {
+            $validated['monthly_deduction_timing'] = null;
+        } elseif (isset($validated['monthly_deduction_timing']) && $validated['monthly_deduction_timing'] === '') {
+            $validated['monthly_deduction_timing'] = null;
+        }
+
         // Additional validation for employee users
         if (Auth::user()->hasRole('employee')) {
             $employee = Auth::user()->employee;
@@ -370,13 +376,20 @@ class CashAdvanceController extends Controller
             DB::beginTransaction();
 
             // Calculate first deduction date based on starting payroll period
-            // This is just for reference, actual deduction logic uses starting_payroll_period
-            $firstDeductionDate = now();
-            if ($validated['starting_payroll_period'] > 1) {
-                // Add some estimated time for delayed periods (this is just for display)
-                $daysToAdd = ($validated['starting_payroll_period'] - 1) * 14; // Rough estimate
-                $firstDeductionDate = now()->addDays($daysToAdd);
-            }
+            // Get the actual payroll period dates for the selected starting period
+            $employee = Employee::findOrFail($validated['employee_id']);
+            $payrollSetting = PayrollSetting::getDefault();
+
+            $monthlyTiming = $validated['monthly_deduction_timing'] ?? null;
+            $deductionFrequency = $validated['deduction_frequency'];
+
+            // Calculate the actual payroll period for the selected starting period
+            $periodOffset = $validated['starting_payroll_period'] - 1; // Convert to 0-based offset
+
+            // Use the SAME calculation that generates the dropdown options
+            $periodData = $this->calculatePayrollPeriodForOffset($payrollSetting, \Carbon\Carbon::now(), $periodOffset, $monthlyTiming, $deductionFrequency);
+            $firstDeductionDate = $periodData['start'];
+            $firstDeductionPeriodEnd = $periodData['end'];
 
             // Determine installments value based on frequency
             $installmentsValue = ($validated['deduction_frequency'] === 'monthly')
@@ -390,12 +403,14 @@ class CashAdvanceController extends Controller
                 'installments' => $installmentsValue,
                 'monthly_installments' => $validated['monthly_installments'] ?? null,
                 'deduction_frequency' => $validated['deduction_frequency'],
-                'monthly_deduction_timing' => $validated['monthly_deduction_timing'] ?? null,
+                'monthly_deduction_timing' => $validated['deduction_frequency'] === 'monthly' ? ($validated['monthly_deduction_timing'] ?? null) : null,
                 'starting_payroll_period' => $validated['starting_payroll_period'],
                 'interest_rate' => $validated['interest_rate'] ?? 0,
                 'reason' => $validated['reason'],
                 'requested_date' => now(),
                 'first_deduction_date' => $firstDeductionDate,
+                'first_deduction_period_start' => $periodData['start'],
+                'first_deduction_period_end' => $periodData['end'],
                 'payroll_id' => null, // No longer tied to specific payroll
                 'requested_by' => Auth::id(),
                 'status' => 'pending',
@@ -494,8 +509,8 @@ class CashAdvanceController extends Controller
 
         $cashAdvance->reject($validated['remarks'], Auth::id());
 
-        return redirect()->route('cash-advances.show', $cashAdvance)
-            ->with('success', 'Cash advance rejected.');
+        return redirect()->route('cash-advances.index')
+            ->with('success', 'Cash advance rejected successfully.');
     }
 
     /**

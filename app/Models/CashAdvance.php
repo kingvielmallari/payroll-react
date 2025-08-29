@@ -31,6 +31,8 @@ class CashAdvance extends Model
         'requested_date',
         'approved_date',
         'first_deduction_date',
+        'first_deduction_period_start',
+        'first_deduction_period_end',
         'starting_payroll_period',
         'deduction_frequency',
         'monthly_deduction_timing',
@@ -49,6 +51,8 @@ class CashAdvance extends Model
         'requested_date' => 'date',
         'approved_date' => 'date',
         'first_deduction_date' => 'date',
+        'first_deduction_period_start' => 'date',
+        'first_deduction_period_end' => 'date',
     ];
 
     protected $attributes = [
@@ -366,6 +370,8 @@ class CashAdvance extends Model
             'payroll_id' => $payrollId,
             'payroll_detail_id' => $payrollDetailId,
             'amount' => $paymentAmount,
+            'payment_amount' => $paymentAmount,
+            'remaining_balance' => $this->outstanding_balance - $paymentAmount,
             'payment_date' => now(),
             'notes' => $notes,
         ]);
@@ -382,5 +388,180 @@ class CashAdvance extends Model
         $this->save();
 
         return $payment;
+    }
+
+    /**
+     * Reject the cash advance
+     */
+    public function reject($remarks, $rejectedById)
+    {
+        $this->status = 'rejected';
+        $this->approved_by = $rejectedById;
+        $this->approved_date = now();
+        $this->remarks = $remarks;
+
+        $this->save();
+
+        return true;
+    }
+
+    /**
+     * Get the first deduction period as a formatted string (e.g., "Aug 16 - 31, 2025")
+     */
+    public function getFirstDeductionPeriodAttribute()
+    {
+        // If both start and end dates are stored, use them directly
+        if ($this->first_deduction_period_start && $this->first_deduction_period_end) {
+            $startDate = \Carbon\Carbon::parse($this->first_deduction_period_start);
+            $endDate = \Carbon\Carbon::parse($this->first_deduction_period_end);
+            return $startDate->format('M d') . ' - ' . $endDate->format('d, Y');
+        }
+
+        // Fallback to first_deduction_date if available
+        if ($this->first_deduction_date) {
+            return \Carbon\Carbon::parse($this->first_deduction_date)->format('M d, Y');
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the deduction period display text (e.g., "Current Payroll Period", "Next Payroll Period")
+     */
+    public function getDeductionPeriodDisplayAttribute()
+    {
+        $periodNumber = $this->starting_payroll_period ?? 1;
+
+        switch ($periodNumber) {
+            case 1:
+                return 'Current Payroll Period';
+            case 2:
+                return 'Next Payroll Period';
+            case 3:
+                return '3rd Payroll Period';
+            case 4:
+                return '3rd Next Payroll Period';
+            default:
+                return 'Payroll Period ' . $periodNumber;
+        }
+    }
+
+    /**
+     * Calculate cash advance deduction for a specific employee and payroll period
+     */
+    public static function calculateDeductionForPeriod($employeeId, $periodStart, $periodEnd)
+    {
+        // Find approved cash advances for this employee that should have deductions in this period
+        $cashAdvances = self::where('employee_id', $employeeId)
+            ->where('status', 'approved')
+            ->where('outstanding_balance', '>', 0)
+            ->get();
+
+        $totalDeduction = 0;
+        $deductionDetails = [];
+
+        foreach ($cashAdvances as $cashAdvance) {
+            // Check if this payroll period should have a deduction for this cash advance
+            if (!self::shouldDeductInPeriod($cashAdvance, $periodStart, $periodEnd)) {
+                continue;
+            }
+
+            // Calculate installment amount based on deduction frequency
+            $installmentAmount = 0;
+
+            if ($cashAdvance->deduction_frequency === 'monthly') {
+                // For monthly deductions, use monthly installment amount
+                $installmentAmount = $cashAdvance->total_amount / $cashAdvance->monthly_installments;
+            } else {
+                // For per-payroll deductions, use regular installment amount
+                $installmentAmount = $cashAdvance->total_amount / $cashAdvance->installments;
+            }
+
+            // Don't exceed outstanding balance
+            $deductionAmount = min($installmentAmount, $cashAdvance->outstanding_balance);
+
+            if ($deductionAmount > 0) {
+                $totalDeduction += $deductionAmount;
+                $deductionDetails[] = [
+                    'cash_advance_id' => $cashAdvance->id,
+                    'reference_number' => $cashAdvance->reference_number,
+                    'amount' => $deductionAmount,
+                    'outstanding_balance' => $cashAdvance->outstanding_balance,
+                ];
+            }
+        }
+
+        return [
+            'total' => $totalDeduction,
+            'details' => $deductionDetails,
+        ];
+    }
+
+    /**
+     * Determine if a cash advance should have a deduction in the given payroll period
+     */
+    private static function shouldDeductInPeriod($cashAdvance, $periodStart, $periodEnd)
+    {
+        // Convert dates to Carbon instances for easier comparison
+        $periodStart = \Carbon\Carbon::parse($periodStart);
+        $periodEnd = \Carbon\Carbon::parse($periodEnd);
+        $firstDeductionStart = \Carbon\Carbon::parse($cashAdvance->first_deduction_period_start);
+        $firstDeductionEnd = \Carbon\Carbon::parse($cashAdvance->first_deduction_period_end);
+
+        // Check if this payroll period matches the first deduction period exactly
+        if ($periodStart->equalTo($firstDeductionStart) && $periodEnd->equalTo($firstDeductionEnd)) {
+            return true;
+        }
+
+        // For subsequent periods, calculate based on deduction frequency
+        if ($cashAdvance->deduction_frequency === 'monthly') {
+            // For monthly deductions, check if this is the correct month and timing
+            return self::shouldDeductMonthly($cashAdvance, $periodStart, $periodEnd, $firstDeductionStart, $firstDeductionEnd);
+        } else {
+            // For per-payroll deductions, check if this is the next payroll period in sequence
+            return self::shouldDeductPerPayroll($cashAdvance, $periodStart, $periodEnd, $firstDeductionStart, $firstDeductionEnd);
+        }
+    }
+
+    /**
+     * Check if monthly deduction should occur in this period
+     */
+    private static function shouldDeductMonthly($cashAdvance, $periodStart, $periodEnd, $firstDeductionStart, $firstDeductionEnd)
+    {
+        // For monthly deductions, we need to check if:
+        // 1. This period matches the timing (1st or 2nd cutoff based on monthly_deduction_timing)
+        // 2. This is a month where deduction should occur (starting from first deduction month)
+
+        $monthsBetween = $firstDeductionStart->diffInMonths($periodStart);
+
+        // Check if we've already started deductions (period is same or after first deduction)
+        if ($periodStart->lt($firstDeductionStart)) {
+            return false;
+        }
+
+        // For semi-monthly employees with monthly deduction
+        if ($cashAdvance->monthly_deduction_timing) {
+            $is1stCutoff = $periodStart->day <= 15;
+            $is2ndCutoff = $periodStart->day >= 16;
+
+            if ($cashAdvance->monthly_deduction_timing === 'first_payroll' && !$is1stCutoff) {
+                return false;
+            }
+
+            if ($cashAdvance->monthly_deduction_timing === 'last_payroll' && !$is2ndCutoff) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if per-payroll deduction should occur in this period
+     */
+    private static function shouldDeductPerPayroll($cashAdvance, $periodStart, $periodEnd, $firstDeductionStart, $firstDeductionEnd)
+    {
+        // For per-payroll deductions, deduct from every payroll period starting from the first deduction period
+        return $periodStart->gte($firstDeductionStart);
     }
 }

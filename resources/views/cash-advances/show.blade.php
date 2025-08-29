@@ -167,6 +167,47 @@
                                     <p class="text-sm text-gray-800">{{ $cashAdvance->reason }}</p>
                                 </div>
                             </div>
+
+                            @if($cashAdvance->installments)
+                            <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                                <h6 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                    <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    Payment Plan
+                                </h6>
+                                <div class="space-y-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm font-medium text-gray-600">Installments:</span>
+                                        <span class="text-lg font-bold text-blue-700">{{ $cashAdvance->installments }} month{{ $cashAdvance->installments > 1 ? 's' : '' }}</span>
+                                    </div>
+                                    @if($cashAdvance->installment_amount)
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm font-medium text-gray-600">Monthly Deduction:</span>
+                                        <span class="text-lg font-bold text-blue-700">₱{{ number_format($cashAdvance->installment_amount, 2) }}</span>
+                                    </div>
+                                    @if($cashAdvance->monthly_deduction_timing)
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm font-medium text-gray-600">Deduction Timing:</span>
+                                        <span class="text-sm font-semibold text-blue-700">
+                                            @if($cashAdvance->monthly_deduction_timing === 'first_payroll')
+                                                1st Cut-off Period
+                                            @elseif($cashAdvance->monthly_deduction_timing === 'last_payroll')
+                                                2nd Cut-off Period
+                                            @endif
+                                        </span>
+                                    </div>
+                                    @endif
+                                    @endif
+                                    @if($cashAdvance->first_deduction_date)
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm font-medium text-gray-600">First Deduction:</span>
+                                        <span class="text-sm font-semibold text-blue-700">{{ $cashAdvance->first_deduction_period ?? $cashAdvance->first_deduction_date->format('M d, Y') }}</span>
+                                    </div>
+                                    @endif
+                                </div>
+                            </div>
+                            @endif
                         </div>
 
                         <!-- Financial Information -->
@@ -223,68 +264,57 @@
                                     </div>
                                 </div>
                             </div>
-                            
-                            @if($cashAdvance->installments)
-                            <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                                <h6 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                                    <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                    </svg>
-                                    Payment Plan
-                                </h6>
-                                <div class="space-y-3">
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-sm font-medium text-gray-600">Installments:</span>
-                                        <span class="text-lg font-bold text-blue-700">{{ $cashAdvance->installments }} month{{ $cashAdvance->installments > 1 ? 's' : '' }}</span>
-                                    </div>
-                                    @if($cashAdvance->installment_amount)
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-sm font-medium text-gray-600">Monthly Deduction:</span>
-                                        <span class="text-lg font-bold text-blue-700">₱{{ number_format($cashAdvance->installment_amount, 2) }}</span>
-                                    </div>
-                                    @if($cashAdvance->interest_rate > 0)
-                                        <div class="text-xs text-orange-600 text-center">
-                                            * Includes interest charges
-                                        </div>
-                                    @endif
-                                    @endif
-                                    @if($cashAdvance->first_deduction_date)
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-sm font-medium text-gray-600">Deduction Period:</span>
-                                        <span class="text-sm font-semibold text-blue-700">
-                                            @if($cashAdvance->deduction_period === 'current')
-                                                Current Payroll Period
+                            @if($cashAdvance->payments->count() > 0)
+            <div class="bg-white overflow-hidden shadow-lg sm:rounded-lg">
+                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-200">
+                    <h5 class="text-lg font-bold text-gray-900 flex items-center">
+                        <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                        </svg>
+                        Payment History
+                    </h5>
+                </div>
+                <div class="p-6">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payroll Period</th>
+                               
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                @foreach($cashAdvance->payments->sortByDesc('payment_date') as $payment)
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-medium text-gray-900">{{ $payment->payment_date->format('M d, Y') }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-semibold text-green-600">₱{{ number_format($payment->payment_amount ?? $payment->amount, 2) }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900">
+                                            @if($payment->payroll)
+                                                {{ $payment->payroll->period_start->format('M d') }} - 
+                                                {{ $payment->payroll->period_end->format('M d, Y') }}
                                             @else
-                                                Next Payroll Period
+                                                <span class="text-gray-500">Manual Payment</span>
                                             @endif
-                                        </span>
-                                    </div>
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-sm font-medium text-gray-600">First Deduction:</span>
-                                        <span class="text-sm font-semibold text-blue-700">{{ $cashAdvance->first_deduction_date->format('M d, Y') }}</span>
-                                    </div>
-                                    @endif
-                                </div>
-                            </div>
-                            @endif
+                                        </div>
+                                    </td>
+                                 
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            @endif
                             
-                            <!-- Important Note about Deduction Process -->
-                            @if($cashAdvance->status === 'approved' && $cashAdvance->outstanding_balance > 0)
-                            <div class="bg-blue-50 rounded-lg p-4 border border-blue-200 mt-4">
-                                <div class="flex items-start">
-                                    <svg class="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    <div>
-                                        <h6 class="text-sm font-semibold text-blue-900 mb-1">Deduction Process</h6>
-                                        <p class="text-sm text-blue-800">
-                                            Automatic deductions from payroll will only start when the corresponding payroll is <strong>marked as paid</strong>. 
-                                            Once payroll is marked as paid, the system will automatically deduct the scheduled installment amount and update the outstanding balance.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            @endif
+                      
                         </div>
                     </div>
 
@@ -306,60 +336,10 @@
                 </div>
             </div>
 
+           
+
             <!-- Payment History -->
-            @if($cashAdvance->payments->count() > 0)
-            <div class="bg-white overflow-hidden shadow-lg sm:rounded-lg">
-                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-200">
-                    <h5 class="text-lg font-bold text-gray-900 flex items-center">
-                        <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
-                        </svg>
-                        Payment History
-                    </h5>
-                </div>
-                <div class="p-6">
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payroll Period</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining Balance</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                @foreach($cashAdvance->payments->sortByDesc('payment_date') as $payment)
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium text-gray-900">{{ $payment->payment_date->format('M d, Y') }}</div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-semibold text-green-600">₱{{ number_format($payment->payment_amount, 2) }}</div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">
-                                            @if($payment->payroll)
-                                                {{ $payment->payroll->period_start->format('M d') }} - 
-                                                {{ $payment->payroll->period_end->format('M d, Y') }}
-                                            @else
-                                                <span class="text-gray-500">Manual Payment</span>
-                                            @endif
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium {{ $payment->remaining_balance > 0 ? 'text-yellow-600' : 'text-green-600' }}">
-                                            ₱{{ number_format($payment->remaining_balance, 2) }}
-                                        </div>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            @endif
+            
         </div>
     </div>
 
