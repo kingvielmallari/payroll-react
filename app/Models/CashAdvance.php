@@ -343,4 +343,44 @@ class CashAdvance extends Model
 
         return true;
     }
+
+    /**
+     * Record a payment for this cash advance
+     */
+    public function recordPayment($amount, $payrollId = null, $payrollDetailId = null, $notes = null)
+    {
+        if ($amount <= 0) {
+            return null;
+        }
+
+        // Don't exceed outstanding balance
+        $paymentAmount = min($amount, $this->outstanding_balance);
+
+        if ($paymentAmount <= 0) {
+            return null;
+        }
+
+        // Create payment record
+        $payment = CashAdvancePayment::create([
+            'cash_advance_id' => $this->id,
+            'payroll_id' => $payrollId,
+            'payroll_detail_id' => $payrollDetailId,
+            'amount' => $paymentAmount,
+            'payment_date' => now(),
+            'notes' => $notes,
+        ]);
+
+        // Update outstanding balance
+        $this->outstanding_balance -= $paymentAmount;
+
+        // Mark as completed if fully paid
+        if ($this->outstanding_balance <= 0) {
+            $this->status = 'completed';
+            $this->outstanding_balance = 0;
+        }
+
+        $this->save();
+
+        return $payment;
+    }
 }

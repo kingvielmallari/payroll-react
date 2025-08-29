@@ -83,11 +83,18 @@ class PayrollController extends Controller
             $query->where('pay_schedule', $request->pay_schedule);
         }
 
-        // Filter by status - only allow processing and approved
+        // Filter by status - allow processing, approved, and paid
         if ($request->filled('status')) {
             $status = $request->status;
-            if (in_array($status, ['processing', 'approved'])) {
+            if ($status === 'paid') {
+                // Filter for payrolls that are marked as paid
+                $query->where('is_paid', true);
+            } elseif (in_array($status, ['processing', 'approved'])) {
                 $query->where('status', $status);
+                // If filtering for approved, also exclude paid ones unless specifically requested
+                if ($status === 'approved') {
+                    $query->where('is_paid', false);
+                }
             }
         } else {
             // Default to only processing and approved payrolls (exclude drafts)
@@ -3123,7 +3130,7 @@ class PayrollController extends Controller
     }
 
     /**
-     * Calculate cash advance deductions for the employee
+     * Calculate cash advance deductions for the employee (calculation only, no payment recording)
      */
     private function calculateCashAdvanceDeductions(Employee $employee, Payroll $payroll)
     {
@@ -3151,13 +3158,8 @@ class PayrollController extends Controller
                 if ($deductionAmount > 0) {
                     $totalDeductions += $deductionAmount;
 
-                    // Use the recordPayment method from the CashAdvance model
-                    $cashAdvance->recordPayment(
-                        $payroll->id,
-                        null, // payroll_detail_id will be set later
-                        $deductionAmount,
-                        "Payroll deduction for period {$payroll->pay_period_start->format('M d')} - {$payroll->pay_period_end->format('M d, Y')}"
-                    );
+                    // Note: Payment recording is only done when payroll is marked as paid
+                    // This method only calculates the deduction amount for display purposes
                 }
             }
 
@@ -7427,5 +7429,224 @@ class PayrollController extends Controller
 
         // Fallback to regular overtime_pay if no breakdown
         return $snapshot->overtime_pay ?? 0;
+    }
+
+    /**
+     * Mark payroll as paid with optional proof upload
+     */
+    public function markAsPaid(Request $request, Payroll $payroll)
+    {
+        $this->authorize('mark payrolls as paid');
+
+        if (!$payroll->canBeMarkedAsPaid()) {
+            return redirect()->back()->with('error', 'This payroll cannot be marked as paid.');
+        }
+
+        $request->validate([
+            'payment_notes' => 'nullable|string|max:1000',
+            'payment_proof.*' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:10240', // Max 10MB per file
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $paymentProofFiles = [];
+
+            // Handle file uploads
+            if ($request->hasFile('payment_proof')) {
+                foreach ($request->file('payment_proof') as $file) {
+                    if ($file->isValid()) {
+                        $originalName = $file->getClientOriginalName();
+                        $fileName = time() . '_' . str_replace(' ', '_', $originalName);
+                        $filePath = $file->storeAs('payroll_proofs', $fileName, 'public');
+
+                        $paymentProofFiles[] = [
+                            'original_name' => $originalName,
+                            'file_name' => $fileName,
+                            'file_path' => $filePath,
+                            'file_size' => $file->getSize(),
+                            'mime_type' => $file->getMimeType(),
+                            'uploaded_at' => now()->toISOString(),
+                        ];
+                    }
+                }
+            }
+
+            // Update payroll
+            $payroll->update([
+                'is_paid' => true,
+                'payment_proof_files' => $paymentProofFiles,
+                'payment_notes' => $request->payment_notes,
+                'marked_paid_by' => Auth::id(),
+                'marked_paid_at' => now(),
+            ]);
+
+            // Process cash advance deductions now that payroll is marked as paid
+            $this->processCashAdvanceDeductions($payroll);
+
+            // Update employee shares calculations
+            $this->updateEmployeeSharesCalculations($payroll);
+
+            DB::commit();
+
+            Log::info('Payroll marked as paid', [
+                'payroll_id' => $payroll->id,
+                'payroll_number' => $payroll->payroll_number,
+                'marked_by' => Auth::id(),
+                'proof_files_count' => count($paymentProofFiles),
+            ]);
+
+            return redirect()->back()->with('success', 'Payroll marked as paid successfully!');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to mark payroll as paid', [
+                'payroll_id' => $payroll->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return redirect()->back()->with('error', 'Failed to mark payroll as paid: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Unmark payroll as paid (undo)
+     */
+    public function unmarkAsPaid(Payroll $payroll)
+    {
+        $this->authorize('mark payrolls as paid');
+
+        if (!$payroll->canBeUnmarkedAsPaid()) {
+            return redirect()->back()->with('error', 'This payroll cannot be unmarked as paid.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Reverse cash advance deductions
+            $this->reverseCashAdvanceDeductions($payroll);
+
+            // Reverse employee shares calculations
+            $this->reverseEmployeeSharesCalculations($payroll);
+
+            // Update payroll
+            $payroll->update([
+                'is_paid' => false,
+                'payment_proof_files' => null,
+                'payment_notes' => null,
+                'marked_paid_by' => null,
+                'marked_paid_at' => null,
+            ]);
+
+            DB::commit();
+
+            Log::info('Payroll unmarked as paid', [
+                'payroll_id' => $payroll->id,
+                'payroll_number' => $payroll->payroll_number,
+                'unmarked_by' => Auth::id(),
+            ]);
+
+            return redirect()->back()->with('success', 'Payroll unmarked as paid successfully!');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to unmark payroll as paid', [
+                'payroll_id' => $payroll->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return redirect()->back()->with('error', 'Failed to unmark payroll as paid: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Process cash advance deductions when payroll is marked as paid
+     */
+    private function processCashAdvanceDeductions(Payroll $payroll)
+    {
+        foreach ($payroll->payrollDetails as $detail) {
+            if ($detail->cash_advance_deductions > 0) {
+                // Find approved cash advances for this employee
+                $activeCashAdvances = \App\Models\CashAdvance::where('employee_id', $detail->employee_id)
+                    ->where('status', 'approved')
+                    ->where('outstanding_balance', '>', 0)
+                    ->get();
+
+                $remainingDeduction = $detail->cash_advance_deductions;
+
+                foreach ($activeCashAdvances as $cashAdvance) {
+                    if ($remainingDeduction <= 0) break;
+
+                    // Calculate deduction for this cash advance
+                    $installmentAmount = $cashAdvance->total_amount / $cashAdvance->installments;
+                    $deductionAmount = min($installmentAmount, $cashAdvance->outstanding_balance, $remainingDeduction);
+
+                    if ($deductionAmount > 0) {
+                        // Record the payment
+                        $cashAdvance->recordPayment(
+                            $deductionAmount,
+                            $payroll->id,
+                            $detail->id
+                        );
+
+                        $remainingDeduction -= $deductionAmount;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Reverse cash advance deductions when payroll is unmarked as paid
+     */
+    private function reverseCashAdvanceDeductions(Payroll $payroll)
+    {
+        // Find and reverse payments made from this payroll
+        $payments = \App\Models\CashAdvancePayment::where('payroll_id', $payroll->id)->get();
+
+        foreach ($payments as $payment) {
+            $cashAdvance = $payment->cashAdvance;
+            if ($cashAdvance) {
+                // Restore the outstanding balance
+                $cashAdvance->increment('outstanding_balance', $payment->amount);
+
+                // If cash advance was marked as completed, revert to approved
+                if ($cashAdvance->status === 'completed' && $cashAdvance->outstanding_balance > 0) {
+                    $cashAdvance->update(['status' => 'approved']);
+                }
+            }
+
+            // Delete the payment record
+            $payment->delete();
+        }
+    }
+
+    /**
+     * Update employee shares calculations (SSS, PhilHealth, Pag-IBIG)
+     */
+    private function updateEmployeeSharesCalculations(Payroll $payroll)
+    {
+        // This method would trigger recalculation of government contribution reports
+        // For now, we'll just log the action as the reports are generated on-demand
+        Log::info('Employee shares calculations updated for paid payroll', [
+            'payroll_id' => $payroll->id,
+            'payroll_number' => $payroll->payroll_number,
+        ]);
+
+        // In a real implementation, you might want to:
+        // 1. Update cached totals for government reports
+        // 2. Trigger notifications to accounting
+        // 3. Update dashboard metrics
+    }
+
+    /**
+     * Reverse employee shares calculations
+     */
+    private function reverseEmployeeSharesCalculations(Payroll $payroll)
+    {
+        // This method would reverse the employee shares calculations
+        // For now, we'll just log the action
+        Log::info('Employee shares calculations reversed for unpaid payroll', [
+            'payroll_id' => $payroll->id,
+            'payroll_number' => $payroll->payroll_number,
+        ]);
     }
 }

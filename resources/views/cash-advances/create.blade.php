@@ -250,7 +250,7 @@
                         <div class="grid grid-cols-1 gap-6">
                             <!-- Starting Payroll Period -->
                             <div>
-                                <label for="starting_payroll_period" class="block text-sm font-medium text-gray-700">Deduction Payroll Period *</label>
+                                <label for="starting_payroll_period" class="block text-sm font-medium text-gray-700">Deduction Start Period *</label>
                                 <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('starting_payroll_period') border-red-300 @enderror" 
                                         id="starting_payroll_period" name="starting_payroll_period" required disabled>
                                     <option value="">{{ !$employee ? 'Select an employee first' : 'Loading payroll periods...' }}</option>

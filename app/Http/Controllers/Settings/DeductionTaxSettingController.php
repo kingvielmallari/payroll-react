@@ -61,6 +61,14 @@ class DeductionTaxSettingController extends Controller
             $validated['calculation_type'] = 'bracket';
         }
 
+        // Convert empty strings to null for decimal fields to prevent casting errors
+        $decimalFields = ['rate_percentage', 'fixed_amount', 'minimum_amount', 'maximum_amount', 'salary_cap', 'employer_share_rate', 'employer_share_fixed'];
+        foreach ($decimalFields as $field) {
+            if (isset($validated[$field]) && $validated[$field] === '') {
+                $validated[$field] = null;
+            }
+        }
+
         DeductionTaxSetting::create($validated);
 
         return redirect()->route('settings.deductions.index')
@@ -112,6 +120,14 @@ class DeductionTaxSettingController extends Controller
         if (in_array($validated['calculation_type'], ['sss_table', 'philhealth_table', 'pagibig_table', 'withholding_tax_table'])) {
             $validated['tax_table_type'] = str_replace('_table', '', $validated['calculation_type']);
             $validated['calculation_type'] = 'bracket';
+        }
+
+        // Convert empty strings to null for decimal fields to prevent casting errors
+        $decimalFields = ['rate_percentage', 'fixed_amount', 'minimum_amount', 'maximum_amount', 'salary_cap', 'employer_share_rate', 'employer_share_fixed'];
+        foreach ($decimalFields as $field) {
+            if (isset($validated[$field]) && $validated[$field] === '') {
+                $validated[$field] = null;
+            }
         }
 
         $deduction->update($validated);

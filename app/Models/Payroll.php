@@ -20,6 +20,11 @@ class Payroll extends Model
         'payroll_type',
         'pay_schedule',
         'status',
+        'is_paid',
+        'payment_proof_files',
+        'payment_notes',
+        'marked_paid_by',
+        'marked_paid_at',
         'total_gross',
         'total_deductions',
         'total_net',
@@ -33,10 +38,13 @@ class Payroll extends Model
         'period_start' => 'date',
         'period_end' => 'date',
         'pay_date' => 'date',
+        'is_paid' => 'boolean',
+        'payment_proof_files' => 'array',
         'total_gross' => 'decimal:2',
         'total_deductions' => 'decimal:2',
         'total_net' => 'decimal:2',
         'approved_at' => 'datetime',
+        'marked_paid_at' => 'datetime',
     ];
 
     /**
@@ -75,6 +83,14 @@ class Payroll extends Model
     }
 
     /**
+     * Get the user who marked the payroll as paid.
+     */
+    public function markedPaidBy()
+    {
+        return $this->belongsTo(User::class, 'marked_paid_by');
+    }
+
+    /**
      * Get the payroll details for the payroll.
      */
     public function payrollDetails()
@@ -103,7 +119,23 @@ class Payroll extends Model
      */
     public function isPaid()
     {
-        return $this->status === 'paid';
+        return $this->is_paid;
+    }
+
+    /**
+     * Check if payroll can be marked as paid.
+     */
+    public function canBeMarkedAsPaid()
+    {
+        return $this->status === 'approved' && !$this->is_paid;
+    }
+
+    /**
+     * Check if payroll can be unmarked as paid.
+     */
+    public function canBeUnmarkedAsPaid()
+    {
+        return $this->status === 'approved' && $this->is_paid;
     }
 
     /**

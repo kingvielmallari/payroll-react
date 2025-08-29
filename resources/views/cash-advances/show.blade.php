@@ -267,6 +267,24 @@
                                 </div>
                             </div>
                             @endif
+                            
+                            <!-- Important Note about Deduction Process -->
+                            @if($cashAdvance->status === 'approved' && $cashAdvance->outstanding_balance > 0)
+                            <div class="bg-blue-50 rounded-lg p-4 border border-blue-200 mt-4">
+                                <div class="flex items-start">
+                                    <svg class="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <div>
+                                        <h6 class="text-sm font-semibold text-blue-900 mb-1">Deduction Process</h6>
+                                        <p class="text-sm text-blue-800">
+                                            Automatic deductions from payroll will only start when the corresponding payroll is <strong>marked as paid</strong>. 
+                                            Once payroll is marked as paid, the system will automatically deduct the scheduled installment amount and update the outstanding balance.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
                         </div>
                     </div>
 

@@ -19,10 +19,11 @@ class PagibigReportService
         $startDate = Carbon::create($year, $month, 1)->startOfMonth();
         $endDate = $startDate->copy()->endOfMonth();
 
-        // Get all payrolls for the specified period
+        // Get all PAID payrolls for the specified period
         $payrolls = Payroll::whereBetween('pay_period_start', [$startDate, $endDate])
-                          ->with(['payrollDetails.employee'])
-                          ->get();
+            ->where('is_paid', true) // Only include paid payrolls
+            ->with(['payrollDetails.employee'])
+            ->get();
 
         $employeeData = [];
         $totals = [
@@ -35,11 +36,11 @@ class PagibigReportService
         foreach ($payrolls as $payroll) {
             foreach ($payroll->payrollDetails as $detail) {
                 $employee = $detail->employee;
-                
+
                 if (!$employee || !$employee->pagibig_number) continue;
 
                 $employeeId = $employee->id;
-                
+
                 if (!isset($employeeData[$employeeId])) {
                     $contributionData = $this->calculatePagibigContribution($detail->gross_pay);
 
@@ -81,7 +82,7 @@ class PagibigReportService
     {
         $pdf = Pdf::loadView('government-forms.pdf.pagibig-mcrf', compact('data', 'year', 'month'));
         $filename = "PagIBIG_MCRF_{$year}_{$month}.pdf";
-        
+
         return $pdf->download($filename);
     }
 
@@ -91,7 +92,7 @@ class PagibigReportService
     public function downloadExcel($data, $year, $month)
     {
         $filename = "PagIBIG_MCRF_{$year}_{$month}.xlsx";
-        
+
         return Excel::download(new PagibigMCRFExport($data), $filename);
     }
 
@@ -106,7 +107,7 @@ class PagibigReportService
 
         // Employee contribution: 1% of monthly compensation (min: 100, max: 100)
         $employeeContribution = max(100, min($monthlyCompensation * $employeeRate, 100));
-        
+
         // Employer contribution: 2% of monthly compensation
         $employerContribution = $monthlyCompensation * $employerRate;
 
@@ -155,7 +156,7 @@ class PagibigReportService
         for ($month = 1; $month <= 12; $month++) {
             $monthData = $this->generateMCRFData($year, $month);
             $monthlyData[$month] = $monthData;
-            
+
             $annualTotals['total_contribution'] += $monthData['totals']['total_contribution'];
             $annualTotals['employee_share'] += $monthData['totals']['employee_share'];
             $annualTotals['employer_share'] += $monthData['totals']['employer_share'];
@@ -178,24 +179,24 @@ class PagibigReportService
         $endDate = $startDate->copy()->endOfYear();
 
         $payrollDetails = PayrollDetail::where('employee_id', $employee->id)
-                                     ->whereHas('payroll', function($query) use ($startDate, $endDate) {
-                                         $query->whereBetween('pay_period_start', [$startDate, $endDate]);
-                                     })
-                                     ->with('payroll')
-                                     ->get();
+            ->whereHas('payroll', function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('pay_period_start', [$startDate, $endDate]);
+            })
+            ->with('payroll')
+            ->get();
 
         $monthlyContributions = [];
         $totalAnnualContribution = 0;
 
         for ($month = 1; $month <= 12; $month++) {
-            $monthlyDetails = $payrollDetails->filter(function($detail) use ($month) {
+            $monthlyDetails = $payrollDetails->filter(function ($detail) use ($month) {
                 return $detail->payroll->pay_period_start->month == $month;
             });
 
             if ($monthlyDetails->isNotEmpty()) {
                 $averageGrossPay = $monthlyDetails->avg('gross_pay');
                 $contributionData = $this->calculatePagibigContribution($averageGrossPay);
-                
+
                 $monthlyContributions[$month] = [
                     'month' => Carbon::create(2025, $month)->format('F'),
                     'gross_pay' => $averageGrossPay,
@@ -239,11 +240,11 @@ class PagibigReportService
         $endDate = now()->endOfMonth();
 
         $payrollDetails = PayrollDetail::where('employee_id', $employee->id)
-                                     ->whereHas('payroll', function($query) use ($startDate, $endDate) {
-                                         $query->whereBetween('pay_period_start', [$startDate, $endDate]);
-                                     })
-                                     ->with('payroll')
-                                     ->get();
+            ->whereHas('payroll', function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('pay_period_start', [$startDate, $endDate]);
+            })
+            ->with('payroll')
+            ->get();
 
         $monthlyContributions = [];
         $totalContributions = 0;
@@ -255,7 +256,7 @@ class PagibigReportService
                 'month' => $detail->payroll->pay_period_start->format('F Y'),
                 'contribution' => $contributionData['total_contribution'],
             ];
-            
+
             $totalContributions += $contributionData['total_contribution'];
             $contributionMonths++;
         }
@@ -263,7 +264,7 @@ class PagibigReportService
         // Loan eligibility criteria
         $minMonths = 24; // Must have contributed for at least 24 months
         $isEligible = $contributionMonths >= $minMonths;
-        
+
         // Estimate loan amount (typically 80 times the monthly contribution)
         $averageMonthlyContribution = $contributionMonths > 0 ? $totalContributions / $contributionMonths : 0;
         $estimatedLoanAmount = $averageMonthlyContribution * 80;

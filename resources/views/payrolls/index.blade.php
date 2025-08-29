@@ -37,6 +37,7 @@
                                 <option value="">All Statuses</option>
                                 <option value="processing" {{ request('status') == 'processing' ? 'selected' : '' }}>Processing</option>
                                 <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Approved</option>
+                                <option value="paid" {{ request('status') == 'paid' ? 'selected' : '' }}>Paid</option>
                             </select>
                         </div>
                         <div class="flex-1 min-w-[180px]">
@@ -155,7 +156,9 @@
                                     <!-- Status Column -->
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm font-medium text-gray-900">
-                                            @if($payroll->status == 'approved' && $payroll->approved_at)
+                                            @if($payroll->is_paid && $payroll->marked_paid_at)
+                                                {{ $payroll->marked_paid_at->format('M d, Y') }}
+                                            @elseif($payroll->status == 'approved' && $payroll->approved_at)
                                                 {{ $payroll->approved_at->format('M d, Y') }}
                                             @elseif($payroll->status == 'processing' && $payroll->processed_at)
                                                 {{ $payroll->processed_at->format('M d, Y') }}
@@ -164,17 +167,17 @@
                                             @endif
                                         </div>
                                         <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 w-fit
-                                            @if($payroll->status == 'paid')
+                                            @if($payroll->is_paid)
                                                 bg-green-100 text-green-800
                                             @elseif($payroll->status == 'approved')
-                                                bg-green-100 text-green-800
+                                                bg-blue-100 text-blue-800
                                             @elseif($payroll->status == 'processing')
                                                 bg-yellow-100 text-yellow-800
                                            
                                             @else
                                                 bg-gray-100 text-gray-800
                                             @endif">
-                                            {{ ucfirst($payroll->status) }}
+                                            {{ $payroll->is_paid ? 'Paid' : ucfirst($payroll->status) }}
                                         </span>
                                     </td>
                                 </tr>

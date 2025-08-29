@@ -199,12 +199,20 @@
                             <h4 class="text-sm font-medium text-gray-900">Status</h4>
                             <div class="mt-1 flex items-center space-x-2">
                                 <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full 
-                                    {{ $payroll->status == 'paid' ? 'bg-green-100 text-green-800' : 
+                                    {{ $payroll->is_paid ? 'bg-green-100 text-green-800' : 
                                        ($payroll->status == 'approved' ? 'bg-blue-100 text-blue-800' : 
                                         ($payroll->status == 'processing' ? 'bg-yellow-100 text-yellow-800' : 
                                          ($payroll->status == 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'))) }}">
-                                    {{ ucfirst($payroll->status) }}
+                                    {{ $payroll->is_paid ? 'Paid' : ucfirst($payroll->status) }}
                                 </span>
+                                @if($payroll->is_paid && $payroll->marked_paid_at)
+                                <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ $payroll->marked_paid_at->format('M d, Y') }}
+                                </span>
+                                @endif
                                 @if(isset($isDynamic))
                                     @if($isDynamic)
                                         <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700">
@@ -237,6 +245,66 @@
                             <p class="mt-1 text-sm text-gray-600">{{ $payroll->pay_date->format('M d, Y') }}</p>
                         </div>
                     </div>
+
+                    {{-- Payment Information Section --}}
+                    @if($payroll->is_paid)
+                    <div class="mt-6 bg-green-50 rounded-lg p-4">
+                        <h4 class="text-sm font-medium text-green-900 mb-3 flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Payment Information
+                        </h4>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-sm text-green-700">
+                                    <span class="font-medium">Marked as paid on:</span><br>
+                                    {{ $payroll->marked_paid_at->format('M d, Y g:i A') }}
+                                </p>
+                                @if($payroll->markedPaidBy)
+                                <p class="text-sm text-green-700 mt-1">
+                                    <span class="font-medium">Marked by:</span><br>
+                                    {{ $payroll->markedPaidBy->name }}
+                                </p>
+                                @endif
+                            </div>
+                            
+                            @if($payroll->payment_notes)
+                            <div>
+                                <p class="text-sm text-green-700">
+                                    <span class="font-medium">Payment Notes:</span><br>
+                                    {{ $payroll->payment_notes }}
+                                </p>
+                            </div>
+                            @endif
+                        </div>
+
+                        @if($payroll->payment_proof_files && count($payroll->payment_proof_files) > 0)
+                        <div class="mt-4">
+                            <p class="text-sm font-medium text-green-900 mb-2">Payment Proof Files:</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                @foreach($payroll->payment_proof_files as $file)
+                                <a href="{{ asset('storage/' . $file['file_path']) }}" 
+                                   target="_blank"
+                                   class="flex items-center p-2 text-sm text-green-700 bg-white rounded border border-green-200 hover:bg-green-50">
+                                    @if(in_array(strtolower(pathinfo($file['original_name'], PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png']))
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 002 2z"></path>
+                                        </svg>
+                                    @else
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                        </svg>
+                                    @endif
+                                    <span class="truncate">{{ $file['original_name'] }}</span>
+                                </a>
+                                @endforeach
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+                    @endif
 
                    
 {{-- 
@@ -369,6 +437,32 @@
                            class="inline-flex items-center px-4 py-2 bg-orange-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-orange-700 focus:bg-orange-700 active:bg-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition ease-in-out duration-150">
                             Download All Payslips
                         </a>
+                        @endif
+                        @endcan
+
+                        {{-- Mark as Paid/Unpaid buttons --}}
+                        @can('mark payrolls as paid')
+                        @if($payroll->canBeMarkedAsPaid())
+                        <button type="button"
+                                onclick="openMarkAsPaidModal()"
+                                class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Mark as Paid
+                        </button>
+                        @elseif($payroll->canBeUnmarkedAsPaid())
+                        <form method="POST" action="{{ route('payrolls.unmark-as-paid', $payroll) }}" class="inline">
+                            @csrf
+                            <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-orange-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-orange-700 focus:bg-orange-700 active:bg-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Are you sure you want to unmark this payroll as paid? This will reverse all deduction calculations.')">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.866-.833-2.598 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                </svg>
+                                Unmark as Paid
+                            </button>
+                        </form>
                         @endif
                         @endcan
 
@@ -2804,4 +2898,83 @@
             </div>
         </div>
     </div>
+
+    {{-- Mark as Paid Modal --}}
+    <div id="markAsPaidModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden" style="z-index: 50;">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Mark Payroll as Paid</h3>
+                    <button type="button" onclick="closeMarkAsPaidModal()" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <form id="markAsPaidForm" method="POST" action="{{ route('payrolls.mark-as-paid', $payroll) }}" enctype="multipart/form-data">
+                    @csrf
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Payment Proof (Optional)</label>
+                        <input type="file" 
+                               name="payment_proof[]" 
+                               multiple 
+                               accept=".jpg,.jpeg,.png,.pdf"
+                               class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        <p class="text-xs text-gray-500 mt-1">You can upload multiple files (JPG, PNG, PDF). Max 10MB per file.</p>
+                    </div>
+
+                    <div class="mb-6">
+                        <label for="payment_notes" class="block text-sm font-medium text-gray-700 mb-2">Payment Notes (Optional)</label>
+                        <textarea name="payment_notes" 
+                                  id="payment_notes" 
+                                  rows="3" 
+                                  class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Add any notes about the payment..."></textarea>
+                    </div>
+
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" 
+                                onclick="closeMarkAsPaidModal()"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 border border-gray-300 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                            Mark as Paid
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openMarkAsPaidModal() {
+            document.getElementById('markAsPaidModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMarkAsPaidModal() {
+            document.getElementById('markAsPaidModal').classList.add('hidden');
+            document.body.style.overflow = 'auto';
+            // Reset form
+            document.getElementById('markAsPaidForm').reset();
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('markAsPaidModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeMarkAsPaidModal();
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeMarkAsPaidModal();
+            }
+        });
+    </script>
 </x-app-layout>

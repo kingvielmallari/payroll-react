@@ -19,10 +19,11 @@ class SSSReportService
         $startDate = Carbon::create($year, $month, 1)->startOfMonth();
         $endDate = $startDate->copy()->endOfMonth();
 
-        // Get all payrolls for the specified period
+        // Get all PAID payrolls for the specified period
         $payrolls = Payroll::whereBetween('pay_period_start', [$startDate, $endDate])
-                          ->with(['payrollDetails.employee'])
-                          ->get();
+            ->where('is_paid', true) // Only include paid payrolls
+            ->with(['payrollDetails.employee'])
+            ->get();
 
         $employeeData = [];
         $totals = [
@@ -36,11 +37,11 @@ class SSSReportService
         foreach ($payrolls as $payroll) {
             foreach ($payroll->payrollDetails as $detail) {
                 $employee = $detail->employee;
-                
+
                 if (!$employee || !$employee->sss_number) continue;
 
                 $employeeId = $employee->id;
-                
+
                 if (!isset($employeeData[$employeeId])) {
                     $salaryCredit = $this->getSSSalaryCredit($detail->gross_pay);
                     $contributions = $this->calculateSSSContributions($salaryCredit);
@@ -85,7 +86,7 @@ class SSSReportService
     {
         $pdf = Pdf::loadView('government-forms.pdf.sss-r3', compact('data', 'year', 'month'));
         $filename = "SSS_R3_{$year}_{$month}.pdf";
-        
+
         return $pdf->download($filename);
     }
 
@@ -95,7 +96,7 @@ class SSSReportService
     public function downloadExcel($data, $year, $month)
     {
         $filename = "SSS_R3_{$year}_{$month}.xlsx";
-        
+
         return Excel::download(new SSSR3Export($data), $filename);
     }
 
@@ -202,7 +203,7 @@ class SSSReportService
         for ($month = 1; $month <= 12; $month++) {
             $monthData = $this->generateR3Data($year, $month);
             $monthlyData[$month] = $monthData;
-            
+
             $annualTotals['total_salary_credit'] += $monthData['totals']['total_salary_credit'];
             $annualTotals['employee_contribution'] += $monthData['totals']['employee_contribution'];
             $annualTotals['employer_contribution'] += $monthData['totals']['employer_contribution'];

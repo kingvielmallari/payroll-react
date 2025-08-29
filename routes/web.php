@@ -138,6 +138,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('payrolls.back-to-draft')
             ->middleware('can:edit payrolls');
 
+        // Mark as Paid functionality
+        Route::post('payrolls/{payroll}/mark-as-paid', [PayrollController::class, 'markAsPaid'])
+            ->name('payrolls.mark-as-paid')
+            ->middleware('can:mark payrolls as paid');
+        Route::post('payrolls/{payroll}/unmark-as-paid', [PayrollController::class, 'unmarkAsPaid'])
+            ->name('payrolls.unmark-as-paid')
+            ->middleware('can:mark payrolls as paid');
+
         // Debug route for snapshots (can be removed in production)
         Route::get('payrolls/{payroll}/debug-snapshots', [PayrollController::class, 'debugSnapshots'])
             ->name('payrolls.debug-snapshots')

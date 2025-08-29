@@ -19,10 +19,11 @@ class PhilHealthReportService
         $startDate = Carbon::create($year, $month, 1)->startOfMonth();
         $endDate = $startDate->copy()->endOfMonth();
 
-        // Get all payrolls for the specified period
+        // Get all PAID payrolls for the specified period
         $payrolls = Payroll::whereBetween('pay_period_start', [$startDate, $endDate])
-                          ->with(['payrollDetails.employee'])
-                          ->get();
+            ->where('is_paid', true) // Only include paid payrolls
+            ->with(['payrollDetails.employee'])
+            ->get();
 
         $employeeData = [];
         $totals = [
@@ -35,11 +36,11 @@ class PhilHealthReportService
         foreach ($payrolls as $payroll) {
             foreach ($payroll->payrollDetails as $detail) {
                 $employee = $detail->employee;
-                
+
                 if (!$employee || !$employee->philhealth_number) continue;
 
                 $employeeId = $employee->id;
-                
+
                 if (!isset($employeeData[$employeeId])) {
                     $premiumData = $this->calculatePhilHealthPremium($detail->gross_pay);
 
@@ -81,7 +82,7 @@ class PhilHealthReportService
     {
         $pdf = Pdf::loadView('government-forms.pdf.philhealth-rf1', compact('data', 'year', 'month'));
         $filename = "PhilHealth_RF1_{$year}_{$month}.pdf";
-        
+
         return $pdf->download($filename);
     }
 
@@ -91,7 +92,7 @@ class PhilHealthReportService
     public function downloadExcel($data, $year, $month)
     {
         $filename = "PhilHealth_RF1_{$year}_{$month}.xlsx";
-        
+
         return Excel::download(new PhilHealthRF1Export($data), $filename);
     }
 
@@ -107,10 +108,10 @@ class PhilHealthReportService
 
         // Determine the premium base
         $premiumBase = max($minimumPremium, min($monthlyBasicSalary, $maximumPremium));
-        
+
         // Calculate total premium
         $totalPremium = $premiumBase * $premiumRate;
-        
+
         // Split between employee and employer (50/50)
         $employeeShare = $totalPremium / 2;
         $employerShare = $totalPremium / 2;
@@ -152,7 +153,7 @@ class PhilHealthReportService
         for ($month = 1; $month <= 12; $month++) {
             $monthData = $this->generateRF1Data($year, $month);
             $monthlyData[$month] = $monthData;
-            
+
             $annualTotals['total_premium'] += $monthData['totals']['total_premium'];
             $annualTotals['employee_share'] += $monthData['totals']['employee_share'];
             $annualTotals['employer_share'] += $monthData['totals']['employer_share'];
@@ -175,24 +176,24 @@ class PhilHealthReportService
         $endDate = $startDate->copy()->endOfYear();
 
         $payrollDetails = PayrollDetail::where('employee_id', $employee->id)
-                                     ->whereHas('payroll', function($query) use ($startDate, $endDate) {
-                                         $query->whereBetween('pay_period_start', [$startDate, $endDate]);
-                                     })
-                                     ->with('payroll')
-                                     ->get();
+            ->whereHas('payroll', function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('pay_period_start', [$startDate, $endDate]);
+            })
+            ->with('payroll')
+            ->get();
 
         $monthlyContributions = [];
         $totalAnnualPremium = 0;
 
         for ($month = 1; $month <= 12; $month++) {
-            $monthlyDetails = $payrollDetails->filter(function($detail) use ($month) {
+            $monthlyDetails = $payrollDetails->filter(function ($detail) use ($month) {
                 return $detail->payroll->pay_period_start->month == $month;
             });
 
             if ($monthlyDetails->isNotEmpty()) {
                 $averageGrossPay = $monthlyDetails->avg('gross_pay');
                 $premiumData = $this->calculatePhilHealthPremium($averageGrossPay);
-                
+
                 $monthlyContributions[$month] = [
                     'month' => Carbon::create(2025, $month)->format('F'),
                     'gross_pay' => $averageGrossPay,

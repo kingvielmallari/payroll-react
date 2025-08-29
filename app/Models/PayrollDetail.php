@@ -285,11 +285,16 @@ class PayrollDetail extends Model
     }
 
     /**
-     * Process cash advance payments after payroll is finalized
+     * Process cash advance payments after payroll is marked as paid
      */
     public function processCashAdvancePayments()
     {
         if ($this->cash_advance_deductions <= 0) {
+            return;
+        }
+
+        // Only process payments if payroll is marked as paid
+        if (!$this->payroll->is_paid) {
             return;
         }
 

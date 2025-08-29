@@ -44,6 +44,7 @@ class RoleAndPermissionSeeder extends Seeder
             'delete approved payrolls',
             'approve payrolls',
             'process payrolls',
+            'mark payrolls as paid',
             'generate payslips',
             'send payslips',
 
@@ -141,8 +142,8 @@ class RoleAndPermissionSeeder extends Seeder
 
         // Create roles and assign permissions
 
-        // System Admin - Full access
-        $systemAdmin = Role::firstOrCreate(['name' => 'System Admin']);
+        // System Administrator - Full access
+        $systemAdmin = Role::firstOrCreate(['name' => 'System Administrator']);
         $systemAdmin->syncPermissions(Permission::all());
 
         // HR Head - Full access to employees, deductions, holidays, approvals, settings
@@ -161,6 +162,7 @@ class RoleAndPermissionSeeder extends Seeder
             'delete approved payrolls',
             'approve payrolls',
             'process payrolls',
+            'mark payrolls as paid',
             'generate payslips',
             'send payslips',
             'view time logs',
@@ -230,6 +232,7 @@ class RoleAndPermissionSeeder extends Seeder
             'create payrolls',
             'edit payrolls',
             'process payrolls',
+            'mark payrolls as paid',
             'generate payslips',
             'send payslips',
             'view time logs',
