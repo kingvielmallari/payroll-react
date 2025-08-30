@@ -434,10 +434,33 @@ function showTaxTableModal(tableType) {
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Salary Range</th>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">MSC</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">EE Share</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">ER Share</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            @foreach($sssTable as $row)
+                            <tr>
+                                <td class="px-3 py-2 text-xs">
+                                    @if($row->range_end)
+                                        ₱{{ number_format($row->range_start, 2) }} - ₱{{ number_format($row->range_end, 2) }}
+                                    @else
+                                        ₱{{ number_format($row->range_start, 2) }} and above
+                                    @endif
+                                </td>
+                                <td class="px-3 py-2 text-xs">₱{{ number_format($row->employee_share, 2) }}</td>
+                                <td class="px-3 py-2 text-xs">₱{{ number_format($row->employer_share, 2) }}</td>
+                                <td class="px-3 py-2 text-xs">₱{{ number_format($row->total_contribution, 2) }}</td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-4 p-3 bg-blue-50 rounded-md">
+                    <p class="text-sm text-blue-800"><strong>Note:</strong> Employee and employer shares are based on 2025 SSS contribution rates.</p>
+                </div>
+            `;
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
@@ -499,14 +522,11 @@ function showTaxTableModal(tableType) {
                             <tr><td class="px-2 py-1 text-xs">31,750 - 32,249.99</td><td class="px-2 py-1 text-xs">32,000.00</td><td class="px-2 py-1 text-xs">1,440.00</td><td class="px-2 py-1 text-xs">3,040.00</td><td class="px-2 py-1 text-xs">4,480.00</td></tr>
                             <tr><td class="px-2 py-1 text-xs">32,250 - 32,749.99</td><td class="px-2 py-1 text-xs">32,500.00</td><td class="px-2 py-1 text-xs">1,462.50</td><td class="px-2 py-1 text-xs">3,087.50</td><td class="px-2 py-1 text-xs">4,550.00</td></tr>
                             <tr><td class="px-2 py-1 text-xs">32,750 - 33,249.99</td><td class="px-2 py-1 text-xs">33,000.00</td><td class="px-2 py-1 text-xs">1,485.00</td><td class="px-2 py-1 text-xs">3,135.00</td><td class="px-2 py-1 text-xs">4,620.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">33,250 - 33,749.99</td><td class="px-2 py-1 text-xs">33,500.00</td><td class="px-2 py-1 text-xs">1,507.50</td><td class="px-2 py-1 text-xs">3,182.50</td><td class="px-2 py-1 text-xs">4,690.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">33,750 - 34,249.99</td><td class="px-2 py-1 text-xs">34,000.00</td><td class="px-2 py-1 text-xs">1,530.00</td><td class="px-2 py-1 text-xs">3,230.00</td><td class="px-2 py-1 text-xs">4,760.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">34,750 - Over</td><td class="px-2 py-1 text-xs">35,000.00</td><td class="px-2 py-1 text-xs">1,575.00</td><td class="px-2 py-1 text-xs">3,325.00</td><td class="px-2 py-1 text-xs">4,900.00</td></tr>
                         </tbody>
                     </table>
-                    <div class="mt-4 p-3 bg-blue-50 rounded-md">
-                        <p class="text-sm text-blue-800"><strong>Note:</strong> MSC = Monthly Salary Credit, EE = Employee, ER = Employer</p>
-                    </div>
+                </div>
+                <div class="mt-4 p-3 bg-blue-50 rounded-md">
+                    <p class="text-sm text-blue-800"><strong>Note:</strong> Employee and employer shares are based on 2025 SSS contribution rates.</p>
                 </div>
             `;
             break;

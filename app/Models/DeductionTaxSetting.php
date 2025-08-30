@@ -193,56 +193,20 @@ class DeductionTaxSetting extends Model
      */
     private function calculateSSSDeduction($salary)
     {
-        // SSS Contribution Table for 2025
-        $sssTable = [
-            ['min' => 0, 'max' => 5249.99, 'ee' => 275.00, 'er' => 550.00],
-            ['min' => 5250, 'max' => 5749.99, 'ee' => 275.00, 'er' => 610.00],
-            ['min' => 5750, 'max' => 6249.99, 'ee' => 300.00, 'er' => 670.00],
-            ['min' => 6250, 'max' => 6749.99, 'ee' => 330.00, 'er' => 730.00],
-            ['min' => 6750, 'max' => 7249.99, 'ee' => 360.00, 'er' => 790.00],
-            ['min' => 7250, 'max' => 7749.99, 'ee' => 390.00, 'er' => 850.00],
-            ['min' => 7750, 'max' => 8249.99, 'ee' => 420.00, 'er' => 910.00],
-            ['min' => 8250, 'max' => 8749.99, 'ee' => 450.00, 'er' => 970.00],
-            ['min' => 8750, 'max' => 9249.99, 'ee' => 480.00, 'er' => 1030.00],
-            ['min' => 9250, 'max' => 9749.99, 'ee' => 510.00, 'er' => 1090.00],
-            ['min' => 9750, 'max' => 10249.99, 'ee' => 540.00, 'er' => 1150.00],
-            ['min' => 10250, 'max' => 10749.99, 'ee' => 570.00, 'er' => 1210.00],
-            ['min' => 10750, 'max' => 11249.99, 'ee' => 600.00, 'er' => 1270.00],
-            ['min' => 11250, 'max' => 11749.99, 'ee' => 630.00, 'er' => 1330.00],
-            ['min' => 11750, 'max' => 12249.99, 'ee' => 660.00, 'er' => 1390.00],
-            ['min' => 12250, 'max' => 12749.99, 'ee' => 690.00, 'er' => 1450.00],
-            ['min' => 12750, 'max' => 13249.99, 'ee' => 720.00, 'er' => 1510.00],
-            ['min' => 13250, 'max' => 13749.99, 'ee' => 750.00, 'er' => 1570.00],
-            ['min' => 13750, 'max' => 14249.99, 'ee' => 780.00, 'er' => 1630.00],
-            ['min' => 14250, 'max' => 14749.99, 'ee' => 810.00, 'er' => 1690.00],
-            ['min' => 14750, 'max' => 15249.99, 'ee' => 840.00, 'er' => 1750.00],
-            ['min' => 15250, 'max' => 15749.99, 'ee' => 870.00, 'er' => 1810.00],
-            ['min' => 15750, 'max' => 16249.99, 'ee' => 900.00, 'er' => 1870.00],
-            ['min' => 16250, 'max' => 16749.99, 'ee' => 930.00, 'er' => 1930.00],
-            ['min' => 16750, 'max' => 17249.99, 'ee' => 960.00, 'er' => 1990.00],
-            ['min' => 17250, 'max' => 17749.99, 'ee' => 990.00, 'er' => 2050.00],
-            ['min' => 17750, 'max' => 18249.99, 'ee' => 1020.00, 'er' => 2110.00],
-            ['min' => 18250, 'max' => 18749.99, 'ee' => 1050.00, 'er' => 2170.00],
-            ['min' => 18750, 'max' => 19249.99, 'ee' => 1080.00, 'er' => 2230.00],
-            ['min' => 19250, 'max' => 19749.99, 'ee' => 1110.00, 'er' => 2290.00],
-            ['min' => 19750, 'max' => 20249.99, 'ee' => 1140.00, 'er' => 2350.00],
-            // Continue pattern up to maximum
-            ['min' => 20250, 'max' => PHP_INT_MAX, 'ee' => 1170.00, 'er' => 2410.00],
-        ];
-
-        foreach ($sssTable as $bracket) {
-            if ($salary >= $bracket['min'] && $salary <= $bracket['max']) {
-                if ($this->share_with_employer) {
-                    // If shared with employer, only deduct employee share
-                    return $bracket['ee'];
-                } else {
-                    // If not shared, deduct both employee and employer shares from employee
-                    return $bracket['ee'] + $bracket['er'];
-                }
-            }
+        // Get SSS contribution from database table
+        $sssContribution = \App\Models\SssTaxTable::getContribution($salary);
+        
+        if (!$sssContribution) {
+            return 0;
         }
 
-        return 0;
+        if ($this->share_with_employer) {
+            // If shared with employer, only deduct employee share
+            return $sssContribution->employee_share;
+        } else {
+            // If not shared, deduct both employee and employer shares from employee
+            return $sssContribution->employee_share + $sssContribution->employer_share;
+        }
     }
 
     /**
