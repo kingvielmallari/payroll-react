@@ -1530,101 +1530,89 @@
                                              
                                             @endif
                                             @php
-                                                // Calculate taxable income: Gross Pay minus non-taxable allowances/bonuses
-                                                $taxableIncome = $calculatedGrossPay;
-                                                $debugSubtractions = []; // Debug array to track what gets subtracted
-                                                
-                                                // Combine allowance and bonus settings for tax calculation
-                                                $allSettings = collect();
-                                                if (isset($allowanceSettings) && $allowanceSettings->isNotEmpty()) {
-                                                    $allSettings = $allSettings->merge($allowanceSettings);
-                                                }
-                                                if (isset($bonusSettings) && $bonusSettings->isNotEmpty()) {
-                                                    $allSettings = $allSettings->merge($bonusSettings);
-                                                }
-                                                
-                                                // Debug: Show all available settings
-                                                if ($allSettings->isNotEmpty()) {
-                                                    $debugSubtractions[] = 'TOTAL SETTINGS FOUND: ' . $allSettings->count();
-                                                    foreach($allSettings as $setting) {
-                                                        $debugSubtractions[] = 'FOUND: ' . $setting->code . ' (' . $setting->type . ') - Active: ' . ($setting->is_active ? 'YES' : 'NO') . ' - Taxable: ' . ($setting->is_taxable ? 'YES' : 'NO');
-                                                    }
+                                                // Calculate taxable income using stored snapshot value or dynamic calculation
+                                                if ($payroll->status !== 'draft' && $employeeSnapshot && isset($employeeSnapshot->taxable_income) && $employeeSnapshot->taxable_income > 0) {
+                                                    // For processing/approved payrolls, use stored taxable income from snapshot
+                                                    $taxableIncome = $employeeSnapshot->taxable_income;
                                                 } else {
-                                                    $debugSubtractions[] = 'NO ALLOWANCE/BONUS SETTINGS FOUND!';
-                                                }
-                                                
-                                                // Process all allowance/bonus settings to subtract non-taxable amounts
-                                                if ($allSettings->isNotEmpty()) {
-                                                    foreach($allSettings as $setting) {
-                                                        // Debug: track all settings being processed
-                                                        $debugSubtractions[] = 'PROCESSING: ' . $setting->code . ' (' . $setting->type . ') - Active: ' . ($setting->is_active ? 'YES' : 'NO') . ' - Taxable: ' . ($setting->is_taxable ? 'YES' : 'NO');
-                                                        
-                                                        // Note: We process ALL settings for tax exemption, regardless of active status
-                                                        // because tax exemption should work even if the setting is temporarily inactive
-                                                        
-                                                        // Skip if this setting is taxable
-                                                        if ($setting->is_taxable) {
-                                                            $debugSubtractions[] = 'SKIPPED: ' . $setting->code . ' (is taxable)';
-                                                            continue;
-                                                        }
-                                                        
-                                                        $calculatedAmount = 0;
-                                                        
-                                                        // Calculate the amount based on the setting type
-                                                        if($setting->calculation_type === 'percentage') {
-                                                            $calculatedAmount = ($basicPay * $setting->rate_percentage) / 100;
-                                                        } elseif($setting->calculation_type === 'fixed_amount') {
-                                                            $calculatedAmount = $setting->fixed_amount;
-                                                            
-                                                            // Apply frequency-based calculation for daily allowances
-                                                            if ($setting->frequency === 'daily') {
-                                                                // Use same working days calculation as in allowances column
-                                                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                                $workingDays = 0;
-                                                                
-                                                                if (isset($employeeBreakdown['regular_workday'])) {
-                                                                    $regularBreakdown = $employeeBreakdown['regular_workday'];
-                                                                    $workingDays += ($regularBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
-                                                                }
-                                                                if (isset($employeeBreakdown['special_holiday'])) {
-                                                                    $specialBreakdown = $employeeBreakdown['special_holiday'];
-                                                                    $workingDays += ($specialBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
-                                                                }
-                                                                if (isset($employeeBreakdown['regular_holiday'])) {
-                                                                    $regularHolidayBreakdown = $employeeBreakdown['regular_holiday'];
-                                                                    $workingDays += ($regularHolidayBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
-                                                                }
-                                                                if (isset($employeeBreakdown['rest_day'])) {
-                                                                    $restBreakdown = $employeeBreakdown['rest_day'];
-                                                                    $workingDays += ($restBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
-                                                                }
-                                                                
-                                                                $maxDays = $setting->max_days_per_period ?? $workingDays;
-                                                                $applicableDays = min($workingDays, $maxDays);
-                                                                
-                                                                $calculatedAmount = $setting->fixed_amount * $applicableDays;
-                                                            }
-                                                        } elseif($setting->calculation_type === 'daily_rate_multiplier') {
-                                                            $dailyRate = $detail->employee->daily_rate ?? 0;
-                                                            $multiplier = $setting->multiplier ?? 1;
-                                                            $calculatedAmount = $dailyRate * $multiplier;
-                                                        }
-                                                        
-                                                        // Apply limits
-                                                        if ($setting->minimum_amount && $calculatedAmount < $setting->minimum_amount) {
-                                                            $calculatedAmount = $setting->minimum_amount;
-                                                        }
-                                                        if ($setting->maximum_amount && $calculatedAmount > $setting->maximum_amount) {
-                                                            $calculatedAmount = $setting->maximum_amount;
-                                                        }
-                                                        
-                                                        // Subtract from taxable income
-                                                        $taxableIncome -= $calculatedAmount;
-                                                        $debugSubtractions[] = $setting->code . ' (' . $setting->type . '): ₱' . number_format($calculatedAmount, 2);
+                                                    // For draft payrolls or if no valid snapshot data, calculate taxable income dynamically
+                                                    // Same calculation as PayrollDetail.getTaxableIncomeAttribute()
+                                                    $taxableIncome = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay;
+                                                    
+                                                    // Add taxable allowances/bonuses from settings
+                                                    $allSettings = collect();
+                                                    if (isset($allowanceSettings) && $allowanceSettings->isNotEmpty()) {
+                                                        $allSettings = $allSettings->merge($allowanceSettings);
                                                     }
+                                                    if (isset($bonusSettings) && $bonusSettings->isNotEmpty()) {
+                                                        $allSettings = $allSettings->merge($bonusSettings);
+                                                    }
+                                                    
+                                                    // Add only taxable allowances/bonuses
+                                                    if ($allSettings->isNotEmpty()) {
+                                                        foreach($allSettings as $setting) {
+                                                            // Only add if this setting is taxable
+                                                            if (!$setting->is_taxable) {
+                                                                continue;
+                                                            }
+                                                            
+                                                            $calculatedAmount = 0;
+                                                            
+                                                            // Calculate the amount based on the setting type
+                                                            if($setting->calculation_type === 'percentage') {
+                                                                $calculatedAmount = ($basicPayForGross * $setting->rate_percentage) / 100;
+                                                            } elseif($setting->calculation_type === 'fixed_amount') {
+                                                                $calculatedAmount = $setting->fixed_amount;
+                                                                
+                                                                // Apply frequency-based calculation for daily allowances
+                                                                if ($setting->frequency === 'daily') {
+                                                                    // Use same working days calculation as in allowances column
+                                                                    $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                                    $workingDays = 0;
+                                                                    
+                                                                    if (isset($employeeBreakdown['regular_workday'])) {
+                                                                        $regularBreakdown = $employeeBreakdown['regular_workday'];
+                                                                        $workingDays += ($regularBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                                                    }
+                                                                    if (isset($employeeBreakdown['special_holiday'])) {
+                                                                        $specialBreakdown = $employeeBreakdown['special_holiday'];
+                                                                        $workingDays += ($specialBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                                                    }
+                                                                    if (isset($employeeBreakdown['regular_holiday'])) {
+                                                                        $regularHolidayBreakdown = $employeeBreakdown['regular_holiday'];
+                                                                        $workingDays += ($regularHolidayBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                                                    }
+                                                                    if (isset($employeeBreakdown['rest_day'])) {
+                                                                        $restBreakdown = $employeeBreakdown['rest_day'];
+                                                                        $workingDays += ($restBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                                                    }
+                                                                    
+                                                                    $maxDays = $setting->max_days_per_period ?? $workingDays;
+                                                                    $applicableDays = min($workingDays, $maxDays);
+                                                                    
+                                                                    $calculatedAmount = $setting->fixed_amount * $applicableDays;
+                                                                }
+                                                            } elseif($setting->calculation_type === 'daily_rate_multiplier') {
+                                                                $dailyRate = $detail->employee->daily_rate ?? 0;
+                                                                $multiplier = $setting->multiplier ?? 1;
+                                                                $calculatedAmount = $dailyRate * $multiplier;
+                                                            }
+                                                            
+                                                            // Apply limits
+                                                            if ($setting->minimum_amount && $calculatedAmount < $setting->minimum_amount) {
+                                                                $calculatedAmount = $setting->minimum_amount;
+                                                            }
+                                                            if ($setting->maximum_amount && $calculatedAmount > $setting->maximum_amount) {
+                                                                $calculatedAmount = $setting->maximum_amount;
+                                                            }
+                                                            
+                                                            // Add taxable allowance/bonus to taxable income
+                                                            $taxableIncome += $calculatedAmount;
+                                                        }
+                                                    }
+                                                    
+                                                    $taxableIncome = max(0, $taxableIncome);
                                                 }
-                                
-                                                $taxableIncome = max(0, $taxableIncome);
                                             @endphp
                                           
                                             <div class="font-medium text-green-600 gross-pay-amount" data-gross-amount="{{ $calculatedGrossPay }}">₱{{ number_format($calculatedGrossPay, 2) }}</div>

@@ -5095,6 +5095,102 @@ class PayrollController extends Controller
                 'total_calculated' => $basicPay + $holidayPay + $restPay + $overtimePay
             ];
 
+            // Calculate taxable income using the same logic as PayrollDetail.getTaxableIncomeAttribute()
+            // This ensures consistency between dynamic and snapshot calculations
+            $taxableIncome = $basicPay + $holidayPay + $restPay + $overtimePay;
+
+            // Add only taxable allowances and bonuses
+            $allowanceSettings = \App\Models\AllowanceBonusSetting::where('type', 'allowance')
+                ->where('is_active', true)
+                ->get();
+            $bonusSettings = \App\Models\AllowanceBonusSetting::where('type', 'bonus')
+                ->where('is_active', true)
+                ->get();
+
+            $allSettings = $allowanceSettings->merge($bonusSettings);
+
+            // Log what settings we're processing
+            Log::info("Processing allowance/bonus settings for taxable income", [
+                'employee_id' => $employee->id,
+                'allowance_settings' => $allowanceSettings->map(function ($s) {
+                    return ['code' => $s->code, 'name' => $s->name, 'is_taxable' => $s->is_taxable, 'type' => $s->type];
+                }),
+                'bonus_settings' => $bonusSettings->map(function ($s) {
+                    return ['code' => $s->code, 'name' => $s->name, 'is_taxable' => $s->is_taxable, 'type' => $s->type];
+                })
+            ]);
+
+            foreach ($allSettings as $setting) {
+                // Only add if this setting is taxable
+                if (!$setting->is_taxable) {
+                    Log::info("Skipping non-taxable setting: {$setting->code} ({$setting->type})");
+                    continue;
+                }
+
+                Log::info("Processing taxable setting: {$setting->code} ({$setting->type})");
+
+                $calculatedAmount = 0;                // Calculate the amount based on the setting type
+                if ($setting->calculation_type === 'percentage') {
+                    $calculatedAmount = ($basicPay * $setting->rate_percentage) / 100;
+                } elseif ($setting->calculation_type === 'fixed_amount') {
+                    $calculatedAmount = $setting->fixed_amount;
+
+                    // Apply frequency-based calculation for daily allowances
+                    if ($setting->frequency === 'daily') {
+                        $workingDays = 0;
+
+                        // Count working days from time breakdown
+                        foreach ($employeeTimeBreakdown as $logType => $breakdown) {
+                            if ($breakdown['regular_hours'] > 0) {
+                                $workingDays += $breakdown['days_count'] ?? 0;
+                            }
+                        }
+
+                        $maxDays = $setting->max_days_per_period ?? $workingDays;
+                        $applicableDays = min($workingDays, $maxDays);
+
+                        $calculatedAmount = $setting->fixed_amount * $applicableDays;
+                    }
+                } elseif ($setting->calculation_type === 'daily_rate_multiplier') {
+                    $dailyRate = $employee->daily_rate ?? 0;
+                    $multiplier = $setting->multiplier ?? 1;
+                    $calculatedAmount = $dailyRate * $multiplier;
+                }
+
+                // Apply limits
+                if ($setting->minimum_amount && $calculatedAmount < $setting->minimum_amount) {
+                    $calculatedAmount = $setting->minimum_amount;
+                }
+                if ($setting->maximum_amount && $calculatedAmount > $setting->maximum_amount) {
+                    $calculatedAmount = $setting->maximum_amount;
+                }
+
+                // Add taxable allowance/bonus to taxable income
+                $taxableIncome += $calculatedAmount;
+
+                Log::info("Added taxable amount", [
+                    'setting_code' => $setting->code,
+                    'setting_type' => $setting->type,
+                    'calculated_amount' => $calculatedAmount,
+                    'running_taxable_income' => $taxableIncome
+                ]);
+            }
+
+            $taxableIncome = max(0, $taxableIncome);
+
+            // Log taxable income calculation for debugging
+            Log::info("Taxable income calculation for employee {$employee->id}", [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+                'rest_pay' => $restPay,
+                'overtime_pay' => $overtimePay,
+                'base_total' => $basicPay + $holidayPay + $restPay + $overtimePay,
+                'gross_pay' => $grossPay,
+                'taxable_income_final' => $taxableIncome,
+                'allowance_settings_count' => $allowanceSettings->count(),
+                'bonus_settings_count' => $bonusSettings->count(),
+            ]);
+
             // Create snapshot with exact draft mode calculations
             $snapshot = \App\Models\PayrollSnapshot::create([
                 'payroll_id' => $payroll->id,
@@ -5114,6 +5210,7 @@ class PayrollController extends Controller
                 'regular_pay' => $basicPay, // Use calculated basic pay
                 'overtime_pay' => $overtimePay, // Use calculated overtime pay
                 'holiday_pay' => $holidayPay, // Use calculated holiday pay
+                'rest_day_pay' => $restPay, // Use calculated rest day pay
                 'night_differential_pay' => $payrollCalculation['night_differential_pay'] ?? 0,
                 'basic_breakdown' => $basicBreakdown,
                 'holiday_breakdown' => $holidayBreakdown,
@@ -5136,6 +5233,7 @@ class PayrollController extends Controller
                 'other_deductions' => $payrollCalculation['other_deductions'] ?? 0,
                 'total_deductions' => $totalDeductions, // Use calculated total
                 'net_pay' => $netPay, // Use calculated net pay
+                'taxable_income' => $taxableIncome, // Store calculated taxable income
                 'settings_snapshot' => array_merge($settingsSnapshot, ['pay_breakdown' => $payBreakdown]),
                 'remarks' => 'Snapshot created at ' . now()->format('Y-m-d H:i:s') . ' - Captures exact draft calculations',
             ]);
