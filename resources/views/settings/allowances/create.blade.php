@@ -99,7 +99,55 @@
                 </div>
             </div>
 
+            <!-- Application Settings -->
+            <div class="mt-6 p-4 border border-gray-200 rounded-lg">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Application Settings</h3>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="flex items-center">
+                        <input type="hidden" name="is_taxable" value="0">
+                        <input type="checkbox" name="is_taxable" id="is_taxable" value="1" {{ old('is_taxable', true) ? 'checked' : '' }} 
+                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                        <label for="is_taxable" class="ml-2 block text-sm text-gray-900">Taxable</label>
+                    </div>
+
+                    <div class="flex items-center">
+                        <input type="hidden" name="apply_to_regular_days" value="0">
+                        <input type="checkbox" name="apply_to_regular_days" id="apply_to_regular_days" value="1" {{ old('apply_to_regular_days', true) ? 'checked' : '' }} 
+                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                        <label for="apply_to_regular_days" class="ml-2 block text-sm text-gray-900">Regular Days</label>
+                    </div>
+
+                    <div class="flex items-center">
+                        <input type="hidden" name="apply_to_overtime" value="0">
+                        <input type="checkbox" name="apply_to_overtime" id="apply_to_overtime" value="1" {{ old('apply_to_overtime', false) ? 'checked' : '' }} 
+                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                        <label for="apply_to_overtime" class="ml-2 block text-sm text-gray-900">Overtime</label>
+                    </div>
+
+                    <div class="flex items-center">
+                        <input type="hidden" name="apply_to_holidays" value="0">
+                        <input type="checkbox" name="apply_to_holidays" id="apply_to_holidays" value="1" {{ old('apply_to_holidays', true) ? 'checked' : '' }} 
+                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                        <label for="apply_to_holidays" class="ml-2 block text-sm text-gray-900">Holidays</label>
+                    </div>
+
+                    <div class="flex items-center">
+                        <input type="hidden" name="apply_to_rest_days" value="0">
+                        <input type="checkbox" name="apply_to_rest_days" id="apply_to_rest_days" value="1" {{ old('apply_to_rest_days', true) ? 'checked' : '' }} 
+                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                        <label for="apply_to_rest_days" class="ml-2 block text-sm text-gray-900">Rest Days</label>
+                    </div>
+                </div>
+                
+                <div class="mt-4 text-sm text-gray-600">
+                    <p><strong>Taxable:</strong> When checked, this allowance/bonus will be included in taxable income calculations for deductions.</p>
+                    <p><strong>Day Type Application:</strong> Choose which types of working days this allowance/bonus applies to.</p>
+                </div>
+            </div>
+
             <div class="flex items-center">
+                <input type="hidden" name="is_active" value="0">
                 <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', 1) ? 'checked' : '' }} 
                        class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
                 <label for="is_active" class="ml-2 block text-sm text-gray-900">Active</label>

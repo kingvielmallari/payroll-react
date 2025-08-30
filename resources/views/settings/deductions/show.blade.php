@@ -60,7 +60,7 @@
                         @if($deduction->rate_percentage)
                             <div>
                                 <dt class="text-sm text-gray-500">Rate Percentage</dt>
-                                <dd class="text-sm text-gray-900">{{ $deduction->rate_percentage }}%</dd>
+                                <dd class="text-sm text-gray-900">{{ rtrim(rtrim(number_format($deduction->rate_percentage, 4), '0'), '.') }}%</dd>
                             </div>
                         @endif
                         @if($deduction->fixed_amount)

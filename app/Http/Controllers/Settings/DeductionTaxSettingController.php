@@ -61,12 +61,17 @@ class DeductionTaxSettingController extends Controller
             $validated['calculation_type'] = 'bracket';
         }
 
-        // Convert empty strings to null for decimal fields to prevent casting errors
+        // Convert empty strings to null for decimal fields and tax_table_type to prevent casting errors
         $decimalFields = ['rate_percentage', 'fixed_amount', 'minimum_amount', 'maximum_amount', 'salary_cap', 'employer_share_rate', 'employer_share_fixed'];
         foreach ($decimalFields as $field) {
             if (isset($validated[$field]) && $validated[$field] === '') {
                 $validated[$field] = null;
             }
+        }
+
+        // Handle tax_table_type empty string - convert to null
+        if (isset($validated['tax_table_type']) && $validated['tax_table_type'] === '') {
+            $validated['tax_table_type'] = null;
         }
 
         DeductionTaxSetting::create($validated);
@@ -122,12 +127,17 @@ class DeductionTaxSettingController extends Controller
             $validated['calculation_type'] = 'bracket';
         }
 
-        // Convert empty strings to null for decimal fields to prevent casting errors
+        // Convert empty strings to null for decimal fields and tax_table_type to prevent casting errors
         $decimalFields = ['rate_percentage', 'fixed_amount', 'minimum_amount', 'maximum_amount', 'salary_cap', 'employer_share_rate', 'employer_share_fixed'];
         foreach ($decimalFields as $field) {
             if (isset($validated[$field]) && $validated[$field] === '') {
                 $validated[$field] = null;
             }
+        }
+
+        // Handle tax_table_type empty string - convert to null
+        if (isset($validated['tax_table_type']) && $validated['tax_table_type'] === '') {
+            $validated['tax_table_type'] = null;
         }
 
         $deduction->update($validated);

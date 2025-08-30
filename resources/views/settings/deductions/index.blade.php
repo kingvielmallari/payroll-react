@@ -84,7 +84,7 @@
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">
                                     @if($deduction->calculation_type === 'percentage' && $deduction->rate_percentage)
-                                        {{ $deduction->rate_percentage }}%
+                                        {{ rtrim(rtrim(number_format($deduction->rate_percentage, 4), '0'), '.') }}%
                                     @elseif($deduction->calculation_type === 'fixed_amount' && $deduction->fixed_amount)
                                         ₱{{ number_format($deduction->fixed_amount, 2) }}
                                     @elseif(in_array($deduction->calculation_type, ['sss_table', 'philhealth_table', 'pagibig_table', 'withholding_tax_table']) || 

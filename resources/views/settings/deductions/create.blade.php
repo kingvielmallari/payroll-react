@@ -124,8 +124,9 @@
             <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div id="percentage_field" style="display: none;">
                     <label for="rate_percentage" class="block text-sm font-medium text-gray-700 mb-2">Rate Percentage (%)</label>
-                    <input type="number" name="rate_percentage" id="rate_percentage" step="0.01" min="0" max="100"
+                    <input type="number" name="rate_percentage" id="rate_percentage" min="0" max="100"
                            class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                           placeholder="Enter percentage (e.g., 10 for 10%)"
                            value="{{ old('rate_percentage') }}">
                     @error('rate_percentage')
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -149,25 +150,17 @@
                 <select name="pay_basis" id="pay_basis" 
                         class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
                     <option value="">Select Pay Basis</option>
-                    <option value="basic_pay" {{ old('pay_basis', 'basic_pay') === 'basic_pay' ? 'selected' : '' }}>
-                        Basic Pay - rate × hours/days worked
-                    </option>
-                    <option value="gross_pay" {{ old('pay_basis') === 'gross_pay' ? 'selected' : '' }}>
-                        Gross Pay - basic + OT + holiday pay + allowances + bonus (taxable)
+                    <option value="gross_pay" {{ old('pay_basis', 'gross_pay') === 'gross_pay' ? 'selected' : '' }}>
+                        Total Gross - basic + OT + holiday pay + allowances + bonus
                     </option>
                     <option value="taxable_income" {{ old('pay_basis') === 'taxable_income' ? 'selected' : '' }}>
-                        Taxable Income - gross pay - (SSS + PhilHealth + Pag-IBIG)
-                    </option>
-                    <option value="net_pay" {{ old('pay_basis') === 'net_pay' ? 'selected' : '' }}>
-                        Net Pay - gross pay - all deductions
+                        Taxable Income - includes only taxable allowances and bonuses
                     </option>
                 </select>
                 
                 <div class="mt-2 text-sm text-gray-500">
-                    <p><strong>Basic Pay:</strong> Used for leave calculations, 13th month pay, and compliance reporting</p>
-                    <p><strong>Gross Pay:</strong> Used for BIR reporting and government contributions</p>
-                    <p><strong>Taxable Income:</strong> Used for BIR withholding tax calculations</p>
-                    <p><strong>Net Pay:</strong> Used for final take-home pay calculations (rarely used for deductions)</p>
+                    <p><strong>Total Gross:</strong> Includes all earnings - basic pay, overtime, holiday pay, allowances, and bonuses</p>
+                    <p><strong>Taxable Income:</strong> Includes basic pay, overtime, holiday pay, and only taxable allowances/bonuses</p>
                 </div>
                 
                 @error('pay_basis')
@@ -175,8 +168,8 @@
                 @enderror
                 
                 <!-- Hidden fields for backward compatibility -->
-                <input type="hidden" name="apply_to_basic_pay" id="hidden_apply_to_basic_pay" value="1">
-                <input type="hidden" name="apply_to_gross_pay" id="hidden_apply_to_gross_pay" value="0">
+                <input type="hidden" name="apply_to_basic_pay" id="hidden_apply_to_basic_pay" value="0">
+                <input type="hidden" name="apply_to_gross_pay" id="hidden_apply_to_gross_pay" value="1">
                 <input type="hidden" name="apply_to_taxable_income" id="hidden_apply_to_taxable_income" value="0">
                 <input type="hidden" name="apply_to_net_pay" id="hidden_apply_to_net_pay" value="0">
             </div>
@@ -575,17 +568,11 @@ function updatePayBasisHiddenFields(selectedValue) {
     
     // Set the selected one to 1
     switch(selectedValue) {
-        case 'basic_pay':
-            document.getElementById('hidden_apply_to_basic_pay').value = '1';
-            break;
         case 'gross_pay':
             document.getElementById('hidden_apply_to_gross_pay').value = '1';
             break;
         case 'taxable_income':
             document.getElementById('hidden_apply_to_taxable_income').value = '1';
-            break;
-        case 'net_pay':
-            document.getElementById('hidden_apply_to_net_pay').value = '1';
             break;
     }
 }

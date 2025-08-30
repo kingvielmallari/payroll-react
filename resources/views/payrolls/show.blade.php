@@ -72,6 +72,7 @@
                             <div class="text-2xl font-bold text-green-600" id="totalGrossDisplay">₱{{ number_format($totalGrossPay, 2) }}</div>
                             <div class="text-sm text-green-800">Total Gross</div>
                         </div>
+                      
                         <div class="bg-red-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
                             @php
                                 // Calculate actual total deductions using the same logic as employee details
@@ -85,7 +86,17 @@
                                         // Use dynamic calculation like in employee details section
                                         foreach($deductionSettings as $setting) {
                                             $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->basic_pay ?? 0;
-                                            $grossPay = $detail->gross_pay ?? 0;
+                                            
+                                            // Calculate the SAME gross pay as in the Gross Pay column for this employee
+                                            $basicPayForGross = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->basic_pay ?? 0;
+                                            $holidayPayForGross = $payBreakdownByEmployee[$detail->employee_id]['holiday_pay'] ?? $detail->holiday_pay ?? 0;
+                                            $restPayForGross = 0;
+                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            if (isset($employeeBreakdown['rest_day'])) {
+                                                $restBreakdown = $employeeBreakdown['rest_day'];
+                                                $restPayForGross = ($restBreakdown['regular_hours'] ?? 0) * ($detail->employee->hourly_rate ?? 0) * 1.3;
+                                                $restPayForGross += ($restBreakdown['overtime_hours'] ?? 0) * ($detail->employee->hourly_rate ?? 0) * 1.69;
+                                            }
                                             $overtimePay = $detail->overtime_pay ?? 0;
                                             
                                             // Calculate DYNAMIC allowances (same logic as Allowances column)
@@ -151,12 +162,15 @@
                                             
                                             $bonuses = $detail->bonuses ?? 0;
                                             
+                                            // Calculate total gross pay like in the Gross Pay column
+                                            $calculatedGrossPayForSummary = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
+                                            
                                             $calculatedAmount = $setting->calculateDeduction(
                                                 $basicPay, 
                                                 $overtimePay, 
                                                 $bonuses, 
                                                 $allowances, 
-                                                $grossPay
+                                                $calculatedGrossPayForSummary  // Use calculated gross pay instead of stored value
                                             );
                                             $detailDeductionTotal += $calculatedAmount;
                                         }
@@ -1515,7 +1529,107 @@
                                                     @endif
                                              
                                             @endif
-                                            <div class="font-bold text-green-600 gross-pay-amount" data-gross-amount="{{ $calculatedGrossPay }}">₱{{ number_format($calculatedGrossPay, 2) }}</div>
+                                            @php
+                                                // Calculate taxable income: Gross Pay minus non-taxable allowances/bonuses
+                                                $taxableIncome = $calculatedGrossPay;
+                                                $debugSubtractions = []; // Debug array to track what gets subtracted
+                                                
+                                                // Combine allowance and bonus settings for tax calculation
+                                                $allSettings = collect();
+                                                if (isset($allowanceSettings) && $allowanceSettings->isNotEmpty()) {
+                                                    $allSettings = $allSettings->merge($allowanceSettings);
+                                                }
+                                                if (isset($bonusSettings) && $bonusSettings->isNotEmpty()) {
+                                                    $allSettings = $allSettings->merge($bonusSettings);
+                                                }
+                                                
+                                                // Debug: Show all available settings
+                                                if ($allSettings->isNotEmpty()) {
+                                                    $debugSubtractions[] = 'TOTAL SETTINGS FOUND: ' . $allSettings->count();
+                                                    foreach($allSettings as $setting) {
+                                                        $debugSubtractions[] = 'FOUND: ' . $setting->code . ' (' . $setting->type . ') - Active: ' . ($setting->is_active ? 'YES' : 'NO') . ' - Taxable: ' . ($setting->is_taxable ? 'YES' : 'NO');
+                                                    }
+                                                } else {
+                                                    $debugSubtractions[] = 'NO ALLOWANCE/BONUS SETTINGS FOUND!';
+                                                }
+                                                
+                                                // Process all allowance/bonus settings to subtract non-taxable amounts
+                                                if ($allSettings->isNotEmpty()) {
+                                                    foreach($allSettings as $setting) {
+                                                        // Debug: track all settings being processed
+                                                        $debugSubtractions[] = 'PROCESSING: ' . $setting->code . ' (' . $setting->type . ') - Active: ' . ($setting->is_active ? 'YES' : 'NO') . ' - Taxable: ' . ($setting->is_taxable ? 'YES' : 'NO');
+                                                        
+                                                        // Note: We process ALL settings for tax exemption, regardless of active status
+                                                        // because tax exemption should work even if the setting is temporarily inactive
+                                                        
+                                                        // Skip if this setting is taxable
+                                                        if ($setting->is_taxable) {
+                                                            $debugSubtractions[] = 'SKIPPED: ' . $setting->code . ' (is taxable)';
+                                                            continue;
+                                                        }
+                                                        
+                                                        $calculatedAmount = 0;
+                                                        
+                                                        // Calculate the amount based on the setting type
+                                                        if($setting->calculation_type === 'percentage') {
+                                                            $calculatedAmount = ($basicPay * $setting->rate_percentage) / 100;
+                                                        } elseif($setting->calculation_type === 'fixed_amount') {
+                                                            $calculatedAmount = $setting->fixed_amount;
+                                                            
+                                                            // Apply frequency-based calculation for daily allowances
+                                                            if ($setting->frequency === 'daily') {
+                                                                // Use same working days calculation as in allowances column
+                                                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                                                $workingDays = 0;
+                                                                
+                                                                if (isset($employeeBreakdown['regular_workday'])) {
+                                                                    $regularBreakdown = $employeeBreakdown['regular_workday'];
+                                                                    $workingDays += ($regularBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                                                }
+                                                                if (isset($employeeBreakdown['special_holiday'])) {
+                                                                    $specialBreakdown = $employeeBreakdown['special_holiday'];
+                                                                    $workingDays += ($specialBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                                                }
+                                                                if (isset($employeeBreakdown['regular_holiday'])) {
+                                                                    $regularHolidayBreakdown = $employeeBreakdown['regular_holiday'];
+                                                                    $workingDays += ($regularHolidayBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                                                }
+                                                                if (isset($employeeBreakdown['rest_day'])) {
+                                                                    $restBreakdown = $employeeBreakdown['rest_day'];
+                                                                    $workingDays += ($restBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                                                }
+                                                                
+                                                                $maxDays = $setting->max_days_per_period ?? $workingDays;
+                                                                $applicableDays = min($workingDays, $maxDays);
+                                                                
+                                                                $calculatedAmount = $setting->fixed_amount * $applicableDays;
+                                                            }
+                                                        } elseif($setting->calculation_type === 'daily_rate_multiplier') {
+                                                            $dailyRate = $detail->employee->daily_rate ?? 0;
+                                                            $multiplier = $setting->multiplier ?? 1;
+                                                            $calculatedAmount = $dailyRate * $multiplier;
+                                                        }
+                                                        
+                                                        // Apply limits
+                                                        if ($setting->minimum_amount && $calculatedAmount < $setting->minimum_amount) {
+                                                            $calculatedAmount = $setting->minimum_amount;
+                                                        }
+                                                        if ($setting->maximum_amount && $calculatedAmount > $setting->maximum_amount) {
+                                                            $calculatedAmount = $setting->maximum_amount;
+                                                        }
+                                                        
+                                                        // Subtract from taxable income
+                                                        $taxableIncome -= $calculatedAmount;
+                                                        $debugSubtractions[] = $setting->code . ' (' . $setting->type . '): ₱' . number_format($calculatedAmount, 2);
+                                                    }
+                                                }
+                                
+                                                $taxableIncome = max(0, $taxableIncome);
+                                            @endphp
+                                          
+                                            <div class="font-medium text-green-600 gross-pay-amount" data-gross-amount="{{ $calculatedGrossPay }}">₱{{ number_format($calculatedGrossPay, 2) }}</div>
+                                              <div class="text-xs text-gray-500 taxable-income-amount" data-taxable-amount="{{ $taxableIncome }}">Taxable: ₱{{ number_format($taxableIncome, 2) }}</div>
+                                          
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
@@ -1563,17 +1677,21 @@
                                                         @php
                                                             // Calculate actual deduction amount for this employee
                                                             $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->basic_pay ?? 0;
-                                                            $grossPay = $detail->gross_pay ?? 0;
+                                                            // Use the CALCULATED gross pay from the Gross Pay column instead of stored value
+                                                            $grossPayForDeduction = $calculatedGrossPay;
                                                             $overtimePay = $detail->overtime_pay ?? 0;
                                                             $allowances = $detail->allowances ?? 0;
                                                             $bonuses = $detail->bonuses ?? 0;
                                                             
+                                                            // Use the calculated taxable income from the previous column
                                                             $calculatedAmount = $setting->calculateDeduction(
                                                                 $basicPay, 
                                                                 $overtimePay, 
                                                                 $bonuses, 
                                                                 $allowances, 
-                                                                $grossPay
+                                                                $grossPayForDeduction,
+                                                                $taxableIncome,  // Pass calculated taxable income
+                                                                null // netPay (not used for now)
                                                             );
                                                             $calculatedDeductionTotal += $calculatedAmount;
                                                         @endphp
@@ -1871,7 +1989,8 @@
                                                 foreach($deductionSettings as $setting) {
                                                     // Use same variable mapping as deduction column calculation
                                                     $basicPayForDeduction = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->basic_pay ?? 0;
-                                                    $grossPayForDeduction = $detail->gross_pay ?? 0;
+                                                    // Use the CALCULATED gross pay from the Gross Pay column instead of stored value
+                                                    $grossPayForDeduction = $calculatedGrossPay;
                                                     $overtimePayForDeduction = $detail->overtime_pay ?? 0;
                                                     $allowancesForDeduction = $detail->allowances ?? 0;
                                                     $bonuses = $detail->bonuses ?? 0;
@@ -1881,7 +2000,9 @@
                                                         $overtimePayForDeduction, 
                                                         $bonuses, 
                                                         $allowancesForDeduction, 
-                                                        $grossPayForDeduction
+                                                        $grossPayForDeduction,
+                                                        $taxableIncome,  // Pass calculated taxable income
+                                                        null // netPay (not used for now)
                                                     );
                                                     $detailDeductionTotal += $calculatedAmount;
                                                 }
