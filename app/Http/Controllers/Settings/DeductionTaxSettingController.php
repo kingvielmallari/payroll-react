@@ -20,11 +20,7 @@ class DeductionTaxSettingController extends Controller
 
     public function create()
     {
-        $sssTable = \App\Models\SssTaxTable::where('is_active', true)
-            ->orderBy('range_start')
-            ->get();
-            
-        return view('settings.deductions.create', compact('sssTable'));
+        return view('settings.deductions.create');
     }
 
     public function store(Request $request)
@@ -91,11 +87,7 @@ class DeductionTaxSettingController extends Controller
 
     public function edit(DeductionTaxSetting $deduction)
     {
-        $sssTable = \App\Models\SssTaxTable::where('is_active', true)
-            ->orderBy('range_start')
-            ->get();
-            
-        return view('settings.deductions.edit', compact('deduction', 'sssTable'));
+        return view('settings.deductions.edit', compact('deduction'));
     }
 
     public function update(Request $request, DeductionTaxSetting $deduction)

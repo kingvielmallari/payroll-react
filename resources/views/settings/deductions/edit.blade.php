@@ -118,6 +118,8 @@
             <div class="mt-6" id="share_employer_section" style="display: none;">
                 <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
                     <div class="flex items-center">
+                        <!-- Hidden field to ensure false value is sent when checkbox is unchecked -->
+                        <input type="hidden" name="share_with_employer" value="0">
                         <input type="checkbox" name="share_with_employer" id="share_with_employer" value="1" 
                                {{ old('share_with_employer', $deduction->share_with_employer) ? 'checked' : '' }}
                                class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
@@ -440,93 +442,72 @@ function showTaxTableModal(tableType) {
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
-                            @foreach($sssTable as $row)
-                            <tr>
-                                <td class="px-3 py-2 text-xs">
-                                    @if($row->range_end)
-                                        ₱{{ number_format($row->range_start, 2) }} - ₱{{ number_format($row->range_end, 2) }}
-                                    @else
-                                        ₱{{ number_format($row->range_start, 2) }} and above
-                                    @endif
-                                </td>
-                                <td class="px-3 py-2 text-xs">₱{{ number_format($row->employee_share, 2) }}</td>
-                                <td class="px-3 py-2 text-xs">₱{{ number_format($row->employer_share, 2) }}</td>
-                                <td class="px-3 py-2 text-xs">₱{{ number_format($row->total_contribution, 2) }}</td>
-                            </tr>
-                            @endforeach
+                            <tr><td class="px-2 py-1 text-xs">₱0 - ₱5,249.99</td><td class="px-2 py-1 text-xs">₱250</td><td class="px-2 py-1 text-xs">₱510</td><td class="px-2 py-1 text-xs">₱760</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱5,250 - ₱5,749.99</td><td class="px-2 py-1 text-xs">₱275</td><td class="px-2 py-1 text-xs">₱560</td><td class="px-2 py-1 text-xs">₱835</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱5,750 - ₱6,249.99</td><td class="px-2 py-1 text-xs">₱300</td><td class="px-2 py-1 text-xs">₱610</td><td class="px-2 py-1 text-xs">₱910</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱6,250 - ₱6,749.99</td><td class="px-2 py-1 text-xs">₱325</td><td class="px-2 py-1 text-xs">₱660</td><td class="px-2 py-1 text-xs">₱985</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱6,750 - ₱7,249.99</td><td class="px-2 py-1 text-xs">₱350</td><td class="px-2 py-1 text-xs">₱710</td><td class="px-2 py-1 text-xs">₱1,060</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱7,250 - ₱7,749.99</td><td class="px-2 py-1 text-xs">₱375</td><td class="px-2 py-1 text-xs">₱760</td><td class="px-2 py-1 text-xs">₱1,135</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱7,750 - ₱8,249.99</td><td class="px-2 py-1 text-xs">₱400</td><td class="px-2 py-1 text-xs">₱810</td><td class="px-2 py-1 text-xs">₱1,210</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱8,250 - ₱8,749.99</td><td class="px-2 py-1 text-xs">₱425</td><td class="px-2 py-1 text-xs">₱860</td><td class="px-2 py-1 text-xs">₱1,285</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱8,750 - ₱9,249.99</td><td class="px-2 py-1 text-xs">₱450</td><td class="px-2 py-1 text-xs">₱910</td><td class="px-2 py-1 text-xs">₱1,360</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱9,250 - ₱9,749.99</td><td class="px-2 py-1 text-xs">₱475</td><td class="px-2 py-1 text-xs">₱960</td><td class="px-2 py-1 text-xs">₱1,435</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱9,750 - ₱10,249.99</td><td class="px-2 py-1 text-xs">₱500</td><td class="px-2 py-1 text-xs">₱1,010</td><td class="px-2 py-1 text-xs">₱1,510</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱10,250 - ₱10,749.99</td><td class="px-2 py-1 text-xs">₱525</td><td class="px-2 py-1 text-xs">₱1,060</td><td class="px-2 py-1 text-xs">₱1,585</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱10,750 - ₱11,249.99</td><td class="px-2 py-1 text-xs">₱550</td><td class="px-2 py-1 text-xs">₱1,110</td><td class="px-2 py-1 text-xs">₱1,660</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱11,250 - ₱11,749.99</td><td class="px-2 py-1 text-xs">₱575</td><td class="px-2 py-1 text-xs">₱1,160</td><td class="px-2 py-1 text-xs">₱1,735</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱11,750 - ₱12,249.99</td><td class="px-2 py-1 text-xs">₱600</td><td class="px-2 py-1 text-xs">₱1,210</td><td class="px-2 py-1 text-xs">₱1,810</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱12,250 - ₱12,749.99</td><td class="px-2 py-1 text-xs">₱625</td><td class="px-2 py-1 text-xs">₱1,260</td><td class="px-2 py-1 text-xs">₱1,885</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱12,750 - ₱13,249.99</td><td class="px-2 py-1 text-xs">₱650</td><td class="px-2 py-1 text-xs">₱1,310</td><td class="px-2 py-1 text-xs">₱1,960</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱13,250 - ₱13,749.99</td><td class="px-2 py-1 text-xs">₱675</td><td class="px-2 py-1 text-xs">₱1,360</td><td class="px-2 py-1 text-xs">₱2,035</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱13,750 - ₱14,249.99</td><td class="px-2 py-1 text-xs">₱700</td><td class="px-2 py-1 text-xs">₱1,410</td><td class="px-2 py-1 text-xs">₱2,110</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱14,250 - ₱14,749.99</td><td class="px-2 py-1 text-xs">₱725</td><td class="px-2 py-1 text-xs">₱1,460</td><td class="px-2 py-1 text-xs">₱2,185</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱14,750 - ₱15,249.99</td><td class="px-2 py-1 text-xs">₱750</td><td class="px-2 py-1 text-xs">₱1,530</td><td class="px-2 py-1 text-xs">₱2,280</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱15,250 - ₱15,749.99</td><td class="px-2 py-1 text-xs">₱775</td><td class="px-2 py-1 text-xs">₱1,580</td><td class="px-2 py-1 text-xs">₱2,355</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱15,750 - ₱16,249.99</td><td class="px-2 py-1 text-xs">₱800</td><td class="px-2 py-1 text-xs">₱1,630</td><td class="px-2 py-1 text-xs">₱2,430</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱16,250 - ₱16,749.99</td><td class="px-2 py-1 text-xs">₱825</td><td class="px-2 py-1 text-xs">₱1,680</td><td class="px-2 py-1 text-xs">₱2,505</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱16,750 - ₱17,249.99</td><td class="px-2 py-1 text-xs">₱850</td><td class="px-2 py-1 text-xs">₱1,730</td><td class="px-2 py-1 text-xs">₱2,580</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱17,250 - ₱17,749.99</td><td class="px-2 py-1 text-xs">₱875</td><td class="px-2 py-1 text-xs">₱1,780</td><td class="px-2 py-1 text-xs">₱2,655</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱17,750 - ₱18,249.99</td><td class="px-2 py-1 text-xs">₱900</td><td class="px-2 py-1 text-xs">₱1,830</td><td class="px-2 py-1 text-xs">₱2,730</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱18,250 - ₱18,749.99</td><td class="px-2 py-1 text-xs">₱925</td><td class="px-2 py-1 text-xs">₱1,880</td><td class="px-2 py-1 text-xs">₱2,805</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱18,750 - ₱19,249.99</td><td class="px-2 py-1 text-xs">₱950</td><td class="px-2 py-1 text-xs">₱1,930</td><td class="px-2 py-1 text-xs">₱2,880</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱19,250 - ₱19,749.99</td><td class="px-2 py-1 text-xs">₱975</td><td class="px-2 py-1 text-xs">₱1,980</td><td class="px-2 py-1 text-xs">₱2,955</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱19,750 - ₱20,249.99</td><td class="px-2 py-1 text-xs">₱1,000</td><td class="px-2 py-1 text-xs">₱2,030</td><td class="px-2 py-1 text-xs">₱3,030</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱20,250 - ₱20,749.99</td><td class="px-2 py-1 text-xs">₱1,025</td><td class="px-2 py-1 text-xs">₱2,080</td><td class="px-2 py-1 text-xs">₱3,105</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱20,750 - ₱21,249.99</td><td class="px-2 py-1 text-xs">₱1,050</td><td class="px-2 py-1 text-xs">₱2,130</td><td class="px-2 py-1 text-xs">₱3,180</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱21,250 - ₱21,749.99</td><td class="px-2 py-1 text-xs">₱1,075</td><td class="px-2 py-1 text-xs">₱2,180</td><td class="px-2 py-1 text-xs">₱3,255</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱21,750 - ₱22,249.99</td><td class="px-2 py-1 text-xs">₱1,100</td><td class="px-2 py-1 text-xs">₱2,230</td><td class="px-2 py-1 text-xs">₱3,330</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱22,250 - ₱22,749.99</td><td class="px-2 py-1 text-xs">₱1,125</td><td class="px-2 py-1 text-xs">₱2,280</td><td class="px-2 py-1 text-xs">₱3,405</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱22,750 - ₱23,249.99</td><td class="px-2 py-1 text-xs">₱1,150</td><td class="px-2 py-1 text-xs">₱2,330</td><td class="px-2 py-1 text-xs">₱3,480</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱23,250 - ₱23,749.99</td><td class="px-2 py-1 text-xs">₱1,175</td><td class="px-2 py-1 text-xs">₱2,380</td><td class="px-2 py-1 text-xs">₱3,555</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱23,750 - ₱24,249.99</td><td class="px-2 py-1 text-xs">₱1,200</td><td class="px-2 py-1 text-xs">₱2,430</td><td class="px-2 py-1 text-xs">₱3,630</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱24,250 - ₱24,749.99</td><td class="px-2 py-1 text-xs">₱1,225</td><td class="px-2 py-1 text-xs">₱2,480</td><td class="px-2 py-1 text-xs">₱3,705</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱24,750 - ₱25,249.99</td><td class="px-2 py-1 text-xs">₱1,250</td><td class="px-2 py-1 text-xs">₱2,530</td><td class="px-2 py-1 text-xs">₱3,780</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱25,250 - ₱25,749.99</td><td class="px-2 py-1 text-xs">₱1,275</td><td class="px-2 py-1 text-xs">₱2,580</td><td class="px-2 py-1 text-xs">₱3,855</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱25,750 - ₱26,249.99</td><td class="px-2 py-1 text-xs">₱1,300</td><td class="px-2 py-1 text-xs">₱2,630</td><td class="px-2 py-1 text-xs">₱3,930</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱26,250 - ₱26,749.99</td><td class="px-2 py-1 text-xs">₱1,325</td><td class="px-2 py-1 text-xs">₱2,680</td><td class="px-2 py-1 text-xs">₱4,005</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱26,750 - ₱27,249.99</td><td class="px-2 py-1 text-xs">₱1,350</td><td class="px-2 py-1 text-xs">₱2,730</td><td class="px-2 py-1 text-xs">₱4,080</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱27,250 - ₱27,749.99</td><td class="px-2 py-1 text-xs">₱1,375</td><td class="px-2 py-1 text-xs">₱2,780</td><td class="px-2 py-1 text-xs">₱4,155</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱27,750 - ₱28,249.99</td><td class="px-2 py-1 text-xs">₱1,400</td><td class="px-2 py-1 text-xs">₱2,830</td><td class="px-2 py-1 text-xs">₱4,230</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱28,250 - ₱28,749.99</td><td class="px-2 py-1 text-xs">₱1,425</td><td class="px-2 py-1 text-xs">₱2,880</td><td class="px-2 py-1 text-xs">₱4,305</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱28,750 - ₱29,249.99</td><td class="px-2 py-1 text-xs">₱1,450</td><td class="px-2 py-1 text-xs">₱2,930</td><td class="px-2 py-1 text-xs">₱4,380</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱29,250 - ₱29,749.99</td><td class="px-2 py-1 text-xs">₱1,475</td><td class="px-2 py-1 text-xs">₱2,980</td><td class="px-2 py-1 text-xs">₱4,455</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱29,750 - ₱30,249.99</td><td class="px-2 py-1 text-xs">₱1,500</td><td class="px-2 py-1 text-xs">₱3,030</td><td class="px-2 py-1 text-xs">₱4,530</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱30,250 - ₱30,749.99</td><td class="px-2 py-1 text-xs">₱1,525</td><td class="px-2 py-1 text-xs">₱3,080</td><td class="px-2 py-1 text-xs">₱4,605</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱30,750 - ₱31,249.99</td><td class="px-2 py-1 text-xs">₱1,550</td><td class="px-2 py-1 text-xs">₱3,130</td><td class="px-2 py-1 text-xs">₱4,680</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱31,250 - ₱31,749.99</td><td class="px-2 py-1 text-xs">₱1,575</td><td class="px-2 py-1 text-xs">₱3,180</td><td class="px-2 py-1 text-xs">₱4,755</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱31,750 - ₱32,249.99</td><td class="px-2 py-1 text-xs">₱1,600</td><td class="px-2 py-1 text-xs">₱3,230</td><td class="px-2 py-1 text-xs">₱4,830</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱32,250 - ₱32,749.99</td><td class="px-2 py-1 text-xs">₱1,625</td><td class="px-2 py-1 text-xs">₱3,280</td><td class="px-2 py-1 text-xs">₱4,905</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱32,750 - ₱33,249.99</td><td class="px-2 py-1 text-xs">₱1,650</td><td class="px-2 py-1 text-xs">₱3,330</td><td class="px-2 py-1 text-xs">₱4,980</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱33,250 - ₱33,749.99</td><td class="px-2 py-1 text-xs">₱1,675</td><td class="px-2 py-1 text-xs">₱3,380</td><td class="px-2 py-1 text-xs">₱5,055</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱33,750 - ₱34,249.99</td><td class="px-2 py-1 text-xs">₱1,700</td><td class="px-2 py-1 text-xs">₱3,430</td><td class="px-2 py-1 text-xs">₱5,130</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱34,250 - ₱34,749.99</td><td class="px-2 py-1 text-xs">₱1,725</td><td class="px-2 py-1 text-xs">₱3,480</td><td class="px-2 py-1 text-xs">₱5,205</td></tr>
+                            <tr><td class="px-2 py-1 text-xs">₱34,750 - Above</td><td class="px-2 py-1 text-xs">₱1,750</td><td class="px-2 py-1 text-xs">₱3,530</td><td class="px-2 py-1 text-xs">₱5,280</td></tr>
                         </tbody>
                     </table>
-                </div>
-                <div class="mt-4 p-3 bg-blue-50 rounded-md">
-                    <p class="text-sm text-blue-800"><strong>Note:</strong> Employee and employer shares are based on 2025 SSS contribution rates.</p>
-                </div>
-            `;
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <tr><td class="px-2 py-1 text-xs">4,250 - 4,749.99</td><td class="px-2 py-1 text-xs">4,500.00</td><td class="px-2 py-1 text-xs">202.50</td><td class="px-2 py-1 text-xs">427.50</td><td class="px-2 py-1 text-xs">630.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">4,750 - 5,249.99</td><td class="px-2 py-1 text-xs">5,000.00</td><td class="px-2 py-1 text-xs">225.00</td><td class="px-2 py-1 text-xs">475.00</td><td class="px-2 py-1 text-xs">700.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">5,250 - 5,749.99</td><td class="px-2 py-1 text-xs">5,500.00</td><td class="px-2 py-1 text-xs">247.50</td><td class="px-2 py-1 text-xs">522.50</td><td class="px-2 py-1 text-xs">770.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">5,750 - 6,249.99</td><td class="px-2 py-1 text-xs">6,000.00</td><td class="px-2 py-1 text-xs">270.00</td><td class="px-2 py-1 text-xs">570.00</td><td class="px-2 py-1 text-xs">840.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">6,250 - 6,749.99</td><td class="px-2 py-1 text-xs">6,500.00</td><td class="px-2 py-1 text-xs">292.50</td><td class="px-2 py-1 text-xs">617.50</td><td class="px-2 py-1 text-xs">910.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">6,750 - 7,249.99</td><td class="px-2 py-1 text-xs">7,000.00</td><td class="px-2 py-1 text-xs">315.00</td><td class="px-2 py-1 text-xs">665.00</td><td class="px-2 py-1 text-xs">980.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">7,250 - 7,749.99</td><td class="px-2 py-1 text-xs">7,500.00</td><td class="px-2 py-1 text-xs">337.50</td><td class="px-2 py-1 text-xs">712.50</td><td class="px-2 py-1 text-xs">1,050.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">7,750 - 8,249.99</td><td class="px-2 py-1 text-xs">8,000.00</td><td class="px-2 py-1 text-xs">360.00</td><td class="px-2 py-1 text-xs">760.00</td><td class="px-2 py-1 text-xs">1,120.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">8,250 - 8,749.99</td><td class="px-2 py-1 text-xs">8,500.00</td><td class="px-2 py-1 text-xs">382.50</td><td class="px-2 py-1 text-xs">807.50</td><td class="px-2 py-1 text-xs">1,190.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">8,750 - 9,249.99</td><td class="px-2 py-1 text-xs">9,000.00</td><td class="px-2 py-1 text-xs">405.00</td><td class="px-2 py-1 text-xs">855.00</td><td class="px-2 py-1 text-xs">1,260.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">9,250 - 9,749.99</td><td class="px-2 py-1 text-xs">9,500.00</td><td class="px-2 py-1 text-xs">427.50</td><td class="px-2 py-1 text-xs">902.50</td><td class="px-2 py-1 text-xs">1,330.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">9,750 - 10,249.99</td><td class="px-2 py-1 text-xs">10,000.00</td><td class="px-2 py-1 text-xs">450.00</td><td class="px-2 py-1 text-xs">950.00</td><td class="px-2 py-1 text-xs">1,400.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">10,250 - 10,749.99</td><td class="px-2 py-1 text-xs">10,500.00</td><td class="px-2 py-1 text-xs">472.50</td><td class="px-2 py-1 text-xs">997.50</td><td class="px-2 py-1 text-xs">1,470.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">10,750 - 11,249.99</td><td class="px-2 py-1 text-xs">11,000.00</td><td class="px-2 py-1 text-xs">495.00</td><td class="px-2 py-1 text-xs">1,045.00</td><td class="px-2 py-1 text-xs">1,540.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">11,250 - 11,749.99</td><td class="px-2 py-1 text-xs">11,500.00</td><td class="px-2 py-1 text-xs">517.50</td><td class="px-2 py-1 text-xs">1,092.50</td><td class="px-2 py-1 text-xs">1,610.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">11,750 - 12,249.99</td><td class="px-2 py-1 text-xs">12,000.00</td><td class="px-2 py-1 text-xs">540.00</td><td class="px-2 py-1 text-xs">1,140.00</td><td class="px-2 py-1 text-xs">1,680.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">12,250 - 12,749.99</td><td class="px-2 py-1 text-xs">12,500.00</td><td class="px-2 py-1 text-xs">562.50</td><td class="px-2 py-1 text-xs">1,187.50</td><td class="px-2 py-1 text-xs">1,750.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">12,750 - 13,249.99</td><td class="px-2 py-1 text-xs">13,000.00</td><td class="px-2 py-1 text-xs">585.00</td><td class="px-2 py-1 text-xs">1,235.00</td><td class="px-2 py-1 text-xs">1,820.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">13,250 - 13,749.99</td><td class="px-2 py-1 text-xs">13,500.00</td><td class="px-2 py-1 text-xs">607.50</td><td class="px-2 py-1 text-xs">1,282.50</td><td class="px-2 py-1 text-xs">1,890.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">13,750 - 14,249.99</td><td class="px-2 py-1 text-xs">14,000.00</td><td class="px-2 py-1 text-xs">630.00</td><td class="px-2 py-1 text-xs">1,330.00</td><td class="px-2 py-1 text-xs">1,960.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">14,250 - 14,749.99</td><td class="px-2 py-1 text-xs">14,500.00</td><td class="px-2 py-1 text-xs">652.50</td><td class="px-2 py-1 text-xs">1,377.50</td><td class="px-2 py-1 text-xs">2,030.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">14,750 - 15,249.99</td><td class="px-2 py-1 text-xs">15,000.00</td><td class="px-2 py-1 text-xs">675.00</td><td class="px-2 py-1 text-xs">1,425.00</td><td class="px-2 py-1 text-xs">2,100.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">15,250 - 15,749.99</td><td class="px-2 py-1 text-xs">15,500.00</td><td class="px-2 py-1 text-xs">697.50</td><td class="px-2 py-1 text-xs">1,472.50</td><td class="px-2 py-1 text-xs">2,170.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">15,750 - 16,249.99</td><td class="px-2 py-1 text-xs">16,000.00</td><td class="px-2 py-1 text-xs">720.00</td><td class="px-2 py-1 text-xs">1,520.00</td><td class="px-2 py-1 text-xs">2,240.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">16,250 - 16,749.99</td><td class="px-2 py-1 text-xs">16,500.00</td><td class="px-2 py-1 text-xs">742.50</td><td class="px-2 py-1 text-xs">1,567.50</td><td class="px-2 py-1 text-xs">2,310.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">16,750 - 17,249.99</td><td class="px-2 py-1 text-xs">17,000.00</td><td class="px-2 py-1 text-xs">765.00</td><td class="px-2 py-1 text-xs">1,615.00</td><td class="px-2 py-1 text-xs">2,380.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">17,250 - 17,749.99</td><td class="px-2 py-1 text-xs">17,500.00</td><td class="px-2 py-1 text-xs">787.50</td><td class="px-2 py-1 text-xs">1,662.50</td><td class="px-2 py-1 text-xs">2,450.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">17,750 - 18,249.99</td><td class="px-2 py-1 text-xs">18,000.00</td><td class="px-2 py-1 text-xs">810.00</td><td class="px-2 py-1 text-xs">1,710.00</td><td class="px-2 py-1 text-xs">2,520.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">18,250 - 18,749.99</td><td class="px-2 py-1 text-xs">18,500.00</td><td class="px-2 py-1 text-xs">832.50</td><td class="px-2 py-1 text-xs">1,757.50</td><td class="px-2 py-1 text-xs">2,590.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">18,750 - 19,249.99</td><td class="px-2 py-1 text-xs">19,000.00</td><td class="px-2 py-1 text-xs">855.00</td><td class="px-2 py-1 text-xs">1,805.00</td><td class="px-2 py-1 text-xs">2,660.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">19,250 - 19,749.99</td><td class="px-2 py-1 text-xs">19,500.00</td><td class="px-2 py-1 text-xs">877.50</td><td class="px-2 py-1 text-xs">1,852.50</td><td class="px-2 py-1 text-xs">2,730.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">19,750 - 20,249.99</td><td class="px-2 py-1 text-xs">20,000.00</td><td class="px-2 py-1 text-xs">900.00</td><td class="px-2 py-1 text-xs">1,900.00</td><td class="px-2 py-1 text-xs">2,800.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">20,250 - 20,749.99</td><td class="px-2 py-1 text-xs">20,500.00</td><td class="px-2 py-1 text-xs">922.50</td><td class="px-2 py-1 text-xs">1,947.50</td><td class="px-2 py-1 text-xs">2,870.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">20,750 - 21,249.99</td><td class="px-2 py-1 text-xs">21,000.00</td><td class="px-2 py-1 text-xs">945.00</td><td class="px-2 py-1 text-xs">1,995.00</td><td class="px-2 py-1 text-xs">2,940.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">21,250 - 21,749.99</td><td class="px-2 py-1 text-xs">21,500.00</td><td class="px-2 py-1 text-xs">967.50</td><td class="px-2 py-1 text-xs">2,042.50</td><td class="px-2 py-1 text-xs">3,010.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">21,750 - 22,249.99</td><td class="px-2 py-1 text-xs">22,000.00</td><td class="px-2 py-1 text-xs">990.00</td><td class="px-2 py-1 text-xs">2,090.00</td><td class="px-2 py-1 text-xs">3,080.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">22,250 - 22,749.99</td><td class="px-2 py-1 text-xs">22,500.00</td><td class="px-2 py-1 text-xs">1,012.50</td><td class="px-2 py-1 text-xs">2,137.50</td><td class="px-2 py-1 text-xs">3,150.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">22,750 - 23,249.99</td><td class="px-2 py-1 text-xs">23,000.00</td><td class="px-2 py-1 text-xs">1,035.00</td><td class="px-2 py-1 text-xs">2,185.00</td><td class="px-2 py-1 text-xs">3,220.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">23,250 - 23,749.99</td><td class="px-2 py-1 text-xs">23,500.00</td><td class="px-2 py-1 text-xs">1,057.50</td><td class="px-2 py-1 text-xs">2,232.50</td><td class="px-2 py-1 text-xs">3,290.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">23,750 - 24,249.99</td><td class="px-2 py-1 text-xs">24,000.00</td><td class="px-2 py-1 text-xs">1,080.00</td><td class="px-2 py-1 text-xs">2,280.00</td><td class="px-2 py-1 text-xs">3,360.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">24,250 - 24,749.99</td><td class="px-2 py-1 text-xs">24,500.00</td><td class="px-2 py-1 text-xs">1,102.50</td><td class="px-2 py-1 text-xs">2,327.50</td><td class="px-2 py-1 text-xs">3,430.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">24,750 - 25,249.99</td><td class="px-2 py-1 text-xs">25,000.00</td><td class="px-2 py-1 text-xs">1,125.00</td><td class="px-2 py-1 text-xs">2,375.00</td><td class="px-2 py-1 text-xs">3,500.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">25,250 - 25,749.99</td><td class="px-2 py-1 text-xs">25,500.00</td><td class="px-2 py-1 text-xs">1,147.50</td><td class="px-2 py-1 text-xs">2,422.50</td><td class="px-2 py-1 text-xs">3,570.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">25,750 - 26,249.99</td><td class="px-2 py-1 text-xs">26,000.00</td><td class="px-2 py-1 text-xs">1,170.00</td><td class="px-2 py-1 text-xs">2,470.00</td><td class="px-2 py-1 text-xs">3,640.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">26,250 - 26,749.99</td><td class="px-2 py-1 text-xs">26,500.00</td><td class="px-2 py-1 text-xs">1,192.50</td><td class="px-2 py-1 text-xs">2,517.50</td><td class="px-2 py-1 text-xs">3,710.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">26,750 - 27,249.99</td><td class="px-2 py-1 text-xs">27,000.00</td><td class="px-2 py-1 text-xs">1,215.00</td><td class="px-2 py-1 text-xs">2,565.00</td><td class="px-2 py-1 text-xs">3,780.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">27,250 - 27,749.99</td><td class="px-2 py-1 text-xs">27,500.00</td><td class="px-2 py-1 text-xs">1,237.50</td><td class="px-2 py-1 text-xs">2,612.50</td><td class="px-2 py-1 text-xs">3,850.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">27,750 - 28,249.99</td><td class="px-2 py-1 text-xs">28,000.00</td><td class="px-2 py-1 text-xs">1,260.00</td><td class="px-2 py-1 text-xs">2,660.00</td><td class="px-2 py-1 text-xs">3,920.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">28,250 - 28,749.99</td><td class="px-2 py-1 text-xs">28,500.00</td><td class="px-2 py-1 text-xs">1,282.50</td><td class="px-2 py-1 text-xs">2,707.50</td><td class="px-2 py-1 text-xs">3,990.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">28,750 - 29,249.99</td><td class="px-2 py-1 text-xs">29,000.00</td><td class="px-2 py-1 text-xs">1,305.00</td><td class="px-2 py-1 text-xs">2,755.00</td><td class="px-2 py-1 text-xs">4,060.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">29,250 - 29,749.99</td><td class="px-2 py-1 text-xs">29,500.00</td><td class="px-2 py-1 text-xs">1,327.50</td><td class="px-2 py-1 text-xs">2,802.50</td><td class="px-2 py-1 text-xs">4,130.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">29,750 - 30,249.99</td><td class="px-2 py-1 text-xs">30,000.00</td><td class="px-2 py-1 text-xs">1,350.00</td><td class="px-2 py-1 text-xs">2,850.00</td><td class="px-2 py-1 text-xs">4,200.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">30,250 - 30,749.99</td><td class="px-2 py-1 text-xs">30,500.00</td><td class="px-2 py-1 text-xs">1,372.50</td><td class="px-2 py-1 text-xs">2,897.50</td><td class="px-2 py-1 text-xs">4,270.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">30,750 - 31,249.99</td><td class="px-2 py-1 text-xs">31,000.00</td><td class="px-2 py-1 text-xs">1,395.00</td><td class="px-2 py-1 text-xs">2,945.00</td><td class="px-2 py-1 text-xs">4,340.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">31,250 - 31,749.99</td><td class="px-2 py-1 text-xs">31,500.00</td><td class="px-2 py-1 text-xs">1,417.50</td><td class="px-2 py-1 text-xs">2,992.50</td><td class="px-2 py-1 text-xs">4,410.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">31,750 - 32,249.99</td><td class="px-2 py-1 text-xs">32,000.00</td><td class="px-2 py-1 text-xs">1,440.00</td><td class="px-2 py-1 text-xs">3,040.00</td><td class="px-2 py-1 text-xs">4,480.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">32,250 - 32,749.99</td><td class="px-2 py-1 text-xs">32,500.00</td><td class="px-2 py-1 text-xs">1,462.50</td><td class="px-2 py-1 text-xs">3,087.50</td><td class="px-2 py-1 text-xs">4,550.00</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">32,750 - 33,249.99</td><td class="px-2 py-1 text-xs">33,000.00</td><td class="px-2 py-1 text-xs">1,485.00</td><td class="px-2 py-1 text-xs">3,135.00</td><td class="px-2 py-1 text-xs">4,620.00</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="mt-4 p-3 bg-blue-50 rounded-md">
-                    <p class="text-sm text-blue-800"><strong>Note:</strong> Employee and employer shares are based on 2025 SSS contribution rates.</p>
+                    <div class="mt-4 p-3 bg-blue-50 rounded-md">
+                        <p class="text-sm text-blue-800"><strong>Note:</strong> EE = Employee, ER = Employer</p>
+                    </div>
                 </div>
             `;
             break;

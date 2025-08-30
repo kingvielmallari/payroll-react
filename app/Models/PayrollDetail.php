@@ -158,6 +158,7 @@ class PayrollDetail extends Model
     {
         $basicSalary = $this->basic_salary;
         $grossPay = $this->gross_pay;
+        $taxableIncome = $this->getTaxableIncomeAttribute();
 
         // Reset contributions
         $this->sss_contribution = 0;
@@ -173,31 +174,48 @@ class PayrollDetail extends Model
 
             foreach ($deductionSettings as $setting) {
                 if ($setting->tax_table_type !== 'withholding_tax') {
-                    // Calculate full contribution amount
-                    $fullAmount = $setting->calculateDeduction($basicSalary, $this->overtime_pay, $this->bonuses, $this->allowances, $grossPay);
+                    // Determine the salary base to use for calculation
+                    $salaryBase = $this->getSalaryBaseForCalculation($setting);
 
-                    // Apply employer sharing if enabled
-                    $employeeShare = $fullAmount;
-                    if ($setting->share_with_employer && in_array($setting->tax_table_type, ['sss', 'philhealth', 'pagibig'])) {
-                        // Employee pays only 50% when sharing is enabled
-                        $employeeShare = $fullAmount * 0.5;
-                    }
+                    // Calculate employee deduction amount (already considers sharing)
+                    $employeeDeduction = $setting->calculateDeduction($salaryBase, $this->overtime_pay, $this->bonuses, $this->allowances, $grossPay);
 
                     // Map to appropriate field based on code
                     switch ($setting->code) {
                         case 'sss':
-                            $this->sss_contribution = $employeeShare;
+                            $this->sss_contribution = $employeeDeduction;
                             break;
                         case 'philhealth':
-                            $this->philhealth_contribution = $employeeShare;
+                            $this->philhealth_contribution = $employeeDeduction;
                             break;
                         case 'pagibig':
-                            $this->pagibig_contribution = $employeeShare;
+                            $this->pagibig_contribution = $employeeDeduction;
                             break;
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Get the salary base for calculation based on deduction setting's pay basis
+     */
+    private function getSalaryBaseForCalculation($setting)
+    {
+        // Check if setting has pay_basis configured
+        if (property_exists($setting, 'pay_basis')) {
+            switch ($setting->pay_basis) {
+                case 'taxable_income':
+                    return $this->getTaxableIncomeAttribute();
+                case 'total_gross':
+                    return $this->gross_pay;
+                default:
+                    return $this->basic_salary;
+            }
+        }
+
+        // Default to basic salary if no pay basis is configured
+        return $this->basic_salary;
     }
 
     /**

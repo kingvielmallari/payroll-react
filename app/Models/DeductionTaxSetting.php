@@ -95,10 +95,10 @@ class DeductionTaxSetting extends Model
         if ($grossPay === null) {
             $grossPay = $basicPay + $overtime + $bonus + $allowances;
         }
-        
+
         // Determine the base amount to apply deduction to
         $applicableSalary = 0;
-        
+
         if ($this->apply_to_basic_pay) $applicableSalary += $basicPay;
         if ($this->apply_to_regular) $applicableSalary += $basicPay; // backwards compatibility
         if ($this->apply_to_overtime) $applicableSalary += $overtime;
@@ -107,23 +107,23 @@ class DeductionTaxSetting extends Model
         if ($this->apply_to_gross_pay && $grossPay) $applicableSalary = $grossPay;
         if ($this->apply_to_taxable_income && $taxableIncome) $applicableSalary = $taxableIncome;
         if ($this->apply_to_net_pay && $netPay) $applicableSalary = $netPay;
-        
+
         // Apply salary cap if set
         if ($this->salary_cap && $applicableSalary > $this->salary_cap) {
             $applicableSalary = $this->salary_cap;
         }
-        
+
         $deduction = 0;
-        
+
         switch ($this->calculation_type) {
             case 'percentage':
                 $deduction = $applicableSalary * ($this->rate_percentage / 100);
                 break;
-                
+
             case 'fixed_amount':
                 $deduction = $this->fixed_amount;
                 break;
-                
+
             case 'bracket':
                 if ($this->tax_table_type) {
                     $deduction = $this->calculateTaxTableDeduction($applicableSalary, $this->tax_table_type);
@@ -132,16 +132,16 @@ class DeductionTaxSetting extends Model
                 }
                 break;
         }
-        
+
         // Apply minimum and maximum limits
         if ($this->minimum_amount && $deduction < $this->minimum_amount) {
             $deduction = $this->minimum_amount;
         }
-        
+
         if ($this->maximum_amount && $deduction > $this->maximum_amount) {
             $deduction = $this->maximum_amount;
         }
-        
+
         return round($deduction, 2);
     }
 
@@ -151,21 +151,21 @@ class DeductionTaxSetting extends Model
     private function calculateBracketDeduction($amount)
     {
         if (!$this->bracket_rates) return 0;
-        
+
         $totalDeduction = 0;
         $remainingAmount = $amount;
-        
+
         foreach ($this->bracket_rates as $bracket) {
             $bracketMin = $bracket['min'] ?? 0;
             $bracketMax = $bracket['max'] ?? PHP_INT_MAX;
             $rate = $bracket['rate'] ?? 0;
-            
+
             if ($remainingAmount <= $bracketMin) break;
-            
+
             $taxableInBracket = min($remainingAmount - $bracketMin, $bracketMax - $bracketMin);
             $totalDeduction += $taxableInBracket * ($rate / 100);
         }
-        
+
         return $totalDeduction;
     }
 
@@ -189,23 +189,33 @@ class DeductionTaxSetting extends Model
     }
 
     /**
-     * Calculate SSS deduction based on contribution table and sharing setting
+     * Calculate SSS deduction based on database contribution table and sharing setting
      */
     private function calculateSSSDeduction($salary)
     {
-        // Get SSS contribution from database table
-        $sssContribution = \App\Models\SssTaxTable::getContribution($salary);
-        
+        // Query the SSS tax table from database for the salary range
+        $sssContribution = \DB::table('sss_tax_table')
+            ->where('range_start', '<=', $salary)
+            ->where(function ($query) use ($salary) {
+                $query->where('range_end', '>=', $salary)
+                    ->orWhereNull('range_end'); // For "above" ranges
+            })
+            ->where('is_active', true)
+            ->first();
+
         if (!$sssContribution) {
-            return 0;
+            return 0; // No matching range found
         }
 
+        $employeeShare = (float) $sssContribution->employee_share;
+        $employerShare = (float) $sssContribution->employer_share;
+
         if ($this->share_with_employer) {
-            // If shared with employer, only deduct employee share
-            return $sssContribution->employee_share;
+            // If shared with employer, only deduct employee share from employee salary
+            return $employeeShare;
         } else {
-            // If not shared, deduct both employee and employer shares from employee
-            return $sssContribution->employee_share + $sssContribution->employer_share;
+            // If not shared, deduct both employee and employer shares from employee salary
+            return $employeeShare + $employerShare;
         }
     }
 
@@ -218,16 +228,16 @@ class DeductionTaxSetting extends Model
         // Total contribution is 5% (2.5% employee, 2.5% employer)
         $employeeRate = 0.025; // 2.5%
         $employerRate = 0.025; // 2.5%
-        
+
         // Calculate employee share
         $employeeShare = $salary * $employeeRate;
-        
+
         // Apply salary cap of ₱80,000
         $maxSalary = 80000;
         if ($salary > $maxSalary) {
             $employeeShare = $maxSalary * $employeeRate;
         }
-        
+
         if ($this->share_with_employer) {
             // If shared with employer, only deduct employee share
             return $employeeShare;
@@ -249,15 +259,15 @@ class DeductionTaxSetting extends Model
         // Pag-IBIG rates for 2024-2025
         $employeeRate = 0.02; // 2%
         $employerRate = 0.02; // 2%
-        
+
         // For salaries ≤ ₱1,500: 1% employee, 2% employer
         if ($salary <= 1500) {
             $employeeRate = 0.01; // 1%
         }
-        
+
         // Calculate employee share with max of ₱200
         $employeeShare = min($salary * $employeeRate, 200);
-        
+
         if ($this->share_with_employer) {
             // If shared with employer, only deduct employee share
             return $employeeShare;
@@ -302,14 +312,14 @@ class DeductionTaxSetting extends Model
         if ($this->employer_share_rate) {
             return $salary * ($this->employer_share_rate / 100);
         }
-        
+
         if ($this->employer_share_fixed) {
             return $this->employer_share_fixed;
         }
-        
+
         return 0;
     }
-    
+
     /**
      * Get share percentage display for UI badge
      */
@@ -318,7 +328,7 @@ class DeductionTaxSetting extends Model
         if (!$this->share_with_employer) {
             return null; // No sharing
         }
-        
+
         // Return standard sharing percentages for government deductions
         switch ($this->tax_table_type) {
             case 'sss':
@@ -331,7 +341,7 @@ class DeductionTaxSetting extends Model
                 return '50%';
         }
     }
-    
+
     /**
      * Check if this deduction supports employer sharing
      */
@@ -348,7 +358,7 @@ class DeductionTaxSetting extends Model
         if ($this->benefit_eligibility === 'both') {
             return true;
         }
-        
+
         return $this->benefit_eligibility === $employee->benefits_status;
     }
 
@@ -359,7 +369,81 @@ class DeductionTaxSetting extends Model
     {
         return $query->where(function ($q) use ($benefitStatus) {
             $q->where('benefit_eligibility', 'both')
-              ->orWhere('benefit_eligibility', $benefitStatus);
+                ->orWhere('benefit_eligibility', $benefitStatus);
         });
+    }
+
+    /**
+     * Calculate employer share only for reporting purposes
+     */
+    public function calculateEmployerShareOnly($salary)
+    {
+        if (!$this->share_with_employer) {
+            return 0; // No employer share if not sharing
+        }
+
+        switch ($this->tax_table_type) {
+            case 'sss':
+                return $this->calculateSSSEmployerShare($salary);
+            case 'philhealth':
+                return $this->calculatePhilHealthEmployerShare($salary);
+            case 'pagibig':
+                return $this->calculatePagibigEmployerShare($salary);
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * Calculate SSS employer share only
+     */
+    private function calculateSSSEmployerShare($salary)
+    {
+        if (!$this->share_with_employer) {
+            return 0;
+        }
+
+        $sssContribution = \DB::table('sss_tax_table')
+            ->where('range_start', '<=', $salary)
+            ->where(function ($query) use ($salary) {
+                $query->where('range_end', '>=', $salary)
+                    ->orWhereNull('range_end');
+            })
+            ->where('is_active', true)
+            ->first();
+
+        return $sssContribution ? (float) $sssContribution->employer_share : 0;
+    }
+
+    /**
+     * Calculate PhilHealth employer share only
+     */
+    private function calculatePhilHealthEmployerShare($salary)
+    {
+        if (!$this->share_with_employer) {
+            return 0;
+        }
+
+        $employerRate = 0.025; // 2.5%
+        $maxSalary = 80000;
+
+        if ($salary > $maxSalary) {
+            return $maxSalary * $employerRate;
+        }
+
+        return $salary * $employerRate;
+    }
+
+    /**
+     * Calculate Pag-IBIG employer share only
+     */
+    private function calculatePagibigEmployerShare($salary)
+    {
+        if (!$this->share_with_employer) {
+            return 0;
+        }
+
+        $employerRate = $salary <= 1500 ? 0.02 : 0.02; // 2% for all salary levels
+        return min($salary * $employerRate, 200);
     }
 }
