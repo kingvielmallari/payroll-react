@@ -2419,8 +2419,13 @@
                                                                     $nightStart = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $nightDiffSetting->start_time);
                                                                     $regularEnd = $nightStart->format('g:i A');
                                                                 } else {
-                                                                    // If no ND hours, regular period goes to employee's time out
-                                                                    $regularEnd = \Carbon\Carbon::parse($timeLog->time_out)->format('g:i A');
+                                                                    // If no ND hours, regular period ends at calculated regular period end (not employee's actual time out)
+                                                                    // Use the regularPeriodEnd calculated earlier which considers grace periods and scheduled hours
+                                                                    if (is_string($regularPeriodEnd)) {
+                                                                        $regularEnd = $regularPeriodEnd;
+                                                                    } else {
+                                                                        $regularEnd = $regularPeriodEnd->format('g:i A');
+                                                                    }
                                                                 }
                                                             } else {
                                                                 $regularEnd = $regularPeriodEnd;
