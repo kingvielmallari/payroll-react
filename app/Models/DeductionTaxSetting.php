@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class DeductionTaxSetting extends Model
 {
@@ -194,7 +195,7 @@ class DeductionTaxSetting extends Model
     private function calculateSSSDeduction($salary)
     {
         // Query the SSS tax table from database for the salary range
-        $sssContribution = \DB::table('sss_tax_table')
+        $sssContribution = DB::table('sss_tax_table')
             ->where('range_start', '<=', $salary)
             ->where(function ($query) use ($salary) {
                 $query->where('range_end', '>=', $salary)
@@ -403,7 +404,7 @@ class DeductionTaxSetting extends Model
             return 0;
         }
 
-        $sssContribution = \DB::table('sss_tax_table')
+        $sssContribution = DB::table('sss_tax_table')
             ->where('range_start', '<=', $salary)
             ->where(function ($query) use ($salary) {
                 $query->where('range_end', '>=', $salary)
