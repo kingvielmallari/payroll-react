@@ -1537,6 +1537,8 @@
                                                 } else {
                                                     // For draft payrolls or if no valid snapshot data, calculate taxable income dynamically
                                                     // Same calculation as PayrollDetail.getTaxableIncomeAttribute()
+                                                    // NOTE: Night differential amounts are already embedded in basic, holiday, and rest pay
+                                                    // through the breakdown calculations (Regular Workday+ND, Holiday+ND, etc.)
                                                     $taxableIncome = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay;
                                                     
                                                     // Add taxable allowances/bonuses from settings

@@ -5013,12 +5013,12 @@ class PayrollController extends Controller
                 }
 
                 if ($logType === 'regular_workday') {
-                    $basicPay += $regularPayAmount; // Only regular pay to basic pay
+                    $basicPay += $regularPayAmount + $nightDiffRegularPayAmount; // Include both regular and ND pay
                     $overtimePay += $overtimePayAmount; // Overtime pay separate
                 } elseif ($logType === 'rest_day') {
-                    $restPay += ($regularPayAmount + $overtimePayAmount); // Rest day pay includes both
+                    $restPay += ($regularPayAmount + $nightDiffRegularPayAmount + $overtimePayAmount); // Rest day pay includes regular, ND, and overtime
                 } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
-                    $holidayPay += ($regularPayAmount + $overtimePayAmount); // Holiday pay includes both
+                    $holidayPay += ($regularPayAmount + $nightDiffRegularPayAmount + $overtimePayAmount); // Holiday pay includes regular, ND, and overtime
                 }
             }
 
@@ -5068,10 +5068,7 @@ class PayrollController extends Controller
 
             // Get breakdown data for allowances and bonuses (exactly as they are in draft mode)
             $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
-            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
-            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail);
-
-            // Log the calculated values for debugging
+            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);            // Log the calculated values for debugging
             Log::info("Snapshot calculation for employee {$employee->id}", [
                 'basic_pay' => $basicPay,
                 'holiday_pay' => $holidayPay,
@@ -5107,6 +5104,9 @@ class PayrollController extends Controller
 
             // Calculate taxable income using the same logic as PayrollDetail.getTaxableIncomeAttribute()
             // This ensures consistency between dynamic and snapshot calculations
+            // NOTE: Night differential amounts are already embedded in basicPay, holidayPay, and restPay
+            // through the breakdown calculations (Regular Workday+ND, Holiday+ND, etc.)
+            // So we don't need to add a separate night_differential_pay field
             $taxableIncome = $basicPay + $holidayPay + $restPay + $overtimePay;
 
             // Add only taxable allowances and bonuses
@@ -5187,6 +5187,10 @@ class PayrollController extends Controller
             }
 
             $taxableIncome = max(0, $taxableIncome);
+
+            // Calculate deductions breakdown after taxable income is finalized
+            // Pass the calculated taxable income to ensure consistent deduction calculations
+            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome);
 
             // Log taxable income calculation for debugging
             Log::info("Taxable income calculation for employee {$employee->id}", [
@@ -5415,7 +5419,7 @@ class PayrollController extends Controller
     /**
      * Get deductions breakdown for employee
      */
-    private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail)
+    private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null)
     {
         $breakdown = [];
 
@@ -5426,13 +5430,16 @@ class PayrollController extends Controller
             ->get();
 
         if ($deductionSettings->isNotEmpty()) {
-            // Use dynamic calculation for active deduction settings
-            // For SSS/government deductions, use taxable income (basic + holiday + rest + taxable allowances/bonuses)
-            $taxableIncomeForDeductions = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+            // Use the passed taxable income if provided, otherwise calculate it from detail components
+            if ($taxableIncome === null) {
+                $taxableIncomeForDeductions = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+            } else {
+                $taxableIncomeForDeductions = $taxableIncome;
+            }
 
             foreach ($deductionSettings as $setting) {
                 $amount = $setting->calculateDeduction(
-                    $taxableIncomeForDeductions, // Use taxable income instead of just regular_pay
+                    $taxableIncomeForDeductions, // Use taxable income (with allowances/bonuses) instead of just basic pay components
                     $detail->overtime_pay ?? 0,
                     $detail->bonuses ?? 0,
                     $detail->allowances ?? 0,
