@@ -4611,14 +4611,34 @@ class PayrollController extends Controller
         $year = $today->format('Y');
         $month = $today->format('m');
 
-        // Get the count of payrolls for this schedule in the current year
-        $count = \App\Models\Payroll::where('pay_schedule', $paySchedule)
-            ->whereYear('created_at', $year)
-            ->count() + 1;
-
-        // Format: SCHEDULE-YEAR-MONTH-COUNT
+        // Get the schedule code for payroll number
         $scheduleCode = strtoupper(str_replace('_', '', $paySchedule));
 
+        // Get all existing payroll numbers for this schedule/period, sorted
+        $existingPayrolls = \App\Models\Payroll::where('pay_schedule', $paySchedule)
+            ->where('payroll_number', 'like', "{$scheduleCode}-{$year}{$month}%")
+            ->orderBy('payroll_number', 'asc')
+            ->pluck('payroll_number')
+            ->toArray();
+
+        if (empty($existingPayrolls)) {
+            $count = 1;
+        } else {
+            // Extract the sequence numbers and find the first gap
+            $sequenceNumbers = [];
+            foreach ($existingPayrolls as $payrollNumber) {
+                // Extract the last 3 digits as the sequence number
+                $sequenceNumbers[] = (int) substr($payrollNumber, -3);
+            }
+
+            // Find the first available number (start from 1)
+            $count = 1;
+            while (in_array($count, $sequenceNumbers)) {
+                $count++;
+            }
+        }
+
+        // Format: SCHEDULE-YEAR-MONTH-COUNT
         return sprintf('%s-%s%s-%03d', $scheduleCode, $year, $month, $count);
     }
 

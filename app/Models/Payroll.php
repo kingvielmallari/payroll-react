@@ -175,22 +175,45 @@ class Payroll extends Model
      */
     public static function generatePayrollNumber($type = 'regular')
     {
-        $prefix = strtoupper(substr($type, 0, 3));
+        // Map the type to the proper prefix
+        $prefix = match (strtolower($type)) {
+            'semimonthly', 'semi_monthly' => 'SEMIMONTHLY',
+            'monthly' => 'MONTHLY',
+            'weekly' => 'WEEKLY',
+            'biweekly', 'bi_weekly' => 'BIWEEKLY',
+            default => strtoupper($type)
+        };
+
         $year = date('Y');
         $month = date('m');
 
-        $lastPayroll = static::where('payroll_number', 'like', "{$prefix}-{$year}{$month}%")
-            ->orderBy('payroll_number', 'desc')
-            ->first();
+        // Get all existing payroll numbers for this type/period, sorted
+        $existingPayrolls = static::where('payroll_number', 'like', "{$prefix}-{$year}{$month}-%")
+            ->orderBy('payroll_number', 'asc')
+            ->pluck('payroll_number')
+            ->toArray();
 
-        if ($lastPayroll) {
-            $lastNumber = (int) substr($lastPayroll->payroll_number, -4);
-            $newNumber = str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
+        if (empty($existingPayrolls)) {
+            $newNumber = '001';
         } else {
-            $newNumber = '0001';
+            // Extract the sequence numbers and find the first gap
+            $sequenceNumbers = [];
+            foreach ($existingPayrolls as $payrollNumber) {
+                // Split by '-' and get the last part (sequence number)
+                $parts = explode('-', $payrollNumber);
+                $sequenceNumbers[] = (int) end($parts);
+            }
+
+            // Find the first available number (start from 1)
+            $newNumber = 1;
+            while (in_array($newNumber, $sequenceNumbers)) {
+                $newNumber++;
+            }
+
+            $newNumber = str_pad($newNumber, 3, '0', STR_PAD_LEFT);
         }
 
-        return "{$prefix}-{$year}{$month}{$newNumber}";
+        return "{$prefix}-{$year}{$month}-{$newNumber}";
     }
 
     /**
