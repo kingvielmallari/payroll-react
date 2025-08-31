@@ -62,7 +62,7 @@
                                     $totalRestDayPay = $payroll->payrollDetails->sum('rest_day_pay');
                                 }
                             @endphp
-                            <div class="text-2xl font-bold text-cyan-600">₱{{ number_format($totalRestDayPay, 2) }}</div>
+                            <div class="text-2xl font-bold text-cyan-600" id="totalRestDisplay">₱{{ number_format($totalRestDayPay, 2) }}</div>
                             <div class="text-sm text-gray-800">Total Rest</div>
                         </div>
                         <div class="bg-green-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
@@ -194,7 +194,7 @@
                                     ];
                                 }
                             @endphp
-                            <div class="text-2xl font-bold text-red-600">₱{{ number_format($actualTotalDeductions, 2) }}</div>
+                            <div class="text-2xl font-bold text-red-600" id="totalDeductionsDisplay">₱{{ number_format($actualTotalDeductions, 2) }}</div>
                             <div class="text-sm text-red-800">Total Deductions</div>
                             
                            
@@ -974,7 +974,7 @@
                                                 @endif
                                             @endif
                                         </div>
-                                        <div class="font-bold text-cyan-600">₱{{ number_format($restDayPay, 2) }}</div>
+                                        <div class="font-bold text-cyan-600 rest-pay-amount" data-rest-amount="{{ $restDayPay }}">₱{{ number_format($restDayPay, 2) }}</div>
                                         </div>
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
@@ -1750,7 +1750,7 @@
                                                 @endif
                                                 
                                                 <!-- Total deductions -->
-                                                <div class="font-medium text-red-600">
+                                                <div class="font-medium text-red-600 deduction-amount" data-deduction-amount="{{ $calculatedDeductionTotal > 0 ? $calculatedDeductionTotal : $detail->total_deductions }}">
                                                     ₱{{ number_format($calculatedDeductionTotal > 0 ? $calculatedDeductionTotal : $detail->total_deductions, 2) }}
                                                 </div>
                                             @else
@@ -2091,6 +2091,30 @@
                     const totalHolidayDisplay = document.getElementById('totalHolidayDisplay');
                     if (totalHolidayDisplay) {
                         totalHolidayDisplay.textContent = formatCurrency(totalHoliday);
+                    }
+                    
+                    // Calculate and update Total Rest (matches Rest column)
+                    const restPayElements = document.querySelectorAll('.rest-pay-amount');
+                    let totalRest = 0;
+                    restPayElements.forEach(function(element) {
+                        const restAmount = parseFloat(element.getAttribute('data-rest-amount')) || 0;
+                        totalRest += restAmount;
+                    });
+                    const totalRestDisplay = document.getElementById('totalRestDisplay');
+                    if (totalRestDisplay) {
+                        totalRestDisplay.textContent = formatCurrency(totalRest);
+                    }
+                    
+                    // Calculate and update Total Deductions (matches Deductions column)
+                    const deductionElements = document.querySelectorAll('.deduction-amount');
+                    let totalDeductions = 0;
+                    deductionElements.forEach(function(element) {
+                        const deductionAmount = parseFloat(element.getAttribute('data-deduction-amount')) || 0;
+                        totalDeductions += deductionAmount;
+                    });
+                    const totalDeductionsDisplay = document.getElementById('totalDeductionsDisplay');
+                    if (totalDeductionsDisplay) {
+                        totalDeductionsDisplay.textContent = formatCurrency(totalDeductions);
                     }
                     
                     // Calculate and update Total Gross (matches Gross Pay column)

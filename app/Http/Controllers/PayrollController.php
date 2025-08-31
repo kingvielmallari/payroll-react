@@ -1221,7 +1221,11 @@ class PayrollController extends Controller
         $cashAdvanceDeductions = $cashAdvanceData['total'];
 
         // Calculate deductions using dynamic settings
-        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $basicSalary, $overtimePay, $allowancesTotal, $bonusesTotal);
+        // For SSS/government deductions, use taxable income (basic + holiday + rest + taxable allowances/bonuses)
+        // The grossPay already includes basic + holiday + rest + overtime
+        $taxableIncomeForDeductions = $grossPay; // This includes basic + holiday + rest + overtime
+
+        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal);
 
         $netPay = $totalGrossPay - $deductions['total'] - $lateDeductions - $undertimeDeductions - $cashAdvanceDeductions;
 
@@ -2190,7 +2194,7 @@ class PayrollController extends Controller
                         $payBreakdownByEmployee[$detail->employee_id] = [
                             'basic_pay' => $payBreakdown['basic_pay'] ?? 0,
                             'holiday_pay' => $payBreakdown['holiday_pay'] ?? 0,
-                            'rest_pay' => $payBreakdown['rest_pay'] ?? 0,
+                            'rest_day_pay' => $payBreakdown['rest_day_pay'] ?? 0,
                             'overtime_pay' => $payBreakdown['overtime_pay'] ?? 0,
                         ];
                     } else {
@@ -2198,7 +2202,7 @@ class PayrollController extends Controller
                         $payBreakdownByEmployee[$detail->employee_id] = [
                             'basic_pay' => $snapshot->regular_pay ?? 0,
                             'holiday_pay' => $snapshot->holiday_pay ?? 0,
-                            'rest_pay' => 0, // Not available in old snapshots
+                            'rest_day_pay' => 0, // Not available in old snapshots
                             'overtime_pay' => $snapshot->overtime_pay ?? 0,
                         ];
                     }
@@ -2207,7 +2211,7 @@ class PayrollController extends Controller
                     Log::info("Using snapshot pay breakdown for employee {$detail->employee_id}", [
                         'basic_pay' => $payBreakdownByEmployee[$detail->employee_id]['basic_pay'],
                         'holiday_pay' => $payBreakdownByEmployee[$detail->employee_id]['holiday_pay'],
-                        'rest_pay' => $payBreakdownByEmployee[$detail->employee_id]['rest_pay'],
+                        'rest_day_pay' => $payBreakdownByEmployee[$detail->employee_id]['rest_day_pay'],
                         'overtime_pay' => $payBreakdownByEmployee[$detail->employee_id]['overtime_pay'],
                         'snapshot_id' => $snapshot->id,
                         'payroll_status' => $payroll->status,
@@ -2279,7 +2283,7 @@ class PayrollController extends Controller
             $payBreakdownByEmployee[$detail->employee_id] = [
                 'basic_pay' => $basicPay,
                 'holiday_pay' => $holidayPay,
-                'rest_pay' => $restPay,
+                'rest_day_pay' => $restPay,
                 'overtime_pay' => $overtimePay,
             ];
         }
@@ -2389,8 +2393,11 @@ class PayrollController extends Controller
             }
         }
 
-        // Calculate total holiday pay for summary
+        // Calculate totals for summary
+        $totalBasicPay = array_sum(array_column($payBreakdownByEmployee, 'basic_pay'));
         $totalHolidayPay = array_sum(array_column($payBreakdownByEmployee, 'holiday_pay'));
+        $totalRestDayPay = array_sum(array_column($payBreakdownByEmployee, 'rest_day_pay'));
+        $totalOvertimePay = array_sum(array_column($payBreakdownByEmployee, 'overtime_pay'));
 
         return view('payrolls.show', compact(
             'payroll',
@@ -2402,7 +2409,10 @@ class PayrollController extends Controller
             'isDynamic',
             'timeBreakdowns',
             'payBreakdownByEmployee',
-            'totalHolidayPay'
+            'totalBasicPay',
+            'totalHolidayPay',
+            'totalRestDayPay',
+            'totalOvertimePay'
         ));
     }
 
@@ -5090,7 +5100,7 @@ class PayrollController extends Controller
             $payBreakdown = [
                 'basic_pay' => $basicPay,
                 'holiday_pay' => $holidayPay,
-                'rest_pay' => $restPay,
+                'rest_day_pay' => $restPay,
                 'overtime_pay' => $overtimePay,
                 'total_calculated' => $basicPay + $holidayPay + $restPay + $overtimePay
             ];
@@ -5417,9 +5427,12 @@ class PayrollController extends Controller
 
         if ($deductionSettings->isNotEmpty()) {
             // Use dynamic calculation for active deduction settings
+            // For SSS/government deductions, use taxable income (basic + holiday + rest + taxable allowances/bonuses)
+            $taxableIncomeForDeductions = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+
             foreach ($deductionSettings as $setting) {
                 $amount = $setting->calculateDeduction(
-                    $detail->regular_pay ?? 0,
+                    $taxableIncomeForDeductions, // Use taxable income instead of just regular_pay
                     $detail->overtime_pay ?? 0,
                     $detail->bonuses ?? 0,
                     $detail->allowances ?? 0,
