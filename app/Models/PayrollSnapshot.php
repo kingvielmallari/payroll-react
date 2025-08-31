@@ -49,6 +49,7 @@ class PayrollSnapshot extends Model
         'other_deductions',
         'total_deductions',
         'net_pay',
+        'taxable_income', // Add taxable_income to fillable fields
         'settings_snapshot',
         'remarks',
     ];
@@ -87,6 +88,7 @@ class PayrollSnapshot extends Model
         'other_deductions' => 'decimal:2',
         'total_deductions' => 'decimal:2',
         'net_pay' => 'decimal:2',
+        'taxable_income' => 'decimal:2', // Add proper casting for taxable_income
         'settings_snapshot' => 'array',
     ];
 

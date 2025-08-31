@@ -4957,6 +4957,14 @@ class PayrollController extends Controller
             $employeeBreakdown = $timeBreakdownsByEmployee[$employee->id] ?? [];
             $hourlyRate = $employee->hourly_rate ?? 0;
 
+            // Log employee breakdown data for debugging
+            Log::info("Employee breakdown data for employee {$employee->id}", [
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'hourly_rate' => $hourlyRate,
+                'breakdown_count' => count($employeeBreakdown),
+                'breakdown_types' => array_keys($employeeBreakdown)
+            ]);
+
             $basicPay = 0; // Regular workday pay only
             $holidayPay = 0; // All holiday-related pay
             $restPay = 0; // Rest day pay
@@ -5107,7 +5115,17 @@ class PayrollController extends Controller
             // NOTE: Night differential amounts are already embedded in basicPay, holidayPay, and restPay
             // through the breakdown calculations (Regular Workday+ND, Holiday+ND, etc.)
             // So we don't need to add a separate night_differential_pay field
-            $taxableIncome = $basicPay + $holidayPay + $restPay + $overtimePay;
+            $baseTaxableIncome = $basicPay + $holidayPay + $restPay + $overtimePay;
+            $taxableIncome = $baseTaxableIncome;
+
+            // Log base taxable income calculation
+            Log::info("Base taxable income calculation for employee {$employee->id}", [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+                'rest_pay' => $restPay,
+                'overtime_pay' => $overtimePay,
+                'base_taxable_income' => $baseTaxableIncome
+            ]);
 
             // Add only taxable allowances and bonuses
             $allowanceSettings = \App\Models\AllowanceBonusSetting::where('type', 'allowance')
@@ -5131,6 +5149,18 @@ class PayrollController extends Controller
             ]);
 
             foreach ($allSettings as $setting) {
+                // Log each setting we're processing
+                Log::info("Evaluating setting for taxable income", [
+                    'employee_id' => $employee->id,
+                    'setting_code' => $setting->code,
+                    'setting_name' => $setting->name,
+                    'setting_type' => $setting->type,
+                    'is_taxable' => $setting->is_taxable,
+                    'calculation_type' => $setting->calculation_type,
+                    'fixed_amount' => $setting->fixed_amount ?? 'N/A',
+                    'frequency' => $setting->frequency ?? 'N/A'
+                ]);
+
                 // Only add if this setting is taxable
                 if (!$setting->is_taxable) {
                     Log::info("Skipping non-taxable setting: {$setting->code} ({$setting->type})");
@@ -5188,22 +5218,56 @@ class PayrollController extends Controller
 
             $taxableIncome = max(0, $taxableIncome);
 
+            // ADDITIONAL DEBUG: Write to clean debug file
+            $debugData = [
+                'employee_id' => $employee->id,
+                'taxable_income_after_max' => $taxableIncome,
+                'base_taxable_income' => $baseTaxableIncome,
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+                'rest_pay' => $restPay,
+                'overtime_pay' => $overtimePay,
+                'timestamp' => now()->format('Y-m-d H:i:s')
+            ];
+            file_put_contents(
+                storage_path('logs/debug_taxable.txt'),
+                "AFTER MAX CALCULATION:\n" . json_encode($debugData, JSON_PRETTY_PRINT) . "\n\n",
+                FILE_APPEND | LOCK_EX
+            );
+
             // Calculate deductions breakdown after taxable income is finalized
             // Pass the calculated taxable income to ensure consistent deduction calculations
             $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome);
 
             // Log taxable income calculation for debugging
-            Log::info("Taxable income calculation for employee {$employee->id}", [
+            Log::info("Final taxable income calculation for employee {$employee->id}", [
                 'basic_pay' => $basicPay,
                 'holiday_pay' => $holidayPay,
                 'rest_pay' => $restPay,
                 'overtime_pay' => $overtimePay,
+                'base_taxable_income' => $baseTaxableIncome,
                 'base_total' => $basicPay + $holidayPay + $restPay + $overtimePay,
                 'gross_pay' => $grossPay,
-                'taxable_income_final' => $taxableIncome,
+                'final_taxable_income' => $taxableIncome,
                 'allowance_settings_count' => $allowanceSettings->count(),
                 'bonus_settings_count' => $bonusSettings->count(),
             ]);
+
+            // FINAL DEBUG: Write to clean debug file just before snapshot creation
+            $preSnapshotData = [
+                'employee_id' => $employee->id,
+                'taxable_income_variable' => $taxableIncome,
+                'taxable_income_type' => gettype($taxableIncome),
+                'is_null' => is_null($taxableIncome),
+                'is_numeric' => is_numeric($taxableIncome),
+                'value_as_string' => (string)$taxableIncome,
+                'timestamp' => now()->format('Y-m-d H:i:s')
+            ];
+            file_put_contents(
+                storage_path('logs/debug_taxable.txt'),
+                "BEFORE SNAPSHOT CREATION:\n" . json_encode($preSnapshotData, JSON_PRETTY_PRINT) . "\n\n",
+                FILE_APPEND | LOCK_EX
+            );
 
             // Create snapshot with exact draft mode calculations
             $snapshot = \App\Models\PayrollSnapshot::create([
@@ -5251,6 +5315,20 @@ class PayrollController extends Controller
                 'settings_snapshot' => array_merge($settingsSnapshot, ['pay_breakdown' => $payBreakdown]),
                 'remarks' => 'Snapshot created at ' . now()->format('Y-m-d H:i:s') . ' - Captures exact draft calculations',
             ]);
+
+            // DEBUG: Check what was actually stored in the database
+            $storedData = [
+                'snapshot_id' => $snapshot->id,
+                'stored_taxable_income' => $snapshot->taxable_income,
+                'stored_gross_pay' => $snapshot->gross_pay,
+                'stored_net_pay' => $snapshot->net_pay,
+                'timestamp' => now()->format('Y-m-d H:i:s')
+            ];
+            file_put_contents(
+                storage_path('logs/debug_taxable.txt'),
+                "AFTER SNAPSHOT CREATED:\n" . json_encode($storedData, JSON_PRETTY_PRINT) . "\n" . str_repeat('=', 50) . "\n\n",
+                FILE_APPEND | LOCK_EX
+            );
 
             // IMPORTANT: Also update the payroll_details table to match the snapshot values
             // This ensures consistency between snapshot data and payroll_details fallback

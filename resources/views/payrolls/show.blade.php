@@ -1531,8 +1531,9 @@
                                             @endif
                                             @php
                                                 // Calculate taxable income using stored snapshot value or dynamic calculation
-                                                if ($payroll->status !== 'draft' && $employeeSnapshot && isset($employeeSnapshot->taxable_income) && $employeeSnapshot->taxable_income > 0) {
-                                                    // For processing/approved payrolls, use stored taxable income from snapshot
+                                                if ($payroll->status !== 'draft' && $employeeSnapshot && isset($employeeSnapshot->taxable_income)) {
+                                                    // For processing/approved payrolls, ALWAYS use stored taxable income from snapshot
+                                                    // This ensures taxable income is locked and doesn't change when settings are modified
                                                     $taxableIncome = $employeeSnapshot->taxable_income;
                                                 } else {
                                                     // For draft payrolls or if no valid snapshot data, calculate taxable income dynamically
