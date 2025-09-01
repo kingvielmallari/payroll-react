@@ -1175,12 +1175,6 @@ class PayrollController extends Controller
                 if ($timeLog->is_holiday && $dynamicCalculation['total_hours'] > 0) {
                     $holidayHours += $dynamicCalculation['total_hours'];
                 }
-                
-                // CRITICAL FIX: Set dynamic fields on the time log object so calculatePayAmount can use them
-                $timeLog->dynamic_regular_hours = $dynamicCalculation['regular_hours'];
-                $timeLog->dynamic_night_diff_regular_hours = $dynamicCalculation['night_diff_regular_hours'] ?? 0;
-                $timeLog->dynamic_regular_overtime_hours = $dynamicCalculation['regular_overtime_hours'] ?? 0;
-                $timeLog->dynamic_night_diff_overtime_hours = $dynamicCalculation['night_diff_overtime_hours'] ?? 0;
             } else {
                 // Use stored values for approved payrolls (snapshot mode)
                 $hoursWorked += $timeLog->total_hours ?? 0;
@@ -1566,7 +1560,6 @@ class PayrollController extends Controller
     {
         $basicPay = $basicPay ?? $grossPay;
         $deductions = [];
-        $deductionDetails = [];
         $total = 0;
 
         // Get active deduction settings that apply to this employee's benefit status
@@ -1587,20 +1580,6 @@ class PayrollController extends Controller
                     $deductions[$setting->code] = $amount;
                     $total += $amount;
                     $governmentTotal += $amount;
-
-                    // Calculate pay basis amount for this deduction
-                    $payBasisAmount = $this->calculatePayBasisAmountFromValues($setting, $basicPay, $overtimePay, $bonuses, $allowances, $grossPay);
-
-                    // Store detailed breakdown
-                    $deductionDetails[$setting->code] = [
-                        'name' => $setting->name,
-                        'code' => $setting->code,
-                        'amount' => $amount,
-                        'type' => $setting->type ?? 'government',
-                        'calculation_type' => $setting->calculation_type,
-                        'pay_basis_amount' => $payBasisAmount,
-                        'pay_basis_type' => $this->getPayBasisType($setting)
-                    ];
                 }
             }
         }
@@ -1621,20 +1600,6 @@ class PayrollController extends Controller
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
                 $total += $amount;
-
-                // Calculate pay basis amount for withholding tax (uses taxable income)
-                $payBasisAmount = $taxableIncome;
-
-                // Store detailed breakdown
-                $deductionDetails[$setting->code] = [
-                    'name' => $setting->name,
-                    'code' => $setting->code,
-                    'amount' => $amount,
-                    'type' => $setting->type ?? 'government',
-                    'calculation_type' => $setting->calculation_type,
-                    'pay_basis_amount' => $payBasisAmount,
-                    'pay_basis_type' => 'Taxable Income'
-                ];
             }
         }
 
@@ -1649,15 +1614,6 @@ class PayrollController extends Controller
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
                 $total += $amount;
-
-                // Store basic info for custom deductions (no pay basis info needed)
-                $deductionDetails[$setting->code] = [
-                    'name' => $setting->name,
-                    'code' => $setting->code,
-                    'amount' => $amount,
-                    'type' => 'custom',
-                    'calculation_type' => $setting->calculation_type
-                ];
             }
         }
 
@@ -1671,7 +1627,7 @@ class PayrollController extends Controller
                 return !in_array($key, ['sss', 'philhealth', 'pagibig', 'withholding_tax']);
             }, ARRAY_FILTER_USE_KEY)),
             'total' => $total,
-            'details' => $deductionDetails
+            'details' => $deductions
         ];
     }
 
@@ -4655,34 +4611,14 @@ class PayrollController extends Controller
         $year = $today->format('Y');
         $month = $today->format('m');
 
-        // Get the schedule code for payroll number
-        $scheduleCode = strtoupper(str_replace('_', '', $paySchedule));
-
-        // Get all existing payroll numbers for this schedule/period, sorted
-        $existingPayrolls = \App\Models\Payroll::where('pay_schedule', $paySchedule)
-            ->where('payroll_number', 'like', "{$scheduleCode}-{$year}{$month}%")
-            ->orderBy('payroll_number', 'asc')
-            ->pluck('payroll_number')
-            ->toArray();
-
-        if (empty($existingPayrolls)) {
-            $count = 1;
-        } else {
-            // Extract the sequence numbers and find the first gap
-            $sequenceNumbers = [];
-            foreach ($existingPayrolls as $payrollNumber) {
-                // Extract the last 3 digits as the sequence number
-                $sequenceNumbers[] = (int) substr($payrollNumber, -3);
-            }
-
-            // Find the first available number (start from 1)
-            $count = 1;
-            while (in_array($count, $sequenceNumbers)) {
-                $count++;
-            }
-        }
+        // Get the count of payrolls for this schedule in the current year
+        $count = \App\Models\Payroll::where('pay_schedule', $paySchedule)
+            ->whereYear('created_at', $year)
+            ->count() + 1;
 
         // Format: SCHEDULE-YEAR-MONTH-COUNT
+        $scheduleCode = strtoupper(str_replace('_', '', $paySchedule));
+
         return sprintf('%s-%s%s-%03d', $scheduleCode, $year, $month, $count);
     }
 
@@ -5014,8 +4950,95 @@ class PayrollController extends Controller
         foreach ($payrollDetails as $detail) {
             $employee = $detail->employee;
 
-            // CRITICAL FIX: Use the EXACT SAME calculation method as the dynamic view
-            // to ensure 100% consistency between draft and snapshot data
+            // For automated payrolls, calculate the earnings using THE EXACT SAME logic as draft mode display
+            // This ensures 100% consistency between draft UI and snapshot data
+
+            // Calculate using the same logic as the show method for draft payrolls
+            $employeeBreakdown = $timeBreakdownsByEmployee[$employee->id] ?? [];
+            $hourlyRate = $employee->hourly_rate ?? 0;
+
+            // Log employee breakdown data for debugging
+            Log::info("Employee breakdown data for employee {$employee->id}", [
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'hourly_rate' => $hourlyRate,
+                'breakdown_count' => count($employeeBreakdown),
+                'breakdown_types' => array_keys($employeeBreakdown)
+            ]);
+
+            $basicPay = 0; // Regular workday pay only
+            $holidayPay = 0; // All holiday-related pay
+            $restPay = 0; // Rest day pay
+            $overtimePay = 0; // Overtime pay
+
+            foreach ($employeeBreakdown as $logType => $breakdown) {
+                $rateConfig = $breakdown['rate_config'];
+                if (!$rateConfig) continue;
+
+                // Calculate pay amounts using rate multipliers with PER-MINUTE precision (same as draft)
+                $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+
+                // PER-MINUTE CALCULATION for exact draft payroll matching
+                $actualMinutes = $breakdown['regular_hours'] * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = $hourlyRate / 60;
+                $regularPayAmount = $roundedMinutes * $ratePerMinute * $regularMultiplier;
+
+                // Calculate night differential regular hours pay separately
+                $nightDiffRegularPayAmount = 0;
+                $nightDiffRegularHours = $breakdown['night_diff_regular_hours'] ?? 0;
+                if ($nightDiffRegularHours > 0) {
+                    $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                    $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+                    $nightDiffRegularMinutes = round($nightDiffRegularHours * 60);
+                    // Use SAME formula as TimeLog method: base_multiplier + (night_diff_multiplier - 1)
+                    $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
+                    $nightDiffRegularPayAmount = $nightDiffRegularMinutes * $ratePerMinute * $combinedMultiplier;
+                }
+
+                // Calculate overtime pay with night differential breakdown using PER-MINUTE precision
+                $overtimePayAmount = 0;
+                $regularOvertimeHours = $breakdown['regular_overtime_hours'] ?? 0;
+                $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
+
+                if ($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) {
+                    // Regular overtime pay (per-minute calculation)
+                    if ($regularOvertimeHours > 0) {
+                        $overtimeMinutes = round($regularOvertimeHours * 60);
+                        $overtimePayAmount += $overtimeMinutes * $ratePerMinute * $overtimeMultiplier;
+                    }
+
+                    // Night differential overtime pay (per-minute calculation)
+                    if ($nightDiffOvertimeHours > 0) {
+                        $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                        $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+                        $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+                        $nightDiffOvertimeMinutes = round($nightDiffOvertimeHours * 60);
+                        $overtimePayAmount += $nightDiffOvertimeMinutes * $ratePerMinute * $combinedMultiplier;
+                    }
+                } else {
+                    // Fallback to simple calculation with per-minute precision
+                    $overtimeMinutes = round($breakdown['overtime_hours'] * 60);
+                    $overtimePayAmount = $overtimeMinutes * $ratePerMinute * $overtimeMultiplier;
+                }
+
+                if ($logType === 'regular_workday') {
+                    $basicPay += $regularPayAmount + $nightDiffRegularPayAmount; // Include both regular and ND pay
+                    $overtimePay += $overtimePayAmount; // Overtime pay separate
+                } elseif ($logType === 'rest_day') {
+                    $restPay += ($regularPayAmount + $nightDiffRegularPayAmount + $overtimePayAmount); // Rest day pay includes regular, ND, and overtime
+                } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                    $holidayPay += ($regularPayAmount + $nightDiffRegularPayAmount + $overtimePayAmount); // Holiday pay includes regular, ND, and overtime
+                }
+            }
+
+            // Round to exactly match the draft display (ensure consistency to the cent)
+            $basicPay = round($basicPay, 2);
+            $holidayPay = round($holidayPay, 2);
+            $restPay = round($restPay, 2);
+            $overtimePay = round($overtimePay, 2);
+
+            // Get deductions and other components using the existing payroll calculation method
             $payrollCalculation = $this->calculateEmployeePayrollForPeriod(
                 $employee,
                 $payroll->period_start,
@@ -5023,77 +5046,62 @@ class PayrollController extends Controller
                 null // Pass null to force draft mode calculations
             );
 
-            // Extract the EXACT values from the same calculation used in dynamic view
-            $basicPay = $payrollCalculation['regular_pay'] ?? 0;
-            $holidayPay = $payrollCalculation['holiday_pay'] ?? 0;
-            $restPay = $payrollCalculation['rest_day_pay'] ?? 0;
-            $overtimePay = $payrollCalculation['overtime_pay'] ?? 0;
-            $grossPay = $payrollCalculation['gross_pay'] ?? 0;
-            $totalDeductions = $payrollCalculation['total_deductions'] ?? 0;
-            $netPay = $payrollCalculation['net_pay'] ?? 0;
-
-            // Calculate taxable income using the same values from the dynamic calculation
-            $baseTaxableIncome = $basicPay + $holidayPay + $restPay + $overtimePay;
-            $taxableIncome = $baseTaxableIncome;
-
-            // Add allowances and bonuses from the payroll calculation
-            $allowancesTotal = $payrollCalculation['allowances'] ?? 0;
-            $bonusesTotal = $payrollCalculation['bonuses'] ?? 0;
-
-            // Check if allowances/bonuses are taxable and add to taxable income
-            $allowanceSettings = \App\Models\AllowanceBonusSetting::where('type', 'allowance')
-                ->where('is_active', true)
-                ->where('is_taxable', true)
-                ->get();
-            $bonusSettings = \App\Models\AllowanceBonusSetting::where('type', 'bonus')
-                ->where('is_active', true)
-                ->where('is_taxable', true)
-                ->get();
-
-            $taxableAllowances = 0;
-            $taxableBonuses = 0;
-
-            // Calculate taxable allowances from the detailed breakdown
-            if (isset($payrollCalculation['allowances_details'])) {
-                foreach ($payrollCalculation['allowances_details'] as $allowanceCode => $allowanceData) {
-                    $setting = $allowanceSettings->where('code', $allowanceCode)->first();
-                    if ($setting && $setting->is_taxable) {
-                        $taxableAllowances += is_array($allowanceData) ? ($allowanceData['amount'] ?? 0) : $allowanceData;
-                    }
-                }
-            }
-
-            // Calculate taxable bonuses from the detailed breakdown
-            if (isset($payrollCalculation['bonuses_details'])) {
-                foreach ($payrollCalculation['bonuses_details'] as $bonusCode => $bonusData) {
-                    $setting = $bonusSettings->where('code', $bonusCode)->first();
-                    if ($setting && $setting->is_taxable) {
-                        $taxableBonuses += is_array($bonusData) ? ($bonusData['amount'] ?? 0) : $bonusData;
-                    }
-                }
-            }
-
-            // Add taxable allowances and bonuses to taxable income
-            $taxableIncome += $taxableAllowances + $taxableBonuses;
-
-            // Calculate deductions breakdown using the calculated taxable income
-            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome);
-
-            // Get the time breakdown for this employee for detailed breakdowns
+            // Get the time breakdown for this employee to extract ONLY regular workday hours
             $employeeTimeBreakdown = $timeBreakdownsByEmployee[$employee->id] ?? [];
 
-            // Create detailed breakdowns for display consistency
+            // Extract only regular workday hours for basic pay calculation
+            $regularWorkdayHours = $employeeTimeBreakdown['regular_workday']['regular_hours'] ?? 0;
+            $regularWorkdayOvertimeHours = $employeeTimeBreakdown['regular_workday']['overtime_hours'] ?? 0;
+
+            // Calculate total hours for all day types (for verification)
+            $totalRegularHours = 0;
+            $totalOvertimeHours = 0;
+            $totalHolidayHours = 0;
+
+            foreach ($employeeTimeBreakdown as $logType => $breakdown) {
+                $totalRegularHours += $breakdown['regular_hours'];
+                $totalOvertimeHours += $breakdown['overtime_hours'];
+                if (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                    $totalHolidayHours += $breakdown['regular_hours'] + $breakdown['overtime_hours'];
+                }
+            }
+
+            // Create detailed breakdowns for Basic, Holiday, Rest, and Overtime columns
             $basicBreakdown = $this->createBasicPayBreakdown($employeeTimeBreakdown, $employee);
             $holidayBreakdown = $this->createHolidayPayBreakdown($employeeTimeBreakdown, $employee);
             $restBreakdown = $this->createRestPayBreakdown($employeeTimeBreakdown, $employee);
             $overtimeBreakdown = $this->createOvertimePayBreakdown($employeeTimeBreakdown, $employee);
 
-            // Get breakdown data for allowances and bonuses
-            $allowancesBreakdown = $payrollCalculation['allowances_details'] ?? [];
-            $bonusesBreakdown = $payrollCalculation['bonuses_details'] ?? [];
+            // Use the SAME calculated amounts from the draft mode display logic
+            // This ensures 100% consistency between draft and processing/locked payroll displays
+            // $basicPay, $holidayPay, $restPay, $overtimePay are already calculated above using exact same logic as draft
+
+            // Get breakdown data for allowances and bonuses (exactly as they are in draft mode)
+            $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
+            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);            // Log the calculated values for debugging
+            Log::info("Snapshot calculation for employee {$employee->id}", [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+                'overtime_pay' => $overtimePay,
+                'rest_pay' => $restPay,
+                'regular_workday_hours' => $regularWorkdayHours,
+                'regular_workday_overtime_hours' => $regularWorkdayOvertimeHours,
+                'total_regular_hours_all_types' => $totalRegularHours,
+                'total_overtime_hours_all_types' => $totalOvertimeHours,
+                'total_holiday_hours' => $totalHolidayHours,
+                'gross_pay' => $payrollCalculation['gross_pay'] ?? 0,
+            ]);
 
             // Get current settings snapshot
             $settingsSnapshot = $this->getCurrentSettingsSnapshot($employee);
+
+            // Calculate total deductions exactly as they would be in draft mode
+            // Use the calculated total deductions from the payroll calculation
+            $totalDeductions = $payrollCalculation['total_deductions'] ?? 0;
+
+            // Calculate net pay exactly as it would be in draft mode
+            $grossPay = $payrollCalculation['gross_pay'] ?? 0;
+            $netPay = $grossPay - $totalDeductions;
 
             // Create pay breakdown for snapshot
             $payBreakdown = [
@@ -5104,31 +5112,166 @@ class PayrollController extends Controller
                 'total_calculated' => $basicPay + $holidayPay + $restPay + $overtimePay
             ];
 
-            // Extract hours data from payroll calculation
-            $regularWorkdayHours = $employeeTimeBreakdown['regular_workday']['regular_hours'] ?? 0;
-            $regularWorkdayOvertimeHours = $employeeTimeBreakdown['regular_workday']['overtime_hours'] ?? 0;
-            $totalHolidayHours = 0;
+            // Calculate taxable income using the same logic as PayrollDetail.getTaxableIncomeAttribute()
+            // This ensures consistency between dynamic and snapshot calculations
+            // NOTE: Night differential amounts are already embedded in basicPay, holidayPay, and restPay
+            // through the breakdown calculations (Regular Workday+ND, Holiday+ND, etc.)
+            // So we don't need to add a separate night_differential_pay field
+            $baseTaxableIncome = $basicPay + $holidayPay + $restPay + $overtimePay;
+            $taxableIncome = $baseTaxableIncome;
 
-            foreach ($employeeTimeBreakdown as $logType => $breakdown) {
-                if (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
-                    $totalHolidayHours += $breakdown['regular_hours'] + $breakdown['overtime_hours'];
-                }
-            }
-
-            // Log the values for debugging
-            Log::info("Snapshot creation using exact same calculation as dynamic view for employee {$employee->id}", [
+            // Log base taxable income calculation
+            Log::info("Base taxable income calculation for employee {$employee->id}", [
                 'basic_pay' => $basicPay,
                 'holiday_pay' => $holidayPay,
                 'rest_pay' => $restPay,
                 'overtime_pay' => $overtimePay,
-                'gross_pay' => $grossPay,
-                'taxable_income' => $taxableIncome,
-                'total_deductions' => $totalDeductions,
-                'net_pay' => $netPay,
-                'source' => 'calculateEmployeePayrollForPeriod'
+                'base_taxable_income' => $baseTaxableIncome
             ]);
 
-            // Create snapshot with values from the EXACT SAME calculation as dynamic view
+            // Add only taxable allowances and bonuses
+            $allowanceSettings = \App\Models\AllowanceBonusSetting::where('type', 'allowance')
+                ->where('is_active', true)
+                ->get();
+            $bonusSettings = \App\Models\AllowanceBonusSetting::where('type', 'bonus')
+                ->where('is_active', true)
+                ->get();
+
+            $allSettings = $allowanceSettings->merge($bonusSettings);
+
+            // Log what settings we're processing
+            Log::info("Processing allowance/bonus settings for taxable income", [
+                'employee_id' => $employee->id,
+                'allowance_settings' => $allowanceSettings->map(function ($s) {
+                    return ['code' => $s->code, 'name' => $s->name, 'is_taxable' => $s->is_taxable, 'type' => $s->type];
+                }),
+                'bonus_settings' => $bonusSettings->map(function ($s) {
+                    return ['code' => $s->code, 'name' => $s->name, 'is_taxable' => $s->is_taxable, 'type' => $s->type];
+                })
+            ]);
+
+            foreach ($allSettings as $setting) {
+                // Log each setting we're processing
+                Log::info("Evaluating setting for taxable income", [
+                    'employee_id' => $employee->id,
+                    'setting_code' => $setting->code,
+                    'setting_name' => $setting->name,
+                    'setting_type' => $setting->type,
+                    'is_taxable' => $setting->is_taxable,
+                    'calculation_type' => $setting->calculation_type,
+                    'fixed_amount' => $setting->fixed_amount ?? 'N/A',
+                    'frequency' => $setting->frequency ?? 'N/A'
+                ]);
+
+                // Only add if this setting is taxable
+                if (!$setting->is_taxable) {
+                    Log::info("Skipping non-taxable setting: {$setting->code} ({$setting->type})");
+                    continue;
+                }
+
+                Log::info("Processing taxable setting: {$setting->code} ({$setting->type})");
+
+                $calculatedAmount = 0;                // Calculate the amount based on the setting type
+                if ($setting->calculation_type === 'percentage') {
+                    $calculatedAmount = ($basicPay * $setting->rate_percentage) / 100;
+                } elseif ($setting->calculation_type === 'fixed_amount') {
+                    $calculatedAmount = $setting->fixed_amount;
+
+                    // Apply frequency-based calculation for daily allowances
+                    if ($setting->frequency === 'daily') {
+                        $workingDays = 0;
+
+                        // Count working days from time breakdown
+                        foreach ($employeeTimeBreakdown as $logType => $breakdown) {
+                            if ($breakdown['regular_hours'] > 0) {
+                                $workingDays += $breakdown['days_count'] ?? 0;
+                            }
+                        }
+
+                        $maxDays = $setting->max_days_per_period ?? $workingDays;
+                        $applicableDays = min($workingDays, $maxDays);
+
+                        $calculatedAmount = $setting->fixed_amount * $applicableDays;
+                    }
+                } elseif ($setting->calculation_type === 'daily_rate_multiplier') {
+                    $dailyRate = $employee->daily_rate ?? 0;
+                    $multiplier = $setting->multiplier ?? 1;
+                    $calculatedAmount = $dailyRate * $multiplier;
+                }
+
+                // Apply limits
+                if ($setting->minimum_amount && $calculatedAmount < $setting->minimum_amount) {
+                    $calculatedAmount = $setting->minimum_amount;
+                }
+                if ($setting->maximum_amount && $calculatedAmount > $setting->maximum_amount) {
+                    $calculatedAmount = $setting->maximum_amount;
+                }
+
+                // Add taxable allowance/bonus to taxable income
+                $taxableIncome += $calculatedAmount;
+
+                Log::info("Added taxable amount", [
+                    'setting_code' => $setting->code,
+                    'setting_type' => $setting->type,
+                    'calculated_amount' => $calculatedAmount,
+                    'running_taxable_income' => $taxableIncome
+                ]);
+            }
+
+            $taxableIncome = max(0, $taxableIncome);
+
+            // ADDITIONAL DEBUG: Write to clean debug file
+            $debugData = [
+                'employee_id' => $employee->id,
+                'taxable_income_after_max' => $taxableIncome,
+                'base_taxable_income' => $baseTaxableIncome,
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+                'rest_pay' => $restPay,
+                'overtime_pay' => $overtimePay,
+                'timestamp' => now()->format('Y-m-d H:i:s')
+            ];
+            file_put_contents(
+                storage_path('logs/debug_taxable.txt'),
+                "AFTER MAX CALCULATION:\n" . json_encode($debugData, JSON_PRETTY_PRINT) . "\n\n",
+                FILE_APPEND | LOCK_EX
+            );
+
+            // Calculate deductions breakdown after taxable income is finalized
+            // Pass the calculated taxable income to ensure consistent deduction calculations
+            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome);
+
+            // Log taxable income calculation for debugging
+            Log::info("Final taxable income calculation for employee {$employee->id}", [
+                'basic_pay' => $basicPay,
+                'holiday_pay' => $holidayPay,
+                'rest_pay' => $restPay,
+                'overtime_pay' => $overtimePay,
+                'base_taxable_income' => $baseTaxableIncome,
+                'base_total' => $basicPay + $holidayPay + $restPay + $overtimePay,
+                'gross_pay' => $grossPay,
+                'final_taxable_income' => $taxableIncome,
+                'allowance_settings_count' => $allowanceSettings->count(),
+                'bonus_settings_count' => $bonusSettings->count(),
+            ]);
+
+            // FINAL DEBUG: Write to clean debug file just before snapshot creation
+            $preSnapshotData = [
+                'employee_id' => $employee->id,
+                'taxable_income_variable' => $taxableIncome,
+                'taxable_income_type' => gettype($taxableIncome),
+                'is_null' => is_null($taxableIncome),
+                'is_numeric' => is_numeric($taxableIncome),
+                'value_as_string' => (string)$taxableIncome,
+                'timestamp' => now()->format('Y-m-d H:i:s')
+            ];
+            file_put_contents(
+                storage_path('logs/debug_taxable.txt'),
+                "BEFORE SNAPSHOT CREATION:\n" . json_encode($preSnapshotData, JSON_PRETTY_PRINT) . "\n\n",
+                FILE_APPEND | LOCK_EX
+            );
+
+            // Create snapshot with exact draft mode calculations
             $snapshot = \App\Models\PayrollSnapshot::create([
                 'payroll_id' => $payroll->id,
                 'employee_id' => $employee->id,
@@ -5140,97 +5283,74 @@ class PayrollController extends Controller
                 'daily_rate' => $employee->daily_rate ?? 0,
                 'hourly_rate' => $employee->hourly_rate ?? 0,
                 'days_worked' => $payrollCalculation['days_worked'] ?? 0,
-                'regular_hours' => $regularWorkdayHours, // Only regular workday hours
+                'regular_hours' => $regularWorkdayHours, // Only regular workday hours, not all regular hours
                 'overtime_hours' => $regularWorkdayOvertimeHours, // Only regular workday overtime hours
-                'holiday_hours' => $totalHolidayHours, // Total holiday hours
+                'holiday_hours' => $totalHolidayHours, // Total holiday hours (regular + overtime)
                 'night_differential_hours' => $payrollCalculation['night_differential_hours'] ?? 0,
-                'regular_pay' => $basicPay, // From unified calculation
-                'overtime_pay' => $overtimePay, // From unified calculation
-                'holiday_pay' => $holidayPay, // From unified calculation
-                'rest_day_pay' => $restPay, // From unified calculation
+                'regular_pay' => $basicPay, // Use calculated basic pay
+                'overtime_pay' => $overtimePay, // Use calculated overtime pay
+                'holiday_pay' => $holidayPay, // Use calculated holiday pay
+                'rest_day_pay' => $restPay, // Use calculated rest day pay
                 'night_differential_pay' => $payrollCalculation['night_differential_pay'] ?? 0,
                 'basic_breakdown' => $basicBreakdown,
                 'holiday_breakdown' => $holidayBreakdown,
                 'rest_breakdown' => $restBreakdown,
                 'overtime_breakdown' => $overtimeBreakdown,
                 'allowances_breakdown' => $allowancesBreakdown,
-                'allowances_total' => $allowancesTotal,
+                'allowances_total' => $payrollCalculation['allowances'] ?? 0,
                 'bonuses_breakdown' => $bonusesBreakdown,
-                'bonuses_total' => $bonusesTotal,
+                'bonuses_total' => $payrollCalculation['bonuses'] ?? 0,
                 'other_earnings' => $payrollCalculation['other_earnings'] ?? 0,
-                'gross_pay' => $grossPay, // From unified calculation
+                'gross_pay' => $grossPay, // Use calculated gross pay
                 'deductions_breakdown' => $deductionsBreakdown,
-                'sss_contribution' => $payrollCalculation['sss_deduction'] ?? 0,
-                'philhealth_contribution' => $payrollCalculation['philhealth_deduction'] ?? 0,
-                'pagibig_contribution' => $payrollCalculation['pagibig_deduction'] ?? 0,
-                'withholding_tax' => $payrollCalculation['tax_deduction'] ?? 0,
-                'late_deductions' => $payrollCalculation['late_deductions'] ?? 0,
-                'undertime_deductions' => $payrollCalculation['undertime_deductions'] ?? 0,
+                'sss_contribution' => $payrollCalculation['sss_contribution'] ?? 0,
+                'philhealth_contribution' => $payrollCalculation['philhealth_contribution'] ?? 0,
+                'pagibig_contribution' => $payrollCalculation['pagibig_contribution'] ?? 0,
+                'withholding_tax' => $payrollCalculation['withholding_tax'] ?? 0,
+                'late_deductions' => 0, // Set to 0 as late/undertime are already accounted for in hours
+                'undertime_deductions' => 0, // Set to 0 as late/undertime are already accounted for in hours
                 'cash_advance_deductions' => $payrollCalculation['cash_advance_deductions'] ?? 0,
                 'other_deductions' => $payrollCalculation['other_deductions'] ?? 0,
-                'total_deductions' => $totalDeductions, // From unified calculation
-                'net_pay' => $netPay, // From unified calculation
-                'taxable_income' => $taxableIncome, // Calculated using same method as dynamic view
+                'total_deductions' => $totalDeductions, // Use calculated total
+                'net_pay' => $netPay, // Use calculated net pay
+                'taxable_income' => $taxableIncome, // Store calculated taxable income
                 'settings_snapshot' => array_merge($settingsSnapshot, ['pay_breakdown' => $payBreakdown]),
-                'remarks' => 'Snapshot created at ' . now()->format('Y-m-d H:i:s') . ' - Uses exact same calculation as dynamic view',
+                'remarks' => 'Snapshot created at ' . now()->format('Y-m-d H:i:s') . ' - Captures exact draft calculations',
             ]);
 
-
+            // DEBUG: Check what was actually stored in the database
+            $storedData = [
+                'snapshot_id' => $snapshot->id,
+                'stored_taxable_income' => $snapshot->taxable_income,
+                'stored_gross_pay' => $snapshot->gross_pay,
+                'stored_net_pay' => $snapshot->net_pay,
+                'timestamp' => now()->format('Y-m-d H:i:s')
+            ];
+            file_put_contents(
+                storage_path('logs/debug_taxable.txt'),
+                "AFTER SNAPSHOT CREATED:\n" . json_encode($storedData, JSON_PRETTY_PRINT) . "\n" . str_repeat('=', 50) . "\n\n",
+                FILE_APPEND | LOCK_EX
+            );
 
             // IMPORTANT: Also update the payroll_details table to match the snapshot values
             // This ensures consistency between snapshot data and payroll_details fallback
             $payrollDetail = $payroll->payrollDetails()->where('employee_id', $employee->id)->first();
             if ($payrollDetail) {
                 $payrollDetail->update([
-                    'regular_pay' => $basicPay, // From unified calculation
-                    'holiday_pay' => $holidayPay, // From unified calculation
-                    'overtime_pay' => $overtimePay, // From unified calculation
-                    'rest_day_pay' => $restPay, // From unified calculation
-                    'allowances' => $allowancesTotal, // From unified calculation
-                    'bonuses' => $bonusesTotal, // From unified calculation
-                    'gross_pay' => $grossPay, // From unified calculation
-                    'total_deductions' => $totalDeductions, // From unified calculation
-                    'net_pay' => $netPay, // From unified calculation
-                    'sss_contribution' => $payrollCalculation['sss_deduction'] ?? 0,
-                    'philhealth_contribution' => $payrollCalculation['philhealth_deduction'] ?? 0,
-                    'pagibig_contribution' => $payrollCalculation['pagibig_deduction'] ?? 0,
-                    'withholding_tax' => $payrollCalculation['tax_deduction'] ?? 0,
-                    'late_deductions' => $payrollCalculation['late_deductions'] ?? 0,
-                    'undertime_deductions' => $payrollCalculation['undertime_deductions'] ?? 0,
-                    'cash_advance_deductions' => $payrollCalculation['cash_advance_deductions'] ?? 0,
-                    'other_deductions' => $payrollCalculation['other_deductions'] ?? 0,
-                    'days_worked' => $payrollCalculation['days_worked'] ?? 0,
-                    'regular_hours' => $payrollCalculation['regular_hours'] ?? 0,
-                    'overtime_hours' => $payrollCalculation['overtime_hours'] ?? 0,
-                    'holiday_hours' => $payrollCalculation['holiday_hours'] ?? 0,
-                    'rest_day_hours' => $payrollCalculation['rest_day_hours'] ?? 0,
-                ]);
-
-                // Update breakdowns if available
-                if (isset($payrollCalculation['deductions_details'])) {
-                    $payrollDetail->deduction_breakdown = json_encode($payrollCalculation['deductions_details']);
-                }
-                if (isset($payrollCalculation['allowances_details']) || isset($payrollCalculation['bonuses_details'])) {
-                    $earningsBreakdown = [];
-                    if (isset($payrollCalculation['allowances_details'])) {
-                        $earningsBreakdown['allowances'] = $payrollCalculation['allowances_details'];
-                    }
-                    if (isset($payrollCalculation['bonuses_details'])) {
-                        $earningsBreakdown['bonuses'] = $payrollCalculation['bonuses_details'];
-                    }
-                    $payrollDetail->earnings_breakdown = json_encode($earningsBreakdown);
-                }
-                $payrollDetail->save();
-
-                Log::info("Updated payroll_details for employee {$employee->id} using unified calculation", [
-                    'basic_pay' => $basicPay,
+                    'regular_pay' => $basicPay, // Update with the exact snapshot value
                     'holiday_pay' => $holidayPay,
                     'overtime_pay' => $overtimePay,
-                    'rest_pay' => $restPay,
+                    'rest_day_pay' => $restPay,
                     'gross_pay' => $grossPay,
-                    'taxable_income' => $taxableIncome,
                     'total_deductions' => $totalDeductions,
-                    'net_pay' => $netPay
+                    'net_pay' => $netPay,
+                ]);
+
+                Log::info("Updated payroll_details for employee {$employee->id} to match snapshot", [
+                    'regular_pay' => $basicPay,
+                    'holiday_pay' => $holidayPay,
+                    'overtime_pay' => $overtimePay,
+                    'gross_pay' => $grossPay
                 ]);
             }
 
@@ -5398,9 +5518,6 @@ class PayrollController extends Controller
             }
 
             foreach ($deductionSettings as $setting) {
-                // Calculate which pay basis amount will be used for this deduction
-                $payBasisAmount = $this->calculatePayBasisAmount($setting, $detail, $taxableIncomeForDeductions);
-
                 $amount = $setting->calculateDeduction(
                     $taxableIncomeForDeductions, // Use taxable income (with allowances/bonuses) instead of just basic pay components
                     $detail->overtime_pay ?? 0,
@@ -5410,25 +5527,13 @@ class PayrollController extends Controller
                 );
 
                 if ($amount > 0) {
-                    $deductionData = [
+                    $breakdown[] = [
                         'name' => $setting->name,
                         'code' => $setting->code ?? strtolower(str_replace(' ', '_', $setting->name)),
                         'amount' => $amount,
                         'type' => $setting->type ?? 'government',
                         'calculation_type' => $setting->calculation_type
                     ];
-
-                    // Add pay basis information for specific deductions
-                    if (
-                        in_array($setting->code, ['sss', 'philhealth', 'pagibig', 'withholding_tax']) ||
-                        $setting->calculation_type === 'bracket' ||
-                        $setting->type === 'government'
-                    ) {
-                        $deductionData['pay_basis_amount'] = $payBasisAmount;
-                        $deductionData['pay_basis_type'] = $this->getPayBasisType($setting);
-                    }
-
-                    $breakdown[] = $deductionData;
                 }
             }
         } else {
@@ -5490,76 +5595,6 @@ class PayrollController extends Controller
         }
 
         return $breakdown;
-    }
-
-    /**
-     * Calculate the actual pay basis amount used for a deduction
-     */
-    private function calculatePayBasisAmount($setting, $detail, $taxableIncome)
-    {
-        $basicPay = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
-        $overtime = $detail->overtime_pay ?? 0;
-        $bonus = $detail->bonuses ?? 0;
-        $allowances = $detail->allowances ?? 0;
-        $grossPay = $detail->gross_pay ?? 0;
-
-        // Calculate what the setting actually uses as pay basis
-        $applicableSalary = 0;
-
-        if ($setting->apply_to_basic_pay) $applicableSalary += $basicPay;
-        if ($setting->apply_to_regular) $applicableSalary += $basicPay; // backwards compatibility
-        if ($setting->apply_to_overtime) $applicableSalary += $overtime;
-        if ($setting->apply_to_bonus) $applicableSalary += $bonus;
-        if ($setting->apply_to_allowances) $applicableSalary += $allowances;
-        if ($setting->apply_to_gross_pay && $grossPay) $applicableSalary = $grossPay;
-        if ($setting->apply_to_taxable_income && $taxableIncome) $applicableSalary = $taxableIncome;
-
-        // Apply salary cap if set
-        if ($setting->salary_cap && $applicableSalary > $setting->salary_cap) {
-            $applicableSalary = $setting->salary_cap;
-        }
-
-        return $applicableSalary;
-    }
-
-    /**
-     * Get the pay basis type for display purposes
-     */
-    private function getPayBasisType($setting)
-    {
-        if ($setting->apply_to_taxable_income) return 'Taxable Income';
-        if ($setting->apply_to_gross_pay) return 'Gross Pay';
-        if ($setting->apply_to_basic_pay || $setting->apply_to_regular) return 'Basic Pay';
-        if ($setting->apply_to_overtime) return 'Overtime Pay';
-        if ($setting->apply_to_bonus) return 'Bonus';
-        if ($setting->apply_to_allowances) return 'Allowances';
-
-        // Default fallback
-        return 'Unknown';
-    }
-
-    /**
-     * Calculate the actual pay basis amount used for a deduction (from individual values)
-     */
-    private function calculatePayBasisAmountFromValues($setting, $basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome = null)
-    {
-        // Calculate what the setting actually uses as pay basis
-        $applicableSalary = 0;
-
-        if ($setting->apply_to_basic_pay) $applicableSalary += $basicPay;
-        if ($setting->apply_to_regular) $applicableSalary += $basicPay; // backwards compatibility
-        if ($setting->apply_to_overtime) $applicableSalary += $overtimePay;
-        if ($setting->apply_to_bonus) $applicableSalary += $bonuses;
-        if ($setting->apply_to_allowances) $applicableSalary += $allowances;
-        if ($setting->apply_to_gross_pay && $grossPay) $applicableSalary = $grossPay;
-        if ($setting->apply_to_taxable_income && $taxableIncome) $applicableSalary = $taxableIncome;
-
-        // Apply salary cap if set
-        if ($setting->salary_cap && $applicableSalary > $setting->salary_cap) {
-            $applicableSalary = $setting->salary_cap;
-        }
-
-        return $applicableSalary;
     }
 
     /**

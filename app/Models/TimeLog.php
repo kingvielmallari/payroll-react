@@ -188,36 +188,59 @@ class TimeLog extends Model
         $rateConfig = $this->getRateConfiguration();
 
         if (!$rateConfig) {
-            // Fallback to regular workday rates
-            $regularAmount = $hourlyRate * $this->regular_hours;
-            $overtimeAmount = $hourlyRate * 1.25 * $this->overtime_hours;
-        } else {
-            // Calculate regular pay with night differential breakdown
+            // Fallback to regular workday rates - using per-minute calculation
+            $regularHours = $this->regular_hours ?? 0;
+            $overtimeHours = $this->overtime_hours ?? 0;
+
+            // Per-minute calculation for regular hours
             $regularAmount = 0;
-            
+            if ($regularHours > 0) {
+                $actualMinutes = $regularHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = $hourlyRate / 60;
+                $regularAmount = $roundedMinutes * $ratePerMinute;
+            }
+
+            // Per-minute calculation for overtime hours
+            $overtimeAmount = 0;
+            if ($overtimeHours > 0) {
+                $actualMinutes = $overtimeHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = ($hourlyRate * 1.25) / 60;
+                $overtimeAmount = $roundedMinutes * $ratePerMinute;
+            }
+        } else {
+            // Calculate regular pay with night differential breakdown using per-minute calculation
+            $regularAmount = 0;
+
             // Check for dynamic calculation fields (used in draft payrolls)
             $regularHours = $this->dynamic_regular_hours ?? $this->regular_hours ?? 0;
             $nightDiffRegularHours = $this->dynamic_night_diff_regular_hours ?? $this->night_diff_regular_hours ?? 0;
-            
-            // Regular hours without night differential
+
+            // Regular hours without night differential - per-minute calculation
             if ($regularHours > 0) {
-                $regularAmount += $hourlyRate * $rateConfig->regular_rate_multiplier * $regularHours;
+                $actualMinutes = $regularHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = ($hourlyRate * $rateConfig->regular_rate_multiplier) / 60;
+                $regularAmount += $roundedMinutes * $ratePerMinute;
             }
-            
-            // Regular hours WITH night differential (add night differential bonus)
+
+            // Regular hours WITH night differential - per-minute calculation
             if ($nightDiffRegularHours > 0) {
                 // Get night differential setting
                 $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
                 $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
-                
-                // Combined rate: base regular rate + night differential bonus
-                // e.g., 2.0 (holiday) * 1.10 (night diff) = 2.20
-                $combinedMultiplier = $rateConfig->regular_rate_multiplier * $nightDiffMultiplier;
-                $nightDiffRegularAmount = $hourlyRate * $combinedMultiplier * $nightDiffRegularHours;
-                $regularAmount += $nightDiffRegularAmount;
+
+                // Combined rate: base regular rate + night differential bonus (SAME AS BREAKDOWN METHOD)
+                $combinedMultiplier = $rateConfig->regular_rate_multiplier + ($nightDiffMultiplier - 1);
+
+                $actualMinutes = $nightDiffRegularHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                $regularAmount += $roundedMinutes * $ratePerMinute;
             }
 
-            // Calculate overtime pay with night differential breakdown if available
+            // Calculate overtime pay with night differential breakdown using per-minute calculation
             $overtimeAmount = 0;
 
             // Check for dynamic calculation fields (used in draft payrolls)
@@ -225,29 +248,37 @@ class TimeLog extends Model
             $nightDiffOvertimeHours = $this->dynamic_night_diff_overtime_hours ?? $this->night_diff_overtime_hours ?? 0;
 
             if ($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) {
-                // Use breakdown calculation
-
-                // Regular overtime pay
+                // Regular overtime pay - per-minute calculation
                 if ($regularOvertimeHours > 0) {
-                    $regularOvertimeAmount = $hourlyRate * $rateConfig->overtime_rate_multiplier * $regularOvertimeHours;
-                    $overtimeAmount += $regularOvertimeAmount;
+                    $actualMinutes = $regularOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $rateConfig->overtime_rate_multiplier) / 60;
+                    $overtimeAmount += $roundedMinutes * $ratePerMinute;
                 }
 
-                // Night differential overtime pay (overtime rate + night differential bonus)
+                // Night differential overtime pay - per-minute calculation
                 if ($nightDiffOvertimeHours > 0) {
                     // Get night differential setting
                     $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
                     $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
 
                     // Combined rate: base overtime rate + night differential bonus
-                    // e.g., 1.25 (overtime) + 0.10 (night diff bonus) = 1.35
                     $combinedMultiplier = $rateConfig->overtime_rate_multiplier + ($nightDiffMultiplier - 1);
-                    $nightDiffOvertimeAmount = $hourlyRate * $combinedMultiplier * $nightDiffOvertimeHours;
-                    $overtimeAmount += $nightDiffOvertimeAmount;
+
+                    $actualMinutes = $nightDiffOvertimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $overtimeAmount += $roundedMinutes * $ratePerMinute;
                 }
             } else {
-                // Fallback to simple calculation if no breakdown available
-                $overtimeAmount = $hourlyRate * $rateConfig->overtime_rate_multiplier * $this->overtime_hours;
+                // Fallback to simple calculation if no breakdown available - per-minute calculation
+                $overtimeHours = $this->overtime_hours ?? 0;
+                if ($overtimeHours > 0) {
+                    $actualMinutes = $overtimeHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $ratePerMinute = ($hourlyRate * $rateConfig->overtime_rate_multiplier) / 60;
+                    $overtimeAmount = $roundedMinutes * $ratePerMinute;
+                }
             }
         }
 
