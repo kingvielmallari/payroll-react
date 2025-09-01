@@ -629,17 +629,25 @@
                                                     $regularHours = $employeeBreakdown['regular_workday']['regular_hours'] ?? 0;
                                                     $nightDiffRegularHours = $employeeBreakdown['regular_workday']['night_diff_regular_hours'] ?? 0;
                                                     
+                                                    // Get rate config for regular workday
+                                                    $rateConfig = $employeeBreakdown['regular_workday']['rate_config'] ?? null;
+                                                    $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.01;
+                                                    
                                                     // Regular Workday (without ND)
                                                     if ($regularHours > 0) {
                                                         // Convert hours to minutes for precise calculation
                                                         $actualMinutes = $regularHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
-                                                        $ratePerMinute = $hourlyRate / 60;
+                                                        $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
                                                         $amount = $roundedMinutes * $ratePerMinute;
+                                                        
+                                                        $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                         
                                                         $basicBreakdownData['Regular Workday'] = [
                                                             'hours' => $regularHours,
                                                             'rate' => $hourlyRate,
+                                                            'multiplier' => $regularMultiplier,
+                                                            'percentage' => $percentageDisplay,
                                                             'amount' => $amount,
                                                         ];
                                                         $basicRegularHours += $regularHours;
@@ -648,15 +656,21 @@
                                                     
                                                     // Regular Workday + ND
                                                     if ($nightDiffRegularHours > 0) {
+                                                        // Combined rate: regular rate + night differential bonus
+                                                        $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
+                                                        
                                                         $nightDiffMinutes = $nightDiffRegularHours * 60;
                                                         $roundedNDMinutes = round($nightDiffMinutes);
-                                                        $ndRatePerMinute = ($hourlyRate * $nightDiffMultiplier) / 60;
+                                                        $ndRatePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
                                                         $ndAmount = $roundedNDMinutes * $ndRatePerMinute;
+                                                        
+                                                        $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
                                                         
                                                         $basicBreakdownData['Regular Workday+ND'] = [
                                                             'hours' => $nightDiffRegularHours,
                                                             'rate' => $hourlyRate,
-                                                            'multiplier' => $nightDiffMultiplier,
+                                                            'multiplier' => $combinedMultiplier,
+                                                            'percentage' => $ndPercentageDisplay,
                                                             'amount' => $ndAmount,
                                                         ];
                                                         $basicRegularHours += $nightDiffRegularHours;
@@ -667,9 +681,20 @@
                                                 // PROCESSING/APPROVED: Use breakdown data from snapshot
                                                 $basicBreakdownData = [];
                                                 if ($employeeSnapshot && $employeeSnapshot->basic_breakdown) {
-                                                    $basicBreakdownData = is_string($employeeSnapshot->basic_breakdown) 
+                                                    $rawBreakdownData = is_string($employeeSnapshot->basic_breakdown) 
                                                         ? json_decode($employeeSnapshot->basic_breakdown, true) 
                                                         : $employeeSnapshot->basic_breakdown;
+                                                    
+                                                    // Ensure percentage is added to snapshot data for consistent display
+                                                    foreach ($rawBreakdownData as $type => $data) {
+                                                        $basicBreakdownData[$type] = [
+                                                            'hours' => $data['hours'],
+                                                            'amount' => $data['amount'],
+                                                            'rate' => $data['rate'] ?? 0,
+                                                            'multiplier' => $data['multiplier'] ?? 1.0,
+                                                            'percentage' => isset($data['multiplier']) ? number_format($data['multiplier'] * 100, 0) . '%' : (isset($data['percentage']) ? $data['percentage'] : '100%')
+                                                        ];
+                                                    }
                                                 }
                                                 $basicRegularHours = array_sum(array_column($basicBreakdownData, 'hours'));
                                                 // Use calculated total from breakdown instead of stored regular_pay
@@ -684,7 +709,9 @@
                                                     <div class="text-xs text-gray-500 mb-1">
                                                         <span>{{ $type }}: {{ number_format($data['hours'], 2) }}h</span>
                                                         <div class="text-xs text-gray-600">
-                                                            @if(str_contains($type, '+ND') && isset($data['multiplier']))
+                                                            @if(isset($data['percentage']))
+                                                                {{ $data['percentage'] }} = ₱{{ number_format($data['amount'] ?? 0, 2) }}
+                                                            @elseif(str_contains($type, '+ND') && isset($data['multiplier']))
                                                                 {{ number_format($data['multiplier'] * 100, 0) }}% = ₱{{ number_format($data['amount'] ?? 0, 2) }}
                                                             @elseif(str_contains($type, '+ND'))
                                                                 110% = ₱{{ number_format($data['amount'] ?? 0, 2) }}
