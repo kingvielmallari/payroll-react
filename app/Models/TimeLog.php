@@ -189,25 +189,20 @@ class TimeLog extends Model
 
         if (!$rateConfig) {
             // Fallback to regular workday rates - using per-minute calculation
-            $regularHours = $this->regular_hours ?? 0;
-            $overtimeHours = $this->overtime_hours ?? 0;
+            // Use dynamic values for draft payrolls, saved values for processed payrolls
+            $regularHours = $this->dynamic_regular_hours ?? $this->regular_hours ?? 0;
+            $overtimeHours = $this->dynamic_overtime_hours ?? $this->overtime_hours ?? 0;
 
             // Per-minute calculation for regular hours
             $regularAmount = 0;
             if ($regularHours > 0) {
-                $actualMinutes = $regularHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = $hourlyRate / 60;
-                $regularAmount = $roundedMinutes * $ratePerMinute;
+                $regularAmount = $this->calculatePerMinuteAmount($hourlyRate, 1.0, $regularHours);
             }
 
             // Per-minute calculation for overtime hours
             $overtimeAmount = 0;
             if ($overtimeHours > 0) {
-                $actualMinutes = $overtimeHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = ($hourlyRate * 1.25) / 60;
-                $overtimeAmount = $roundedMinutes * $ratePerMinute;
+                $overtimeAmount = $this->calculatePerMinuteAmount($hourlyRate, 1.25, $overtimeHours);
             }
         } else {
             // Calculate regular pay with night differential breakdown using per-minute calculation
@@ -219,10 +214,7 @@ class TimeLog extends Model
 
             // Regular hours without night differential - per-minute calculation
             if ($regularHours > 0) {
-                $actualMinutes = $regularHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = ($hourlyRate * $rateConfig->regular_rate_multiplier) / 60;
-                $regularAmount += $roundedMinutes * $ratePerMinute;
+                $regularAmount += $this->calculatePerMinuteAmount($hourlyRate, $rateConfig->regular_rate_multiplier, $regularHours);
             }
 
             // Regular hours WITH night differential - per-minute calculation
@@ -233,11 +225,7 @@ class TimeLog extends Model
 
                 // Combined rate: base regular rate + night differential bonus (SAME AS BREAKDOWN METHOD)
                 $combinedMultiplier = $rateConfig->regular_rate_multiplier + ($nightDiffMultiplier - 1);
-
-                $actualMinutes = $nightDiffRegularHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                $regularAmount += $roundedMinutes * $ratePerMinute;
+                $regularAmount += $this->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
             }
 
             // Calculate overtime pay with night differential breakdown using per-minute calculation
@@ -250,10 +238,7 @@ class TimeLog extends Model
             if ($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) {
                 // Regular overtime pay - per-minute calculation
                 if ($regularOvertimeHours > 0) {
-                    $actualMinutes = $regularOvertimeHours * 60;
-                    $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $rateConfig->overtime_rate_multiplier) / 60;
-                    $overtimeAmount += $roundedMinutes * $ratePerMinute;
+                    $overtimeAmount += $this->calculatePerMinuteAmount($hourlyRate, $rateConfig->overtime_rate_multiplier, $regularOvertimeHours);
                 }
 
                 // Night differential overtime pay - per-minute calculation
@@ -264,20 +249,13 @@ class TimeLog extends Model
 
                     // Combined rate: base overtime rate + night differential bonus
                     $combinedMultiplier = $rateConfig->overtime_rate_multiplier + ($nightDiffMultiplier - 1);
-
-                    $actualMinutes = $nightDiffOvertimeHours * 60;
-                    $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                    $overtimeAmount += $roundedMinutes * $ratePerMinute;
+                    $overtimeAmount += $this->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOvertimeHours);
                 }
             } else {
                 // Fallback to simple calculation if no breakdown available - per-minute calculation
                 $overtimeHours = $this->overtime_hours ?? 0;
                 if ($overtimeHours > 0) {
-                    $actualMinutes = $overtimeHours * 60;
-                    $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $rateConfig->overtime_rate_multiplier) / 60;
-                    $overtimeAmount = $roundedMinutes * $ratePerMinute;
+                    $overtimeAmount = $this->calculatePerMinuteAmount($hourlyRate, $rateConfig->overtime_rate_multiplier, $overtimeHours);
                 }
             }
         }
@@ -287,6 +265,32 @@ class TimeLog extends Model
             'overtime_amount' => $overtimeAmount,
             'total_amount' => $regularAmount + $overtimeAmount,
         ];
+    }
+
+    /**
+     * Calculate per-minute amount with proper precision
+     * This ensures consistent calculation across all methods
+     */
+    public function calculatePerMinuteAmount($hourlyRate, $multiplier, $hours)
+    {
+        // Convert hours to minutes and round minutes (not hours)
+        $actualMinutes = $hours * 60;
+        $roundedMinutes = round($actualMinutes);
+
+        // Calculate per-minute rate: emp_rate / 60
+        $fullPerMinuteRate = $hourlyRate / 60;
+
+        // TRUNCATE (not round) to exactly 4 decimals: 3.333333333 becomes 3.3333
+        $truncatedPerMinuteRate = floor($fullPerMinuteRate * 10000) / 10000;
+
+        // Apply multiplier to the truncated per-minute rate
+        $finalPerMinuteRate = $truncatedPerMinuteRate * $multiplier;
+
+        // Calculate amount: truncated per-minute rate × multiplier × total minutes
+        $amount = $finalPerMinuteRate * $roundedMinutes;
+
+        // Return amount with full precision (rounding will happen at display level)
+        return $amount;
     }
 
     /**

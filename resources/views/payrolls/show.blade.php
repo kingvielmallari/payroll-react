@@ -635,11 +635,11 @@
                                                     
                                                     // Regular Workday (without ND)
                                                     if ($regularHours > 0) {
-                                                        // Convert hours to minutes for precise calculation
-                                                        $actualMinutes = $regularHours * 60;
-                                                        $roundedMinutes = round($actualMinutes);
-                                                        $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
-                                                        $amount = $roundedMinutes * $ratePerMinute;
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
+                                                        // Round amount to 2 decimals for consistency between display and total
+                                                        $amount = round($rawAmount, 2);
                                                         
                                                         $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                         
@@ -659,10 +659,11 @@
                                                         // Combined rate: regular rate + night differential bonus
                                                         $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
                                                         
-                                                        $nightDiffMinutes = $nightDiffRegularHours * 60;
-                                                        $roundedNDMinutes = round($nightDiffMinutes);
-                                                        $ndRatePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                                                        $ndAmount = $roundedNDMinutes * $ndRatePerMinute;
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $rawNdAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
+                                                        // Round amount to 2 decimals for consistency between display and total
+                                                        $ndAmount = round($rawNdAmount, 2);
                                                         
                                                         $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
                                                         
@@ -707,7 +708,7 @@
                                                 <!-- Show Basic Pay breakdown -->
                                                 @foreach($basicBreakdownData as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <span>{{ $type }}: {{ number_format($data['hours'], 2) }}h</span>
+                                                        <span>{{ $type }}: {{ isset($data['minutes']) ? number_format($data['minutes'], 0) . 'm' : number_format($data['hours'] * 60, 0) . 'm' }}</span>
                                                         <div class="text-xs text-gray-600">
                                                             @if(isset($data['percentage']))
                                                                 {{ $data['percentage'] }} = ₱{{ number_format($data['amount'] ?? 0, 2) }}
@@ -716,17 +717,33 @@
                                                             @elseif(str_contains($type, '+ND'))
                                                                 110% = ₱{{ number_format($data['amount'] ?? 0, 2) }}
                                                             @else
-                                                                ₱{{ number_format($data['rate'] ?? 0, 2) }}/hr = ₱{{ number_format($data['amount'] ?? 0, 2) }}
+                                                                ₱{{ number_format($data['rate'] ?? 0, 2) }}/hr 
+                                                                @if(isset($data['rate_per_minute']))
+                                                                    <br>(₱{{ number_format($data['rate_per_minute'], 4) }}/min)
+                                                                @endif
+                                                                = ₱{{ number_format($data['amount'] ?? 0, 2) }}
                                                             @endif
                                                         </div>
                                                     </div>
                                                 @endforeach
                                                 <div class="text-xs border-t pt-1">
-                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 2) }} hrs</div>
+                                                    <?php 
+                                                        // More generous rounding to handle floating point precision
+                                                        $totalMinutes = round($basicRegularHours * 60 + 0.5);
+                                                        $hours = intval($totalMinutes / 60);
+                                                        $minutes = $totalMinutes % 60;
+                                                    ?>
+                                                    <div class="text-gray-500">Total: {{ $hours }}h {{ $minutes }}m</div>
                                                 </div>
                                             @else
                                                 <div class="text-xs text-gray-500">
-                                                    <div class="text-gray-500">Total: {{ number_format($basicRegularHours, 2) }} hrs</div>
+                                                    <?php 
+                                                        // More generous rounding to handle floating point precision
+                                                        $totalMinutes = round($basicRegularHours * 60 + 0.5);
+                                                        $hours = intval($totalMinutes / 60);
+                                                        $minutes = $totalMinutes % 60;
+                                                    ?>
+                                                    <div class="text-gray-500">Total: {{ $hours }}h {{ $minutes }}m</div>
                                                 </div>
                                             @endif
                                         </div>
@@ -761,10 +778,11 @@
                                                         
                                                         // Holiday (without ND)
                                                         if ($regularHours > 0) {
-                                                            $actualMinutes = $regularHours * 60;
-                                                            $roundedMinutes = round($actualMinutes);
-                                                            $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
-                                                            $amount = $roundedMinutes * $ratePerMinute;
+                                                            // Use TimeLog's per-minute precision calculation method
+                                                            $timeLogInstance = new \App\Models\TimeLog();
+                                                            $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
+                                                            // Round amount to 2 decimals for consistency between display and total
+                                                            $amount = round($rawAmount, 2);
                                                             
                                                             $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                             
@@ -790,10 +808,11 @@
                                                             $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
                                                             $ndDisplayName = $displayName . '+ND';
                                                             
-                                                            $nightDiffMinutes = $nightDiffRegularHours * 60;
-                                                            $roundedNDMinutes = round($nightDiffMinutes);
-                                                            $ndRatePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                                                            $ndAmount = $roundedNDMinutes * $ndRatePerMinute;
+                                                            // Use TimeLog's per-minute precision calculation method
+                                                            $timeLogInstance = new \App\Models\TimeLog();
+                                                            $rawNdAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
+                                                            // Round amount to 2 decimals for consistency between display and total
+                                                            $ndAmount = round($rawNdAmount, 2);
                                                             
                                                             $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
                                                             
@@ -864,7 +883,7 @@
                                                 @endphp
                                                 @foreach($sortedHolidayBreakdown as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <span>{{ $type }}: {{ number_format($data['hours'], 2) }}h</span>
+                                                        <span>{{ $type }}: {{ isset($data['minutes']) ? number_format($data['minutes'], 0) . 'm' : number_format($data['hours'] * 60, 0) . 'm' }}</span>
                                                         <div class="text-xs text-gray-600">
                                                             {{ $data['percentage'] }} = ₱{{ number_format($data['amount'], 2) }}
                                                         </div>
@@ -872,10 +891,16 @@
                                                 @endforeach
                                                 
                                                 <div class="text-xs border-t pt-1">
-                                                    <div class="text-gray-500">Total: {{ number_format($totalHolidayRegularHours, 2) }} hrs</div>
+                                                    <?php 
+                                                        // More generous rounding to handle floating point precision
+                                                        $totalMinutes = round($totalHolidayRegularHours * 60 + 0.5);
+                                                        $hours = intval($totalMinutes / 60);
+                                                        $minutes = $totalMinutes % 60;
+                                                    ?>
+                                                    <div class="text-gray-500">Total: {{ $hours }}h {{ $minutes }}m</div>
                                                 </div>
                                             @else
-                                                <div class="text-gray-400">0 hrs</div>
+                                                <div class="text-gray-400">0h 0m</div>
                                             @endif
                                         </div>
                                         <div class="font-bold text-yellow-600 holiday-pay-amount" data-holiday-amount="{{ $holidayPay }}">₱{{ number_format($holidayPay, 2) }}</div>
@@ -907,10 +932,11 @@
                                                     
                                                     // Rest Day (without ND)
                                                     if ($regularHours > 0) {
-                                                        $actualMinutes = $regularHours * 60;
-                                                        $roundedMinutes = round($actualMinutes);
-                                                        $ratePerMinute = ($hourlyRate * $regularMultiplier) / 60;
-                                                        $amount = $roundedMinutes * $ratePerMinute;
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
+                                                        // Round amount to 2 decimals for consistency between display and total
+                                                        $amount = round($rawAmount, 2);
                                                         
                                                         $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                         
@@ -930,10 +956,11 @@
                                                         // Combined rate: rest day rate + night differential bonus
                                                         $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
                                                         
-                                                        $nightDiffMinutes = $nightDiffRegularHours * 60;
-                                                        $roundedNDMinutes = round($nightDiffMinutes);
-                                                        $ndRatePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                                                        $ndAmount = $roundedNDMinutes * $ndRatePerMinute;
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $rawNdAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
+                                                        // Round amount to 2 decimals for consistency between display and total
+                                                        $ndAmount = round($rawNdAmount, 2);
                                                         
                                                         $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
                                                         
@@ -981,7 +1008,7 @@
                                                 @foreach($restDayBreakdown as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
                                                        
-                                                            <span>{{ $type }}: {{ number_format($data['hours'], 2) }}h</span>
+                                                            <span>{{ $type }}: {{ isset($data['minutes']) ? number_format($data['minutes'], 0) . 'm' : number_format($data['hours'] * 60, 0) . 'm' }}</span>
                                                      
                                                         <div class="text-xs text-gray-600">
                                                             {{ $data['percentage'] }} = ₱{{ number_format($data['amount'], 2) }}
@@ -990,14 +1017,26 @@
                                                 @endforeach
                                                 
                                                 <div class="text-xs border-t pt-1">
-                                                    <div class="text-gray-500">Total: {{ number_format($totalRestRegularHours, 2) }} hrs</div>
+                                                    <?php 
+                                                        // More generous rounding to handle floating point precision
+                                                        $totalMinutes = round($totalRestRegularHours * 60 + 0.5);
+                                                        $hours = intval($totalMinutes / 60);
+                                                        $minutes = $totalMinutes % 60;
+                                                    ?>
+                                                    <div class="text-gray-500">Total: {{ $hours }}h {{ $minutes }}m</div>
                                                    
                                                 </div>
                                             @else
                                                 @if($totalRestRegularHours > 0)
-                                                    <div class="text-xs text-gray-500">{{ number_format($totalRestRegularHours, 2) }} hrs</div>
+                                                    <?php 
+                                                        // More generous rounding to handle floating point precision
+                                                        $totalMinutes = round($totalRestRegularHours * 60 + 0.5);
+                                                        $hours = intval($totalMinutes / 60);
+                                                        $minutes = $totalMinutes % 60;
+                                                    ?>
+                                                    <div class="text-xs text-gray-500">{{ $hours }}h {{ $minutes }}m</div>
                                                 @else
-                                                    <div class="text-gray-400">0 hrs</div>
+                                                    <div class="text-gray-400">0h 0m</div>
                                                 @endif
                                             @endif
                                         </div>
@@ -1031,11 +1070,11 @@
                                                     // Regular Workday OT (without ND)
                                                     if ($regularOTHours > 0) {
                                                         // Apply per-minute calculation for overtime (same as Basic/Holiday/Rest)
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier; // 300 * 1.25 = 375/hr
-                                                        $overtimeMinutes = $regularOTHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60; // 375/hr = 6.25/min
-                                                        $amount = $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        // Round amount to 2 decimals for consistency between display and total
+                                                        $amount = round($rawAmount, 2);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Workday OT',
@@ -1051,11 +1090,10 @@
                                                     if ($nightDiffOTHours > 0) {
                                                         // Combined rate: overtime rate + night differential bonus
                                                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
-                                                        $combinedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $overtimeMinutes = $nightDiffOTHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $combinedHourlyRate / 60;
-                                                        $amount = $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Workday OT+ND',
@@ -1081,11 +1119,9 @@
                                                     
                                                     // Special Holiday OT (without ND)
                                                     if ($regularOTHours > 0) {
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $regularOTHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $amount = $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Special Holiday OT',
@@ -1101,11 +1137,10 @@
                                                     if ($nightDiffOTHours > 0) {
                                                         // Combined rate: overtime rate + night differential bonus
                                                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
-                                                        $combinedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $overtimeMinutes = $nightDiffOTHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $combinedHourlyRate / 60;
-                                                        $amount = $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Special Holiday OT+ND',
@@ -1131,11 +1166,9 @@
                                                     
                                                     // Regular Holiday OT (without ND)
                                                     if ($regularOTHours > 0) {
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $regularOTHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $amount = $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Holiday OT',
@@ -1151,11 +1184,10 @@
                                                     if ($nightDiffOTHours > 0) {
                                                         // Combined rate: overtime rate + night differential bonus
                                                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
-                                                        $combinedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $overtimeMinutes = $nightDiffOTHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $combinedHourlyRate / 60;
-                                                        $amount = $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Holiday OT+ND',
@@ -1181,11 +1213,9 @@
                                                     
                                                     // Rest Day OT (without ND)
                                                     if ($regularOTHours > 0) {
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $regularOTHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $amount = $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Rest Day OT',
@@ -1201,11 +1231,10 @@
                                                     if ($nightDiffOTHours > 0) {
                                                         // Combined rate: overtime rate + night differential bonus
                                                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
-                                                        $combinedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $overtimeMinutes = $nightDiffOTHours * 60; // Convert to minutes
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes); // Round to nearest minute
-                                                        $overtimeRatePerMinute = $combinedHourlyRate / 60;
-                                                        $amount = $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        
+                                                        // Use TimeLog's per-minute precision calculation method
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Rest Day OT+ND',
@@ -1250,7 +1279,7 @@
                                             @if(!empty($overtimeBreakdown))
                                                 @foreach($overtimeBreakdown as $ot)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <span>{{ $ot['name'] }}: {{ number_format($ot['hours'], 2) }}h</span>
+                                                        <span>{{ $ot['name'] }}: {{ isset($ot['minutes']) ? number_format($ot['minutes'], 0) . 'm' : number_format($ot['hours'] * 60, 0) . 'm' }}</span>
                                                         <div class="text-xs text-gray-600">
                                                             {{ $ot['percentage'] }} = ₱{{ number_format($ot['amount'], 2) }}
                                                         </div>
@@ -1258,10 +1287,16 @@
                                                 @endforeach
                                                 
                                                 <div class="text-xs border-t pt-1">
-                                                    <div class="text-gray-500">Total: {{ number_format($totalOvertimeHours, 2) }} hrs</div>
+                                                    <?php 
+                                                        // More generous rounding to handle floating point precision
+                                                        $totalMinutes = round($totalOvertimeHours * 60 + 0.5);
+                                                        $hours = intval($totalMinutes / 60);
+                                                        $minutes = $totalMinutes % 60;
+                                                    ?>
+                                                    <div class="text-gray-500">Total: {{ $hours }}h {{ $minutes }}m</div>
                                                 </div>
                                             @else
-                                                <div class="text-gray-400">0 hrs</div>
+                                                <div class="text-gray-400">0h 0m</div>
                                             @endif
                                         </div>
                                         <div class="font-bold text-orange-600">₱{{ number_format($overtimePay, 2) }}</div>
@@ -1858,17 +1893,9 @@
                                                         $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
                                                         
                                                         // Apply per-minute calculation for rest day pay (same as Rest column)
-                                                        $regularRestHourlyRate = $hourlyRate * $regularMultiplier;
-                                                        $regularMinutes = ($restBreakdown['regular_hours'] ?? 0) * 60;
-                                                        $roundedRegularMinutes = round($regularMinutes);
-                                                        $regularRatePerMinute = $regularRestHourlyRate / 60;
-                                                        $regularRestPay = $roundedRegularMinutes * $regularRatePerMinute;
-                                                        
-                                                        $overtimeRestHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = ($restBreakdown['overtime_hours'] ?? 0) * 60;
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                        $overtimeRatePerMinute = $overtimeRestHourlyRate / 60;
-                                                        $overtimeRestPay = $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $regularRestPay = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, ($restBreakdown['regular_hours'] ?? 0));
+                                                        $overtimeRestPay = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, ($restBreakdown['overtime_hours'] ?? 0));
                                                         
                                                         $restPayForNet = $regularRestPay + $overtimeRestPay;
                                                     }
@@ -1901,11 +1928,8 @@
                                                         $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
                                                         
                                                         // Apply per-minute calculation for overtime (same as Overtime column)
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $overtimeHours * 60;
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $overtimePayForNet += $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $overtimePayForNet += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $overtimeHours);
                                                     }
                                                 }
                                                 
@@ -1918,11 +1942,8 @@
                                                         $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
                                                         
                                                         // Apply per-minute calculation for overtime (same as Overtime column)
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $overtimeHours * 60;
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $overtimePayForNet += $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $overtimePayForNet += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $overtimeHours);
                                                     }
                                                 }
                                                 
@@ -1935,11 +1956,8 @@
                                                         $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 2.6;
                                                         
                                                         // Apply per-minute calculation for overtime (same as Overtime column)
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $overtimeHours * 60;
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $overtimePayForNet += $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $overtimePayForNet += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $overtimeHours);
                                                     }
                                                 }
                                                 
@@ -1952,11 +1970,8 @@
                                                         $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.69;
                                                         
                                                         // Apply per-minute calculation for overtime (same as Overtime column)
-                                                        $overtimeHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $overtimeMinutes = $overtimeHours * 60;
-                                                        $roundedOvertimeMinutes = round($overtimeMinutes);
-                                                        $overtimeRatePerMinute = $overtimeHourlyRate / 60;
-                                                        $overtimePayForNet += $roundedOvertimeMinutes * $overtimeRatePerMinute;
+                                                        $timeLogInstance = new \App\Models\TimeLog();
+                                                        $overtimePayForNet += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $overtimeHours);
                                                     }
                                                 }
                                             } else {
@@ -2288,7 +2303,10 @@
                                             @else
                                                 <div class="text-xs text-gray-600">No schedule assigned</div>
                                             @endif
-                                            <div class="text-xs text-blue-600">₱{{ number_format($detail->employee->hourly_rate ?? 0, 2) }}/hr</div>
+                                            <div class="text-xs text-blue-600">
+                                ₱{{ number_format($detail->employee->hourly_rate ?? 0, 2) }}/hr
+                                <br>(₱{{ number_format(($detail->employee->hourly_rate ?? 0) / 60, 4) }}/min)
+                            </div>
                                         </div>
                                     </td>
                                     @php 
@@ -2598,7 +2616,7 @@
                                                         @if($displayRegularHours > 0)
                                                             {{-- (regular hours period) --}}
                                                         @endif
-                                                        ({{ number_format($displayRegularHours, 2) }}h)
+                                                        ({{ number_format($displayRegularHours * 60, 0) }}m) {{ floor($displayRegularHours) }}h {{ round(($displayRegularHours - floor($displayRegularHours)) * 60) }}m
                                                     </div>
                                                     
                                                     {{-- Display Night Differential Regular Hours --}}
@@ -2672,7 +2690,7 @@
                                                                 $actualNDEnd = $nightRegularEnd;
                                                             }
                                                         @endphp
-                                                        {{ $actualNDStart }} - {{ $actualNDEnd }} ({{ number_format($nightDiffRegularHours, 2) }}h)
+                                                        {{ $actualNDStart }} - {{ $actualNDEnd }} ({{ number_format($nightDiffRegularHours * 60, 0) }}m) {{ floor($nightDiffRegularHours) }}h {{ round(($nightDiffRegularHours - floor($nightDiffRegularHours)) * 60) }}m
                                                     </div>
                                                     {{-- <div class="text-blue-600 text-xs">
                                                         Regular Workday + ND
@@ -2746,7 +2764,7 @@
                                                     {{-- Display break time if applicable --}}
                                                     @if($showBreakTime && $breakHours > 0)
                                                         <div class="text-red-600 text-xs">
-                                                            {{ $breakDisplayStart }} - {{ $breakDisplayEnd }} ({{ number_format($breakHours, 2) }}h)
+                                                            {{ $breakDisplayStart }} - {{ $breakDisplayEnd }} ({{ number_format($breakHours * 60, 0) }}m) {{ floor($breakHours) }}h {{ round(($breakHours - floor($breakHours)) * 60) }}m
                                                         </div>
                                                     @endif
                                                 
@@ -2807,9 +2825,9 @@
                                                         </div>
                                                         <div class="{{ $period['color_class'] }} text-xs">
                                                             @if($period['type'] === 'regular_overtime')
-                                                                OT: {{ number_format($period['hours'], 2) }}h
+                                                                OT: {{ number_format($period['hours'] * 60, 0) }}m {{ floor($period['hours']) }}h {{ round(($period['hours'] - floor($period['hours'])) * 60) }}m
                                                             @elseif($period['type'] === 'night_diff_overtime')
-                                                                OT+ND: {{ number_format($period['hours'], 2) }}h
+                                                                OT+ND: {{ number_format($period['hours'] * 60, 0) }}m {{ floor($period['hours']) }}h {{ round(($period['hours'] - floor($period['hours'])) * 60) }}m
                                                             @endif
                                                         </div>
                                                         @endif
@@ -2899,7 +2917,7 @@
                                                         @endphp
                                                         @if($regularOTStart && $regularOTEnd)
                                                         <div class="text-orange-600 text-xs">
-                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($regularOvertimeHours, 2) }}h)
+                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($regularOvertimeHours * 60, 0) }}m) {{ floor($regularOvertimeHours) }}h {{ round(($regularOvertimeHours - floor($regularOvertimeHours)) * 60) }}m
                                                         </div>
                                                         {{-- <div class="text-orange-600 text-xs">
                                                             Regular Workday OT
@@ -2985,7 +3003,7 @@
                                                         @endphp
                                                         @if($nightOTStart && $nightOTEnd)
                                                         <div class="text-purple-600 text-xs">
-                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} ({{ number_format($nightDiffOvertimeHours, 2) }}h)
+                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} ({{ number_format($nightDiffOvertimeHours * 60, 0) }}m) {{ floor($nightDiffOvertimeHours) }}h {{ round(($nightDiffOvertimeHours - floor($nightDiffOvertimeHours)) * 60) }}m
                                                         </div>
                                                         {{-- <div class="text-purple-600 text-xs">
                                                             Regular Workday OT + ND
@@ -3071,11 +3089,11 @@
                                                             {{ $overtimeStart }} - {{ $overtimeEnd }} 
                                                         </div>
                                                         <div class="text-orange-600 text-xs">
-                                                            OT: {{ number_format($calculatedOTHours, 2) }}h
+                                                            OT: {{ number_format($calculatedOTHours * 60, 0) }}m {{ floor($calculatedOTHours) }}h {{ round(($calculatedOTHours - floor($calculatedOTHours)) * 60) }}m
                                                         </div>
                                                         @else
                                                         <div class="text-orange-600 text-xs">
-                                                            OT: {{ number_format($overtimeHours, 2) }}h
+                                                            OT: {{ number_format($overtimeHours * 60, 0) }}m {{ floor($overtimeHours) }}h {{ round(($overtimeHours - floor($overtimeHours)) * 60) }}m
                                                         </div>
                                                         @endif
                                                         @endif
