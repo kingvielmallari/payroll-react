@@ -1175,6 +1175,12 @@ class PayrollController extends Controller
                 if ($timeLog->is_holiday && $dynamicCalculation['total_hours'] > 0) {
                     $holidayHours += $dynamicCalculation['total_hours'];
                 }
+                
+                // CRITICAL FIX: Set dynamic fields on the time log object so calculatePayAmount can use them
+                $timeLog->dynamic_regular_hours = $dynamicCalculation['regular_hours'];
+                $timeLog->dynamic_night_diff_regular_hours = $dynamicCalculation['night_diff_regular_hours'] ?? 0;
+                $timeLog->dynamic_regular_overtime_hours = $dynamicCalculation['regular_overtime_hours'] ?? 0;
+                $timeLog->dynamic_night_diff_overtime_hours = $dynamicCalculation['night_diff_overtime_hours'] ?? 0;
             } else {
                 // Use stored values for approved payrolls (snapshot mode)
                 $hoursWorked += $timeLog->total_hours ?? 0;

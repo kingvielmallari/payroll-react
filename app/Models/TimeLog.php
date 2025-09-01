@@ -192,7 +192,30 @@ class TimeLog extends Model
             $regularAmount = $hourlyRate * $this->regular_hours;
             $overtimeAmount = $hourlyRate * 1.25 * $this->overtime_hours;
         } else {
-            $regularAmount = $hourlyRate * $rateConfig->regular_rate_multiplier * $this->regular_hours;
+            // Calculate regular pay with night differential breakdown
+            $regularAmount = 0;
+            
+            // Check for dynamic calculation fields (used in draft payrolls)
+            $regularHours = $this->dynamic_regular_hours ?? $this->regular_hours ?? 0;
+            $nightDiffRegularHours = $this->dynamic_night_diff_regular_hours ?? $this->night_diff_regular_hours ?? 0;
+            
+            // Regular hours without night differential
+            if ($regularHours > 0) {
+                $regularAmount += $hourlyRate * $rateConfig->regular_rate_multiplier * $regularHours;
+            }
+            
+            // Regular hours WITH night differential (add night differential bonus)
+            if ($nightDiffRegularHours > 0) {
+                // Get night differential setting
+                $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+                
+                // Combined rate: base regular rate + night differential bonus
+                // e.g., 2.0 (holiday) * 1.10 (night diff) = 2.20
+                $combinedMultiplier = $rateConfig->regular_rate_multiplier * $nightDiffMultiplier;
+                $nightDiffRegularAmount = $hourlyRate * $combinedMultiplier * $nightDiffRegularHours;
+                $regularAmount += $nightDiffRegularAmount;
+            }
 
             // Calculate overtime pay with night differential breakdown if available
             $overtimeAmount = 0;
