@@ -354,21 +354,25 @@ class CashAdvanceController extends Controller
             $validated['monthly_deduction_timing'] = null;
         }
 
+        // Check if employee already has an active cash advance (applies to all users)
+        $existingAdvance = CashAdvance::where('employee_id', $validated['employee_id'])
+            ->whereIn('status', ['pending', 'approved'])
+            ->where('outstanding_balance', '>', 0)
+            ->first();
+
+        if ($existingAdvance) {
+            $employee = Employee::find($validated['employee_id']);
+            $employeeName = $employee ? $employee->full_name : 'Employee';
+            return redirect()->back()
+                ->withInput()
+                ->with('error', $employeeName . ' already has an active cash advance (Reference: ' . $existingAdvance->reference_number . '). Please wait until it is fully paid before creating a new one.');
+        }
+
         // Additional validation for employee users
         if (Auth::user()->hasRole('employee')) {
             $employee = Auth::user()->employee;
             if (!$employee || $employee->id != $validated['employee_id']) {
                 return redirect()->back()->with('error', 'You can only request cash advances for yourself.');
-            }
-
-            // Check if employee has pending cash advance
-            $pendingAdvance = CashAdvance::where('employee_id', $employee->id)
-                ->whereIn('status', ['pending', 'approved'])
-                ->where('outstanding_balance', '>', 0)
-                ->exists();
-
-            if ($pendingAdvance) {
-                return redirect()->back()->with('error', 'You already have a pending or active cash advance.');
             }
         }
 
@@ -581,5 +585,43 @@ class CashAdvanceController extends Controller
 
         return redirect()->route('cash-advances.index')
             ->with('success', "Cash advance {$reference} has been deleted successfully.");
+    }
+
+    /**
+     * Check if employee has existing active cash advances (AJAX endpoint)
+     */
+    public function checkEmployeeActiveAdvances(Request $request)
+    {
+        $employeeId = $request->input('employee_id');
+
+        if (!$employeeId) {
+            return response()->json(['error' => 'Employee ID is required'], 400);
+        }
+
+        $employee = Employee::find($employeeId);
+        if (!$employee) {
+            return response()->json(['error' => 'Employee not found'], 404);
+        }
+
+        // Check for active cash advances
+        $activeAdvance = CashAdvance::where('employee_id', $employeeId)
+            ->whereIn('status', ['pending', 'approved'])
+            ->where('outstanding_balance', '>', 0)
+            ->with(['employee'])
+            ->first();
+
+        if ($activeAdvance) {
+            return response()->json([
+                'has_active_advance' => true,
+                'active_advance' => [
+                    'reference_number' => $activeAdvance->reference_number,
+                    'status' => $activeAdvance->status,
+                    'outstanding_balance' => number_format($activeAdvance->outstanding_balance, 2),
+                    'requested_amount' => number_format($activeAdvance->requested_amount, 2),
+                ]
+            ]);
+        }
+
+        return response()->json(['has_active_advance' => false]);
     }
 }

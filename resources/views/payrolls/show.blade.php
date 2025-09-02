@@ -1751,10 +1751,12 @@
                                                             $amount = $deductionData['amount'] ?? $deductionData;
                                                             $calculatedDeductionTotal += $amount;
                                                         @endphp
-                                                        <div class="text-xs text-gray-500">
-                                                            <span>{{ $deductionData['name'] ?? $code }}:</span>
-                                                            <span>₱{{ number_format($amount, 2) }}</span>
-                                                        </div>
+                                                        @if($amount > 0)
+                                                            <div class="text-xs text-gray-500">
+                                                                <span>{{ $deductionData['name'] ?? $code }}:</span>
+                                                                <span>₱{{ number_format($amount, 2) }}</span>
+                                                            </div>
+                                                        @endif
                                                     @endforeach
                                                 @elseif(isset($isDynamic) && $isDynamic && $deductionSettings->isNotEmpty())
                                                     @php $hasBreakdown = true; @endphp
@@ -1824,11 +1826,13 @@
                                                             
                                                             }
                                                         @endphp
-                                                        <div class="text-xs text-gray-500">
-                                                            <span>{{ $setting->name }}:</span>
-                                                            <span>₱{{ number_format($calculatedAmount, 2) }}</span>
-                                                            {!! $debugInfo !!}
-                                                        </div>
+                                                        @if($calculatedAmount > 0)
+                                                            <div class="text-xs text-gray-500">
+                                                                <span>{{ $setting->name }}:</span>
+                                                                <span>₱{{ number_format($calculatedAmount, 2) }}</span>
+                                                                {!! $debugInfo !!}
+                                                            </div>
+                                                        @endif
                                                     @endforeach
                                                     
                                                     <!-- Show Cash Advance Deductions for Dynamic Payroll -->

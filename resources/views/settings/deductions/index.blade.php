@@ -29,7 +29,7 @@
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        {{-- <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th> --}}
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>                     
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deduct</th>
                          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
@@ -45,9 +45,9 @@
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm font-medium {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">{{ $deduction->name }}</div>
                             </td>
-                            <td class="px-6 py-4">
+                            {{-- <td class="px-6 py-4">
                                 <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-500' }}">{{ $deduction->description ?: 'No description' }}</div>
-                            </td>
+                            </td> --}}
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">
                                     @if($deduction->calculation_type === 'sss_table' || ($deduction->calculation_type === 'bracket' && $deduction->tax_table_type === 'sss'))
@@ -95,6 +95,10 @@
                                             @if($deduction->share_with_employer && in_array($deduction->tax_table_type, ['sss', 'philhealth', 'pagibig']))
                                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                                     50% Share
+                                                </span>
+                                                @else
+                                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                    50% EE
                                                 </span>
                                             @endif
                                         </div>

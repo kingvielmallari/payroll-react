@@ -136,7 +136,7 @@
                                         Approved Amount
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Monthly Deduction
+                                        Installment Amount
                                     </th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Outstanding Balance
@@ -216,7 +216,12 @@
                                                 ₱{{ number_format($cashAdvance->installment_amount, 2) }}
                                             </div>
                                             <div class="text-xs text-gray-500">
-                                                for {{ $cashAdvance->installments }} months
+                                                for {{ $cashAdvance->installments }} 
+                                                @if($cashAdvance->deduction_frequency === 'monthly')
+                                                    month{{ $cashAdvance->installments > 1 ? 's' : '' }}
+                                                @else
+                                                    Pay Period{{ $cashAdvance->installments > 1 ? 's' : '' }}
+                                                @endif
                                             </div>
                                         @else
                                             <span class="text-sm text-gray-500">—</span>

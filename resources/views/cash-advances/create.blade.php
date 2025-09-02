@@ -91,6 +91,17 @@
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
+                               <div>
+                            <label for="starting_payroll_period" class="block text-sm font-medium text-gray-700">Deduction Start Period *</label>
+                            <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('starting_payroll_period') border-red-300 @enderror" 
+                                    id="starting_payroll_period" name="starting_payroll_period" required disabled>
+                                <option value="">{{ !$employee ? 'Select an employee first' : 'Loading payroll periods...' }}</option>
+                            </select>
+                            @error('starting_payroll_period')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                            <p class="mt-1 text-xs text-muted text-gray-500">Choose the payroll period when deductions should start</p>
+                        </div>
                         </div>
                         @else
                         <!-- Hidden field for employee users -->
@@ -115,7 +126,7 @@
                         @endif
 
                         <!-- Form Fields -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
                             <!-- Requested Amount -->
                             <div>
                                 <label for="requested_amount" class="block text-sm font-medium text-gray-700">Requested Amount *</label>
@@ -134,6 +145,20 @@
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                                 <p class="mt-1 text-sm text-gray-500">Minimum: ₱100, Maximum: ₱50,000</p>
+                            </div>
+                                      <div>
+                                <label for="interest_rate" class="block text-sm font-medium text-gray-700">Interest Rate (%)</label>
+                                <input type="number" 
+                                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('interest_rate') border-red-300 @enderror" 
+                                       id="interest_rate" name="interest_rate" 
+                                       value="{{ old('interest_rate') }}" 
+                                       step="0.1" min="0" max="100"
+                                       onchange="calculateInstallment()"
+                                       placeholder="0">
+                                @error('interest_rate')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                                <p class="mt-1 text-sm text-gray-500">Leave 0 for no interest</p>
                             </div>
 
                             <!-- Deduction Frequency -->
@@ -155,27 +180,7 @@
                                 <p class="mt-1 text-sm text-gray-500">Choose deduction frequency</p>
                             </div>
 
-                            <!-- Interest Rate -->
-                            <div>
-                                <label for="interest_rate" class="block text-sm font-medium text-gray-700">Interest Rate (%)</label>
-                                <input type="number" 
-                                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('interest_rate') border-red-300 @enderror" 
-                                       id="interest_rate" name="interest_rate" 
-                                       value="{{ old('interest_rate') }}" 
-                                       step="0.1" min="0" max="100"
-                                       onchange="calculateInstallment()"
-                                       placeholder="0">
-                                @error('interest_rate')
-                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-sm text-gray-500">Leave 0 for no interest</p>
-                            </div>
-                        </div>
-
-                        <!-- Installment Options Row -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <!-- Number of Payroll Installments (for per_payroll frequency) -->
-                            <div id="payroll_installments_field">
+                                   <div id="payroll_installments_field">
                                 <label for="installments" class="block text-sm font-medium text-gray-700">Number of Pay Period Installments *</label>
                                 <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('installments') border-red-300 @enderror" 
                                         id="installments" name="installments" onchange="calculateInstallment()">
@@ -190,6 +195,14 @@
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
+                            <!-- Interest Rate -->
+                  
+                        </div>
+
+                        <!-- Installment Options Row -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <!-- Number of Payroll Installments (for per_payroll frequency) -->
+                     
 
                             <!-- Number of Monthly Installments (for monthly frequency) -->
                             <div id="monthly_installments_field" style="display: none;">
@@ -248,17 +261,7 @@
                         </div>
 
                         <!-- Deduction Start Period -->
-                        <div>
-                            <label for="starting_payroll_period" class="block text-sm font-medium text-gray-700">Deduction Start Period *</label>
-                            <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('starting_payroll_period') border-red-300 @enderror" 
-                                    id="starting_payroll_period" name="starting_payroll_period" required disabled>
-                                <option value="">{{ !$employee ? 'Select an employee first' : 'Loading payroll periods...' }}</option>
-                            </select>
-                            @error('starting_payroll_period')
-                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                            @enderror
-                            <p class="mt-1 text-sm text-gray-500">Choose the payroll period when deductions should start</p>
-                        </div>
+                     
 
                         <!-- Reason -->
                         <div>
@@ -446,7 +449,32 @@
         
         if (!employeeId) {
             startingPayrollSelect.innerHTML = '<option value="">Select an employee first</option>';
+            clearActiveAdvanceWarning();
             return;
+        }
+
+        // Check for existing active cash advances first
+        try {
+            const activeCheckResponse = await fetch('{{ route('cash-advances.check-active') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ employee_id: employeeId })
+            });
+            const activeCheckData = await activeCheckResponse.json();
+            
+            if (activeCheckData.has_active_advance) {
+                startingPayrollSelect.innerHTML = '<option value="">Employee has active cash advance</option>';
+                startingPayrollSelect.disabled = true;
+                showActiveAdvanceWarning(activeCheckData.active_advance);
+                return;
+            } else {
+                clearActiveAdvanceWarning();
+            }
+        } catch (error) {
+            console.error('Error checking active advances:', error);
         }
 
         // Load employee pay schedule first
@@ -644,5 +672,61 @@
         // If all validations pass, allow form submission
         return true;
     });
+
+    // Show warning for active cash advance
+    function showActiveAdvanceWarning(activeAdvance) {
+        let warningContainer = document.getElementById('active-advance-warning');
+        if (!warningContainer) {
+            // Create warning container if it doesn't exist
+            warningContainer = document.createElement('div');
+            warningContainer.id = 'active-advance-warning';
+            warningContainer.className = 'mb-6 bg-red-50 border border-red-200 rounded-md p-4';
+            
+            // Insert the warning before the form, in the same position as success/error messages
+            const form = document.getElementById('cashAdvanceForm');
+            form.parentNode.insertBefore(warningContainer, form);
+        }
+        
+        warningContainer.innerHTML = `
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-red-800">Employee has an active cash advance</h3>
+                    <div class="mt-2 text-sm text-red-700">
+                        <p>Reference: <strong>${activeAdvance.reference_number}</strong></p>
+                        <p>Status: <strong>${activeAdvance.status}</strong></p>
+                        <p>Outstanding Balance: <strong>₱${activeAdvance.outstanding_balance}</strong></p>
+                        <p class="mt-2">Please wait until the current cash advance is fully paid before creating a new one.</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Disable the submit button
+        const submitButton = document.querySelector('button[type="submit"]');
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+    }
+
+    // Clear active advance warning
+    function clearActiveAdvanceWarning() {
+        const warningContainer = document.getElementById('active-advance-warning');
+        if (warningContainer) {
+            warningContainer.remove();
+        }
+        
+        // Re-enable the submit button
+        const submitButton = document.querySelector('button[type="submit"]');
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
     </script>
 </x-app-layout>

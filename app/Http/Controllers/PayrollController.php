@@ -5803,7 +5803,7 @@ class PayrollController extends Controller
         // Always include other deductions (excluding late/undertime as they're already accounted for in hours)
         if ($detail->cash_advance_deductions > 0) {
             $breakdown[] = [
-                'name' => 'Cash Advance',
+                'name' => 'CA',
                 'code' => 'cash_advance',
                 'amount' => $detail->cash_advance_deductions,
                 'type' => 'loan',

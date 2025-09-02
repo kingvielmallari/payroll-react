@@ -179,11 +179,24 @@
                                 <div class="space-y-3">
                                     <div class="flex justify-between items-center">
                                         <span class="text-sm font-medium text-gray-600">Installments:</span>
-                                        <span class="text-lg font-bold text-blue-700">{{ $cashAdvance->installments }} month{{ $cashAdvance->installments > 1 ? 's' : '' }}</span>
+                                        <span class="text-lg font-bold text-blue-700">
+                                            {{ $cashAdvance->installments }} 
+                                            @if($cashAdvance->deduction_frequency === 'monthly')
+                                                Month{{ $cashAdvance->installments > 1 ? 's' : '' }}
+                                            @else
+                                                Pay Period{{ $cashAdvance->installments > 1 ? 's' : '' }}
+                                            @endif
+                                        </span>
                                     </div>
                                     @if($cashAdvance->installment_amount)
                                     <div class="flex justify-between items-center">
-                                        <span class="text-sm font-medium text-gray-600">Monthly Deduction:</span>
+                                        <span class="text-sm font-medium text-gray-600">
+                                            @if($cashAdvance->deduction_frequency === 'monthly')
+                                                Monthly Deduction:
+                                            @else
+                                                Per Payroll Deduction:
+                                            @endif
+                                        </span>
                                         <span class="text-lg font-bold text-blue-700">₱{{ number_format($cashAdvance->installment_amount, 2) }}</span>
                                     </div>
                                     @if($cashAdvance->monthly_deduction_timing)
@@ -400,7 +413,13 @@
                                     <div class="font-bold text-red-600" id="modal_total_amount">₱0.00</div>
                                 </div>
                                 <div>
-                                    <p class="text-sm text-gray-600">Monthly Deduction</p>
+                                    <p class="text-sm text-gray-600">
+                                        @if($cashAdvance->deduction_frequency === 'monthly')
+                                            Monthly Deduction
+                                        @else
+                                            Per Payroll Deduction
+                                        @endif
+                                    </p>
                                     <div class="font-bold text-jade-600" id="modal_monthly_deduction">₱0.00</div>
                                 </div>
                             </div>
