@@ -171,13 +171,16 @@
                            old('apply_to_basic_pay', $deduction->apply_to_basic_pay) || 
                            old('apply_to_gross_pay', $deduction->apply_to_gross_pay) ||
                            old('apply_to_taxable_income', $deduction->apply_to_taxable_income) ||
-                           old('apply_to_net_pay', $deduction->apply_to_net_pay)) {
+                           old('apply_to_net_pay', $deduction->apply_to_net_pay) ||
+                           old('apply_to_monthly_basic_salary', $deduction->apply_to_monthly_basic_salary)) {
                             if(old('pay_basis')) {
                                 $currentPayBasis = old('pay_basis');
                             } elseif(old('apply_to_gross_pay', $deduction->apply_to_gross_pay)) {
                                 $currentPayBasis = 'gross_pay';
                             } elseif(old('apply_to_taxable_income', $deduction->apply_to_taxable_income)) {
                                 $currentPayBasis = 'taxable_income';
+                            } elseif(old('apply_to_monthly_basic_salary', $deduction->apply_to_monthly_basic_salary)) {
+                                $currentPayBasis = 'monthly_basic_salary';
                             }
                         }
                     @endphp
@@ -189,11 +192,15 @@
                     <option value="taxable_income" {{ $currentPayBasis === 'taxable_income' ? 'selected' : '' }}>
                         Taxable Income - includes only taxable allowances and bonuses
                     </option>
+                    <option value="monthly_basic_salary" {{ $currentPayBasis === 'monthly_basic_salary' ? 'selected' : '' }}>
+                        Monthly Basic Salary - employee's monthly basic salary
+                    </option>
                 </select>
                 
                 <div class="mt-2 text-sm text-gray-500">
                     <p><strong>Total Gross:</strong> Includes all earnings - basic pay, overtime, holiday pay, allowances, and bonuses</p>
                     <p><strong>Taxable Income:</strong> Includes basic pay, overtime, holiday pay, and only taxable allowances/bonuses</p>
+                    <p><strong>Monthly Basic Salary:</strong> Uses the employee's monthly basic salary from their profile (ideal for government contributions like PhilHealth)</p>
                 </div>
                 
                 @error('pay_basis')
@@ -205,6 +212,7 @@
                 <input type="hidden" name="apply_to_gross_pay" id="hidden_apply_to_gross_pay" value="0">
                 <input type="hidden" name="apply_to_taxable_income" id="hidden_apply_to_taxable_income" value="0">
                 <input type="hidden" name="apply_to_net_pay" id="hidden_apply_to_net_pay" value="0">
+                <input type="hidden" name="apply_to_monthly_basic_salary" id="hidden_apply_to_monthly_basic_salary" value="0">
             </div>
 
             <div class="mt-6">
@@ -344,6 +352,7 @@ function updatePayBasisHiddenFields(selectedValue) {
     document.getElementById('hidden_apply_to_gross_pay').value = '0';
     document.getElementById('hidden_apply_to_taxable_income').value = '0';
     document.getElementById('hidden_apply_to_net_pay').value = '0';
+    document.getElementById('hidden_apply_to_monthly_basic_salary').value = '0';
     
     // Set the selected one to 1
     switch(selectedValue) {
@@ -352,6 +361,9 @@ function updatePayBasisHiddenFields(selectedValue) {
             break;
         case 'taxable_income':
             document.getElementById('hidden_apply_to_taxable_income').value = '1';
+            break;
+        case 'monthly_basic_salary':
+            document.getElementById('hidden_apply_to_monthly_basic_salary').value = '1';
             break;
     }
 }
@@ -430,110 +442,185 @@ function showTaxTableModal(tableType) {
     switch(tableType) {
         case 'sss':
             title = 'SSS Contribution Table 2025';
+            // Show loading message
             content = `
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Salary Range</th>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">EE Share</th>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">ER Share</th>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <tr><td class="px-2 py-1 text-xs">₱0 - ₱5,249.99</td><td class="px-2 py-1 text-xs">₱250</td><td class="px-2 py-1 text-xs">₱510</td><td class="px-2 py-1 text-xs">₱760</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱5,250 - ₱5,749.99</td><td class="px-2 py-1 text-xs">₱275</td><td class="px-2 py-1 text-xs">₱560</td><td class="px-2 py-1 text-xs">₱835</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱5,750 - ₱6,249.99</td><td class="px-2 py-1 text-xs">₱300</td><td class="px-2 py-1 text-xs">₱610</td><td class="px-2 py-1 text-xs">₱910</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱6,250 - ₱6,749.99</td><td class="px-2 py-1 text-xs">₱325</td><td class="px-2 py-1 text-xs">₱660</td><td class="px-2 py-1 text-xs">₱985</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱6,750 - ₱7,249.99</td><td class="px-2 py-1 text-xs">₱350</td><td class="px-2 py-1 text-xs">₱710</td><td class="px-2 py-1 text-xs">₱1,060</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱7,250 - ₱7,749.99</td><td class="px-2 py-1 text-xs">₱375</td><td class="px-2 py-1 text-xs">₱760</td><td class="px-2 py-1 text-xs">₱1,135</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱7,750 - ₱8,249.99</td><td class="px-2 py-1 text-xs">₱400</td><td class="px-2 py-1 text-xs">₱810</td><td class="px-2 py-1 text-xs">₱1,210</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱8,250 - ₱8,749.99</td><td class="px-2 py-1 text-xs">₱425</td><td class="px-2 py-1 text-xs">₱860</td><td class="px-2 py-1 text-xs">₱1,285</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱8,750 - ₱9,249.99</td><td class="px-2 py-1 text-xs">₱450</td><td class="px-2 py-1 text-xs">₱910</td><td class="px-2 py-1 text-xs">₱1,360</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱9,250 - ₱9,749.99</td><td class="px-2 py-1 text-xs">₱475</td><td class="px-2 py-1 text-xs">₱960</td><td class="px-2 py-1 text-xs">₱1,435</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱9,750 - ₱10,249.99</td><td class="px-2 py-1 text-xs">₱500</td><td class="px-2 py-1 text-xs">₱1,010</td><td class="px-2 py-1 text-xs">₱1,510</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱10,250 - ₱10,749.99</td><td class="px-2 py-1 text-xs">₱525</td><td class="px-2 py-1 text-xs">₱1,060</td><td class="px-2 py-1 text-xs">₱1,585</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱10,750 - ₱11,249.99</td><td class="px-2 py-1 text-xs">₱550</td><td class="px-2 py-1 text-xs">₱1,110</td><td class="px-2 py-1 text-xs">₱1,660</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱11,250 - ₱11,749.99</td><td class="px-2 py-1 text-xs">₱575</td><td class="px-2 py-1 text-xs">₱1,160</td><td class="px-2 py-1 text-xs">₱1,735</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱11,750 - ₱12,249.99</td><td class="px-2 py-1 text-xs">₱600</td><td class="px-2 py-1 text-xs">₱1,210</td><td class="px-2 py-1 text-xs">₱1,810</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱12,250 - ₱12,749.99</td><td class="px-2 py-1 text-xs">₱625</td><td class="px-2 py-1 text-xs">₱1,260</td><td class="px-2 py-1 text-xs">₱1,885</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱12,750 - ₱13,249.99</td><td class="px-2 py-1 text-xs">₱650</td><td class="px-2 py-1 text-xs">₱1,310</td><td class="px-2 py-1 text-xs">₱1,960</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱13,250 - ₱13,749.99</td><td class="px-2 py-1 text-xs">₱675</td><td class="px-2 py-1 text-xs">₱1,360</td><td class="px-2 py-1 text-xs">₱2,035</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱13,750 - ₱14,249.99</td><td class="px-2 py-1 text-xs">₱700</td><td class="px-2 py-1 text-xs">₱1,410</td><td class="px-2 py-1 text-xs">₱2,110</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱14,250 - ₱14,749.99</td><td class="px-2 py-1 text-xs">₱725</td><td class="px-2 py-1 text-xs">₱1,460</td><td class="px-2 py-1 text-xs">₱2,185</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱14,750 - ₱15,249.99</td><td class="px-2 py-1 text-xs">₱750</td><td class="px-2 py-1 text-xs">₱1,530</td><td class="px-2 py-1 text-xs">₱2,280</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱15,250 - ₱15,749.99</td><td class="px-2 py-1 text-xs">₱775</td><td class="px-2 py-1 text-xs">₱1,580</td><td class="px-2 py-1 text-xs">₱2,355</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱15,750 - ₱16,249.99</td><td class="px-2 py-1 text-xs">₱800</td><td class="px-2 py-1 text-xs">₱1,630</td><td class="px-2 py-1 text-xs">₱2,430</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱16,250 - ₱16,749.99</td><td class="px-2 py-1 text-xs">₱825</td><td class="px-2 py-1 text-xs">₱1,680</td><td class="px-2 py-1 text-xs">₱2,505</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱16,750 - ₱17,249.99</td><td class="px-2 py-1 text-xs">₱850</td><td class="px-2 py-1 text-xs">₱1,730</td><td class="px-2 py-1 text-xs">₱2,580</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱17,250 - ₱17,749.99</td><td class="px-2 py-1 text-xs">₱875</td><td class="px-2 py-1 text-xs">₱1,780</td><td class="px-2 py-1 text-xs">₱2,655</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱17,750 - ₱18,249.99</td><td class="px-2 py-1 text-xs">₱900</td><td class="px-2 py-1 text-xs">₱1,830</td><td class="px-2 py-1 text-xs">₱2,730</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱18,250 - ₱18,749.99</td><td class="px-2 py-1 text-xs">₱925</td><td class="px-2 py-1 text-xs">₱1,880</td><td class="px-2 py-1 text-xs">₱2,805</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱18,750 - ₱19,249.99</td><td class="px-2 py-1 text-xs">₱950</td><td class="px-2 py-1 text-xs">₱1,930</td><td class="px-2 py-1 text-xs">₱2,880</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱19,250 - ₱19,749.99</td><td class="px-2 py-1 text-xs">₱975</td><td class="px-2 py-1 text-xs">₱1,980</td><td class="px-2 py-1 text-xs">₱2,955</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱19,750 - ₱20,249.99</td><td class="px-2 py-1 text-xs">₱1,000</td><td class="px-2 py-1 text-xs">₱2,030</td><td class="px-2 py-1 text-xs">₱3,030</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱20,250 - ₱20,749.99</td><td class="px-2 py-1 text-xs">₱1,025</td><td class="px-2 py-1 text-xs">₱2,080</td><td class="px-2 py-1 text-xs">₱3,105</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱20,750 - ₱21,249.99</td><td class="px-2 py-1 text-xs">₱1,050</td><td class="px-2 py-1 text-xs">₱2,130</td><td class="px-2 py-1 text-xs">₱3,180</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱21,250 - ₱21,749.99</td><td class="px-2 py-1 text-xs">₱1,075</td><td class="px-2 py-1 text-xs">₱2,180</td><td class="px-2 py-1 text-xs">₱3,255</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱21,750 - ₱22,249.99</td><td class="px-2 py-1 text-xs">₱1,100</td><td class="px-2 py-1 text-xs">₱2,230</td><td class="px-2 py-1 text-xs">₱3,330</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱22,250 - ₱22,749.99</td><td class="px-2 py-1 text-xs">₱1,125</td><td class="px-2 py-1 text-xs">₱2,280</td><td class="px-2 py-1 text-xs">₱3,405</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱22,750 - ₱23,249.99</td><td class="px-2 py-1 text-xs">₱1,150</td><td class="px-2 py-1 text-xs">₱2,330</td><td class="px-2 py-1 text-xs">₱3,480</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱23,250 - ₱23,749.99</td><td class="px-2 py-1 text-xs">₱1,175</td><td class="px-2 py-1 text-xs">₱2,380</td><td class="px-2 py-1 text-xs">₱3,555</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱23,750 - ₱24,249.99</td><td class="px-2 py-1 text-xs">₱1,200</td><td class="px-2 py-1 text-xs">₱2,430</td><td class="px-2 py-1 text-xs">₱3,630</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱24,250 - ₱24,749.99</td><td class="px-2 py-1 text-xs">₱1,225</td><td class="px-2 py-1 text-xs">₱2,480</td><td class="px-2 py-1 text-xs">₱3,705</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱24,750 - ₱25,249.99</td><td class="px-2 py-1 text-xs">₱1,250</td><td class="px-2 py-1 text-xs">₱2,530</td><td class="px-2 py-1 text-xs">₱3,780</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱25,250 - ₱25,749.99</td><td class="px-2 py-1 text-xs">₱1,275</td><td class="px-2 py-1 text-xs">₱2,580</td><td class="px-2 py-1 text-xs">₱3,855</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱25,750 - ₱26,249.99</td><td class="px-2 py-1 text-xs">₱1,300</td><td class="px-2 py-1 text-xs">₱2,630</td><td class="px-2 py-1 text-xs">₱3,930</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱26,250 - ₱26,749.99</td><td class="px-2 py-1 text-xs">₱1,325</td><td class="px-2 py-1 text-xs">₱2,680</td><td class="px-2 py-1 text-xs">₱4,005</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱26,750 - ₱27,249.99</td><td class="px-2 py-1 text-xs">₱1,350</td><td class="px-2 py-1 text-xs">₱2,730</td><td class="px-2 py-1 text-xs">₱4,080</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱27,250 - ₱27,749.99</td><td class="px-2 py-1 text-xs">₱1,375</td><td class="px-2 py-1 text-xs">₱2,780</td><td class="px-2 py-1 text-xs">₱4,155</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱27,750 - ₱28,249.99</td><td class="px-2 py-1 text-xs">₱1,400</td><td class="px-2 py-1 text-xs">₱2,830</td><td class="px-2 py-1 text-xs">₱4,230</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱28,250 - ₱28,749.99</td><td class="px-2 py-1 text-xs">₱1,425</td><td class="px-2 py-1 text-xs">₱2,880</td><td class="px-2 py-1 text-xs">₱4,305</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱28,750 - ₱29,249.99</td><td class="px-2 py-1 text-xs">₱1,450</td><td class="px-2 py-1 text-xs">₱2,930</td><td class="px-2 py-1 text-xs">₱4,380</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱29,250 - ₱29,749.99</td><td class="px-2 py-1 text-xs">₱1,475</td><td class="px-2 py-1 text-xs">₱2,980</td><td class="px-2 py-1 text-xs">₱4,455</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱29,750 - ₱30,249.99</td><td class="px-2 py-1 text-xs">₱1,500</td><td class="px-2 py-1 text-xs">₱3,030</td><td class="px-2 py-1 text-xs">₱4,530</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱30,250 - ₱30,749.99</td><td class="px-2 py-1 text-xs">₱1,525</td><td class="px-2 py-1 text-xs">₱3,080</td><td class="px-2 py-1 text-xs">₱4,605</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱30,750 - ₱31,249.99</td><td class="px-2 py-1 text-xs">₱1,550</td><td class="px-2 py-1 text-xs">₱3,130</td><td class="px-2 py-1 text-xs">₱4,680</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱31,250 - ₱31,749.99</td><td class="px-2 py-1 text-xs">₱1,575</td><td class="px-2 py-1 text-xs">₱3,180</td><td class="px-2 py-1 text-xs">₱4,755</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱31,750 - ₱32,249.99</td><td class="px-2 py-1 text-xs">₱1,600</td><td class="px-2 py-1 text-xs">₱3,230</td><td class="px-2 py-1 text-xs">₱4,830</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱32,250 - ₱32,749.99</td><td class="px-2 py-1 text-xs">₱1,625</td><td class="px-2 py-1 text-xs">₱3,280</td><td class="px-2 py-1 text-xs">₱4,905</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱32,750 - ₱33,249.99</td><td class="px-2 py-1 text-xs">₱1,650</td><td class="px-2 py-1 text-xs">₱3,330</td><td class="px-2 py-1 text-xs">₱4,980</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱33,250 - ₱33,749.99</td><td class="px-2 py-1 text-xs">₱1,675</td><td class="px-2 py-1 text-xs">₱3,380</td><td class="px-2 py-1 text-xs">₱5,055</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱33,750 - ₱34,249.99</td><td class="px-2 py-1 text-xs">₱1,700</td><td class="px-2 py-1 text-xs">₱3,430</td><td class="px-2 py-1 text-xs">₱5,130</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱34,250 - ₱34,749.99</td><td class="px-2 py-1 text-xs">₱1,725</td><td class="px-2 py-1 text-xs">₱3,480</td><td class="px-2 py-1 text-xs">₱5,205</td></tr>
-                            <tr><td class="px-2 py-1 text-xs">₱34,750 - Above</td><td class="px-2 py-1 text-xs">₱1,750</td><td class="px-2 py-1 text-xs">₱3,530</td><td class="px-2 py-1 text-xs">₱5,280</td></tr>
-                        </tbody>
-                    </table>
-                    <div class="mt-4 p-3 bg-blue-50 rounded-md">
-                        <p class="text-sm text-blue-800"><strong>Note:</strong> EE = Employee, ER = Employer</p>
-                    </div>
+                <div class="text-center py-8">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p class="mt-2 text-gray-600">Loading SSS tax table...</p>
                 </div>
             `;
+            
+            // Set initial content while loading
+            modalTitle.textContent = title;
+            modalContent.innerHTML = content;
+            modal.classList.remove('hidden');
+            
+            // Fetch data from API
+            fetch('{{ route("settings.deductions.sss.tax-table") }}')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let tableRows = '';
+                        data.data.forEach(item => {
+                            let salaryRange = '';
+                            if (item.range_end === null || item.range_end >= 999999) {
+                                salaryRange = `₱${item.range_start.toLocaleString('en-PH', {minimumFractionDigits: 2})} - Above`;
+                            } else {
+                                salaryRange = `₱${item.range_start.toLocaleString('en-PH', {minimumFractionDigits: 2})} - ₱${item.range_end.toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+                            }
+                            
+                            tableRows += `
+                                <tr>
+                                    <td class="px-2 py-1 text-xs">${salaryRange}</td>
+                                    <td class="px-2 py-1 text-xs">₱${item.employee_share.toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
+                                    <td class="px-2 py-1 text-xs">₱${item.employer_share.toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
+                                    <td class="px-2 py-1 text-xs">₱${item.total_contribution.toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        const dynamicContent = `
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Salary Range</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">EE Share</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">ER Share</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        ${tableRows}
+                                    </tbody>
+                                </table>
+                                <div class="mt-4 p-3 bg-blue-50 rounded-md">
+                                    <p class="text-sm text-blue-800"><strong>Note:</strong> EE = Employee, ER = Employer</p>
+                                </div>
+                            </div>
+                        `;
+                        
+                        modalContent.innerHTML = dynamicContent;
+                    } else {
+                        modalContent.innerHTML = `
+                            <div class="text-center py-8">
+                                <p class="text-red-600">Error loading SSS tax table data.</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching SSS tax table:', error);
+                    modalContent.innerHTML = `
+                        <div class="text-center py-8">
+                            <p class="text-red-600">Error loading SSS tax table data.</p>
+                        </div>
+                    `;
+                });
+            return; // Early return to avoid setting content again
             break;
             
         case 'philhealth':
             title = 'PhilHealth Contribution Table 2024-2025';
+            // Show loading message
             content = `
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Salary Range</th>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Employee Share</th>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Employer Share</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <tr><td class="px-3 py-2">₱1,500 and below</td><td class="px-3 py-2">1%</td><td class="px-3 py-2">2%</td></tr>
-                            <tr><td class="px-3 py-2">Over ₱1,500</td><td class="px-3 py-2">2%</td><td class="px-3 py-2">2%</td></tr>
-                        </tbody>
-                    </table>
-                    <div class="mt-4 p-3 bg-blue-50 rounded-md">
-                        <p class="text-sm text-blue-800"><strong>Note:</strong> Maximum salary cap is ₱60,000 per month</p>
-                    </div>
+                <div class="text-center py-8">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p class="mt-2 text-gray-600">Loading PhilHealth tax table...</p>
                 </div>
             `;
+            
+            // Set initial content while loading
+            modalTitle.textContent = title;
+            modalContent.innerHTML = content;
+            modal.classList.remove('hidden');
+            
+            // Fetch data from API
+            fetch('{{ route("settings.deductions.philhealth.tax-table") }}')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let tableRows = '';
+                        data.data.forEach(item => {
+                            let salaryRange = '';
+                            let rangeStart = parseFloat(item.range_start);
+                            let rangeEnd = item.range_end ? parseFloat(item.range_end) : null;
+                            
+                            if (rangeStart === 0 && rangeEnd < 10000) {
+                                salaryRange = `Below ₱${rangeEnd.toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+                            } else if (rangeStart === rangeEnd) {
+                                salaryRange = `₱${rangeStart.toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+                            } else if (rangeEnd === null || rangeEnd >= 999999) {
+                                salaryRange = `₱${rangeStart.toLocaleString('en-PH', {minimumFractionDigits: 2})} and above`;
+                            } else {
+                                salaryRange = `₱${rangeStart.toLocaleString('en-PH', {minimumFractionDigits: 2})} - ₱${rangeEnd.toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+                            }
+                            
+                            let eeShare = parseFloat(item.employee_share).toFixed(1) + '%';
+                            let erShare = parseFloat(item.employer_share).toFixed(1) + '%';
+                            let total = parseFloat(item.total_contribution).toFixed(1) + '%';
+                            
+                            let monthlyPremium = '';
+                            let minContribution = parseFloat(item.min_contribution);
+                            let maxContribution = parseFloat(item.max_contribution);
+                            
+                            if (minContribution === maxContribution) {
+                                monthlyPremium = `₱${minContribution.toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+                            } else {
+                                monthlyPremium = `₱${minContribution.toLocaleString('en-PH', {minimumFractionDigits: 2})} - ₱${maxContribution.toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+                            }
+                            
+                            tableRows += `
+                                <tr>
+                                    <td class="px-3 py-2">${salaryRange}</td>
+                                    <td class="px-3 py-2">${eeShare}</td>
+                                    <td class="px-3 py-2">${erShare}</td>
+                                    <td class="px-3 py-2">${total}</td>
+                                    <td class="px-3 py-2">${monthlyPremium}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        const dynamicContent = `
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Salary Range</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">EE Share</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">ER Share</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Monthly Premium</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        ${tableRows}
+                                    </tbody>
+                                </table>
+                                <div class="mt-4 p-3 bg-blue-50 rounded-md">
+                                    <p class="text-sm text-blue-800"><strong>Note:</strong> Based on Monthly Basic Salary. EE = Employee, ER = Employer</p>
+                                </div>
+                            </div>
+                        `;
+                        
+                        modalContent.innerHTML = dynamicContent;
+                    } else {
+                        modalContent.innerHTML = `
+                            <div class="text-center py-8">
+                                <p class="text-red-600">Error loading PhilHealth tax table data.</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching PhilHealth tax table:', error);
+                    modalContent.innerHTML = `
+                        <div class="text-center py-8">
+                            <p class="text-red-600">Error loading PhilHealth tax table data.</p>
+                        </div>
+                    `;
+                });
+            return; // Early return to avoid setting content again
             break;
             
         case 'pagibig':

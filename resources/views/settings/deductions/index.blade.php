@@ -77,6 +77,7 @@
                                         if($deduction->apply_to_gross_pay) $payBasis[] = 'Gross Pay';
                                         if($deduction->apply_to_taxable_income) $payBasis[] = 'Taxable Income';
                                         if($deduction->apply_to_net_pay) $payBasis[] = 'Net Pay';
+                                        if($deduction->apply_to_monthly_basic_salary) $payBasis[] = 'Monthly Basic';
                                         echo !empty($payBasis) ? implode(', ', $payBasis) : 'N/A';
                                     @endphp
                                 </div>

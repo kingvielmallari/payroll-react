@@ -1580,7 +1580,7 @@ class PayrollController extends Controller
         // Calculate government deductions (SSS, PhilHealth, Pag-IBIG)
         foreach ($deductionSettings as $setting) {
             if ($setting->tax_table_type !== 'withholding_tax') {
-                $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay);
+                $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, null, null, $employee->basic_salary);
 
                 if ($amount > 0) {
                     $deductions[$setting->code] = $amount;
@@ -1601,7 +1601,7 @@ class PayrollController extends Controller
             ->get();
 
         foreach ($taxSettings as $setting) {
-            $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome);
+            $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome, null, $employee->basic_salary);
 
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
@@ -4617,15 +4617,24 @@ class PayrollController extends Controller
         $year = $today->format('Y');
         $month = $today->format('m');
 
-        // Get the count of payrolls for this schedule in the current year
-        $count = \App\Models\Payroll::where('pay_schedule', $paySchedule)
-            ->whereYear('created_at', $year)
-            ->count() + 1;
-
         // Format: SCHEDULE-YEAR-MONTH-COUNT
         $scheduleCode = strtoupper(str_replace('_', '', $paySchedule));
+        $prefix = "{$scheduleCode}-{$year}{$month}";
 
-        return sprintf('%s-%s%s-%03d', $scheduleCode, $year, $month, $count);
+        // Find the last payroll with this prefix to determine next number
+        $lastPayroll = \App\Models\Payroll::where('payroll_number', 'like', "{$prefix}%")
+            ->orderBy('payroll_number', 'desc')
+            ->first();
+
+        if ($lastPayroll) {
+            // Extract the last 3 digits from the payroll number
+            $lastNumber = (int) substr($lastPayroll->payroll_number, -3);
+            $newNumber = sprintf('%03d', $lastNumber + 1);
+        } else {
+            $newNumber = '001';
+        }
+
+        return "{$prefix}-{$newNumber}";
     }
 
     /**
@@ -5548,10 +5557,13 @@ class PayrollController extends Controller
                     $payBasisName = 'totalgross';
                 } elseif ($setting->apply_to_taxable_income) {
                     $payBasisAmount = $taxableIncomeForDeductions;
-                    $payBasisName = 'totalincome';
+                    $payBasisName = 'taxableincome';
                 } elseif ($setting->apply_to_net_pay) {
                     $payBasisAmount = $detail->net_pay ?? 0;
-                    $payBasisName = 'Net Pay';
+                    $payBasisName = 'netpay';
+                } elseif ($setting->apply_to_monthly_basic_salary) {
+                    $payBasisAmount = $employee->basic_salary ?? 0;
+                    $payBasisName = 'mbs';
                 } else {
                     // Calculate component-based pay basis
                     $components = [];
@@ -5592,7 +5604,10 @@ class PayrollController extends Controller
                     $detail->overtime_pay ?? 0,
                     $detail->bonuses ?? 0,
                     $detail->allowances ?? 0,
-                    $detail->gross_pay ?? 0
+                    $detail->gross_pay ?? 0,
+                    null, // taxableIncome
+                    null, // netPay
+                    $employee->basic_salary // monthlyBasicSalary
                 );
 
                 if ($amount > 0) {

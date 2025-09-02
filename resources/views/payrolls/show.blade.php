@@ -38,7 +38,7 @@
                                 $totalBasicPay = 0; // This will be updated by JavaScript to match Basic column exactly
                             @endphp
                             <div class="text-2xl font-bold text-blue-600" id="totalBasicDisplay">₱{{ number_format($totalBasicPay, 2) }}</div>
-                            <div class="text-sm text-blue-800">Total Basic</div>
+                            <div class="text-sm text-blue-800">Total Regular</div>
                         </div>
                         <div class="bg-yellow-50 p-4 rounded-lg flex-1 h-20 flex flex-col justify-center text-center">
                             @php
@@ -513,7 +513,7 @@
                                         Employee
                                     </th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Basic
+                                        Regular
                                     </th>
                                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         Holiday
@@ -1555,7 +1555,7 @@
                                                
                                                     @if($basicPayForGross > 0)
                                                         <div class="text-xs text-gray-500">
-                                                            <span>Basic:</span>
+                                                            <span>Regular:</span>
                                                             <span>₱{{ number_format($basicPayForGross, 2) }}</span>
                                                         </div>
                                                     @endif
@@ -1744,13 +1744,43 @@
                                                                 $allowances, 
                                                                 $grossPayForDeduction,
                                                                 $taxableIncome,  // Pass calculated taxable income
-                                                                null // netPay (not used for now)
+                                                                null, // netPay (not used for now)
+                                                                $detail->employee->basic_salary // monthlyBasicSalary
                                                             );
                                                             $calculatedDeductionTotal += $calculatedAmount;
+                                                            
+                                                            // Debug info for PhilHealth only
+                                                            $debugInfo = '';
+                                                            if (strtolower($setting->name) === 'philhealth' || strtolower($setting->code) === 'philhealth') {
+                                                                // Get the pay basis being used by this setting
+                                                                $payBasisDebug = '';
+                                                                if ($setting->apply_to_basic_pay) $payBasisDebug .= 'Basic Pay ';
+                                                                if ($setting->apply_to_gross_pay) $payBasisDebug .= 'Gross Pay ';
+                                                                if ($setting->apply_to_taxable_income) $payBasisDebug .= 'Taxable Income ';
+                                                                if ($setting->apply_to_monthly_basic_salary) $payBasisDebug .= 'Monthly Basic ';
+                                                                if ($setting->apply_to_net_pay) $payBasisDebug .= 'Net Pay ';
+                                                                
+                                                                $salaryUsed = 0;
+                                                                if ($setting->apply_to_basic_pay) $salaryUsed = $basicPay;
+                                                                elseif ($setting->apply_to_gross_pay) $salaryUsed = $grossPayForDeduction;
+                                                                elseif ($setting->apply_to_taxable_income) $salaryUsed = $taxableIncome;
+                                                                elseif ($setting->apply_to_monthly_basic_salary) $salaryUsed = $detail->employee->basic_salary;
+                                                                elseif ($setting->apply_to_net_pay) $salaryUsed = 0; // calculated later
+                                                                
+                                                                // Find matching tax table using correct column names
+                                                                $taxTable = null;
+                                                                if ($setting->tax_table_type === 'philhealth') {
+                                                                    $taxTable = \App\Models\PhilHealthTaxTable::where('range_start', '<=', $salaryUsed)
+                                                                        ->where('range_end', '>=', $salaryUsed)
+                                                                        ->first();
+                                                                }
+                                                            
+                                                            }
                                                         @endphp
                                                         <div class="text-xs text-gray-500">
                                                             <span>{{ $setting->name }}:</span>
                                                             <span>₱{{ number_format($calculatedAmount, 2) }}</span>
+                                                            {!! $debugInfo !!}
                                                         </div>
                                                     @endforeach
                                                     

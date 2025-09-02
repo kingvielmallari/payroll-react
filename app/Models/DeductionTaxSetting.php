@@ -32,6 +32,7 @@ class DeductionTaxSetting extends Model
         'apply_to_gross_pay',
         'apply_to_taxable_income',
         'apply_to_net_pay',
+        'apply_to_monthly_basic_salary',
         'employer_share_rate',
         'employer_share_fixed',
         'share_with_employer',
@@ -58,6 +59,7 @@ class DeductionTaxSetting extends Model
         'apply_to_gross_pay' => 'boolean',
         'apply_to_taxable_income' => 'boolean',
         'apply_to_net_pay' => 'boolean',
+        'apply_to_monthly_basic_salary' => 'boolean',
         'share_with_employer' => 'boolean',
         'is_active' => 'boolean',
         'is_system_default' => 'boolean',
@@ -90,7 +92,7 @@ class DeductionTaxSetting extends Model
     /**
      * Calculate deduction amount based on salary components
      */
-    public function calculateDeduction($basicPay = 0, $overtime = 0, $bonus = 0, $allowances = 0, $grossPay = null, $taxableIncome = null, $netPay = null)
+    public function calculateDeduction($basicPay = 0, $overtime = 0, $bonus = 0, $allowances = 0, $grossPay = null, $taxableIncome = null, $netPay = null, $monthlyBasicSalary = null)
     {
         // Calculate gross pay if not provided
         if ($grossPay === null) {
@@ -108,6 +110,7 @@ class DeductionTaxSetting extends Model
         if ($this->apply_to_gross_pay && $grossPay) $applicableSalary = $grossPay;
         if ($this->apply_to_taxable_income && $taxableIncome) $applicableSalary = $taxableIncome;
         if ($this->apply_to_net_pay && $netPay) $applicableSalary = $netPay;
+        if ($this->apply_to_monthly_basic_salary && $monthlyBasicSalary) $applicableSalary = $monthlyBasicSalary;
 
         // Apply salary cap if set
         if ($this->salary_cap && $applicableSalary > $this->salary_cap) {
@@ -127,7 +130,12 @@ class DeductionTaxSetting extends Model
 
             case 'bracket':
                 if ($this->tax_table_type) {
-                    $deduction = $this->calculateTaxTableDeduction($applicableSalary, $this->tax_table_type);
+                    // For PhilHealth, always use monthly basic salary regardless of pay basis
+                    if ($this->tax_table_type === 'philhealth' && $monthlyBasicSalary) {
+                        $deduction = $this->calculateTaxTableDeduction($monthlyBasicSalary, $this->tax_table_type);
+                    } else {
+                        $deduction = $this->calculateTaxTableDeduction($applicableSalary, $this->tax_table_type);
+                    }
                 } else {
                     $deduction = $this->calculateBracketDeduction($applicableSalary);
                 }
@@ -221,33 +229,25 @@ class DeductionTaxSetting extends Model
     }
 
     /**
-     * Calculate PhilHealth deduction based on sharing setting
+     * Calculate PhilHealth deduction using the PhilHealth tax table
      */
     private function calculatePhilHealthDeduction($salary)
     {
-        // PhilHealth rates for 2024-2025
-        // Total contribution is 5% (2.5% employee, 2.5% employer)
-        $employeeRate = 0.025; // 2.5%
-        $employerRate = 0.025; // 2.5%
+        // Use the PhilHealthTaxTable model for calculation
+        $contribution = \App\Models\PhilHealthTaxTable::calculateContribution($salary);
 
-        // Calculate employee share
-        $employeeShare = $salary * $employeeRate;
-
-        // Apply salary cap of ₱80,000
-        $maxSalary = 80000;
-        if ($salary > $maxSalary) {
-            $employeeShare = $maxSalary * $employeeRate;
+        if (!$contribution) {
+            return 0; // No contribution required (e.g., salary below minimum)
         }
 
+        $employeeShare = $contribution['employee_share'];
+        $employerShare = $contribution['employer_share'];
+
         if ($this->share_with_employer) {
-            // If shared with employer, only deduct employee share
+            // If shared with employer, only deduct employee share from employee salary
             return $employeeShare;
         } else {
-            // If not shared, deduct both employee and employer shares from employee
-            $employerShare = $salary * $employerRate;
-            if ($salary > $maxSalary) {
-                $employerShare = $maxSalary * $employerRate;
-            }
+            // If not shared, deduct both employee and employer shares from employee salary
             return $employeeShare + $employerShare;
         }
     }
