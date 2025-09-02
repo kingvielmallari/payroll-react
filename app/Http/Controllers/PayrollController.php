@@ -7940,8 +7940,8 @@ class PayrollController extends Controller
                 // Restore the outstanding balance
                 $cashAdvance->increment('outstanding_balance', $payment->payment_amount ?? $payment->amount);
 
-                // If cash advance was marked as completed, revert to approved
-                if ($cashAdvance->status === 'completed' && $cashAdvance->outstanding_balance > 0) {
+                // If cash advance was marked as fully_paid, revert to approved
+                if ($cashAdvance->status === 'fully_paid' && $cashAdvance->outstanding_balance > 0) {
                     $cashAdvance->update(['status' => 'approved']);
                 }
             }

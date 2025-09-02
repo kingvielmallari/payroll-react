@@ -212,20 +212,22 @@
                         <div>
                             <h4 class="text-sm font-medium text-gray-900">Status</h4>
                             <div class="mt-1 flex items-center space-x-2">
-                                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full 
-                                    {{ $payroll->is_paid ? 'bg-green-100 text-green-800' : 
-                                       ($payroll->status == 'approved' ? 'bg-blue-100 text-blue-800' : 
-                                        ($payroll->status == 'processing' ? 'bg-yellow-100 text-yellow-800' : 
-                                         ($payroll->status == 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'))) }}">
-                                    {{ $payroll->is_paid ? 'Paid' : ucfirst($payroll->status) }}
-                                </span>
-                                @if($payroll->is_paid && $payroll->marked_paid_at)
-                                <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700">
-                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    {{ $payroll->marked_paid_at->format('M d, Y') }}
-                                </span>
+                                @if($payroll->is_paid)
+                                    {{-- Show both Approved and Paid when payroll is paid --}}
+                                    <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-800">
+                                        Approved
+                                    </span>
+                                    <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-green-100 text-green-800">
+                                        Paid
+                                    </span>
+                                @else
+                                    {{-- Show only the current status when not paid --}}
+                                    <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full 
+                                        {{ $payroll->status == 'approved' ? 'bg-blue-100 text-blue-800' : 
+                                            ($payroll->status == 'processing' ? 'bg-yellow-100 text-yellow-800' : 
+                                             ($payroll->status == 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800')) }}">
+                                        {{ ucfirst($payroll->status) }}
+                                    </span>
                                 @endif
                                 @if(isset($isDynamic))
                                     @if($isDynamic)

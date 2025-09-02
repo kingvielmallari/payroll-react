@@ -242,7 +242,7 @@ class CashAdvance extends Model
 
         // Mark as fully paid if balance reaches zero
         if ($this->outstanding_balance <= 0) {
-            $this->status = 'completed';
+            $this->status = 'fully_paid';
             $this->outstanding_balance = 0;
         }
 
@@ -379,9 +379,14 @@ class CashAdvance extends Model
         // Update outstanding balance
         $this->outstanding_balance -= $paymentAmount;
 
-        // Mark as completed if fully paid
-        if ($this->outstanding_balance <= 0) {
-            $this->status = 'completed';
+        // Ensure outstanding balance doesn't go below 0
+        if ($this->outstanding_balance < 0) {
+            $this->outstanding_balance = 0;
+        }
+
+        // Mark as fully_paid only if truly fully paid
+        if ($this->outstanding_balance <= 0.01) { // Allow for small rounding differences
+            $this->status = 'fully_paid';
             $this->outstanding_balance = 0;
         }
 
