@@ -1231,7 +1231,19 @@ class PayrollController extends Controller
         // The grossPay already includes basic + holiday + rest + overtime
         $taxableIncomeForDeductions = $grossPay; // This includes basic + holiday + rest + overtime
 
-        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal);
+        // Detect pay frequency based on period duration
+        $periodDays = \Carbon\Carbon::parse($periodStart)->diffInDays(\Carbon\Carbon::parse($periodEnd)) + 1;
+        if ($periodDays <= 1) {
+            $payFrequency = 'daily';
+        } elseif ($periodDays <= 7) {
+            $payFrequency = 'weekly';
+        } elseif ($periodDays <= 16) {
+            $payFrequency = 'semi_monthly';
+        } else {
+            $payFrequency = 'monthly';
+        }
+
+        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal, $payFrequency);
 
         $netPay = $totalGrossPay - $deductions['total'] - $lateDeductions - $undertimeDeductions - $cashAdvanceDeductions;
 
@@ -1251,7 +1263,7 @@ class PayrollController extends Controller
             'philhealth_deduction' => $deductions['philhealth'],
             'pagibig_deduction' => $deductions['pagibig'],
             'other_deductions' => $deductions['other'],
-            'deductions_details' => $deductions['details'],
+            'deductions_details' => $deductions['deductions_details'],
             'total_deductions' => $deductions['total'] + $lateDeductions + $undertimeDeductions + $cashAdvanceDeductions,
             'net_pay' => $netPay,
             'hours_worked' => $hoursWorked,
@@ -1562,10 +1574,11 @@ class PayrollController extends Controller
     /**
      * Calculate deductions for an employee using dynamic settings
      */
-    private function calculateDeductions($employee, $grossPay, $basicPay = null, $overtimePay = 0, $allowances = 0, $bonuses = 0)
+    private function calculateDeductions($employee, $grossPay, $basicPay = null, $overtimePay = 0, $allowances = 0, $bonuses = 0, $payFrequency = 'semi_monthly')
     {
         $basicPay = $basicPay ?? $grossPay;
         $deductions = [];
+        $deductionDetails = [];
         $total = 0;
 
         // Get active deduction settings that apply to this employee's benefit status
@@ -1580,12 +1593,23 @@ class PayrollController extends Controller
         // Calculate government deductions (SSS, PhilHealth, Pag-IBIG)
         foreach ($deductionSettings as $setting) {
             if ($setting->tax_table_type !== 'withholding_tax') {
-                $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, null, null, $employee->basic_salary);
+                $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, null, null, $employee->basic_salary, $payFrequency);
 
                 if ($amount > 0) {
                     $deductions[$setting->code] = $amount;
                     $total += $amount;
                     $governmentTotal += $amount;
+
+                    // Add to detailed breakdown for snapshot
+                    $deductionDetails[] = [
+                        'name' => $setting->name,
+                        'code' => $setting->code,
+                        'amount' => $amount,
+                        'type' => $setting->type,
+                        'calculation_type' => $setting->calculation_type,
+                        'pay_basis' => $this->getPayBasisName($setting),
+                        'pay_basis_amount' => $this->getPayBasisAmount($setting, $basicPay, $overtimePay, $bonuses, $allowances, $grossPay)
+                    ];
                 }
             }
         }
@@ -1601,11 +1625,22 @@ class PayrollController extends Controller
             ->get();
 
         foreach ($taxSettings as $setting) {
-            $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome, null, $employee->basic_salary);
+            $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome, null, $employee->basic_salary, $payFrequency);
 
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
                 $total += $amount;
+
+                // Add to detailed breakdown for snapshot
+                $deductionDetails[] = [
+                    'name' => $setting->name,
+                    'code' => $setting->code,
+                    'amount' => $amount,
+                    'type' => $setting->type,
+                    'calculation_type' => $setting->calculation_type,
+                    'pay_basis' => 'taxable_income', // Withholding tax uses taxable income
+                    'pay_basis_amount' => $taxableIncome
+                ];
             }
         }
 
@@ -1620,6 +1655,17 @@ class PayrollController extends Controller
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
                 $total += $amount;
+
+                // Add to detailed breakdown for snapshot
+                $deductionDetails[] = [
+                    'name' => $setting->name,
+                    'code' => $setting->code,
+                    'amount' => $amount,
+                    'type' => $setting->type,
+                    'calculation_type' => 'custom',
+                    'pay_basis' => 'custom',
+                    'pay_basis_amount' => $amount
+                ];
             }
         }
 
@@ -1633,8 +1679,37 @@ class PayrollController extends Controller
                 return !in_array($key, ['sss', 'philhealth', 'pagibig', 'withholding_tax']);
             }, ARRAY_FILTER_USE_KEY)),
             'total' => $total,
-            'details' => $deductions
+            'details' => $deductions,
+            'deductions_details' => $deductionDetails // Add this for snapshot compatibility
         ];
+    }
+
+    /**
+     * Get pay basis name for deduction setting
+     */
+    private function getPayBasisName($setting)
+    {
+        if ($setting->apply_to_basic_pay) return 'basic_pay';
+        if ($setting->apply_to_gross_pay) return 'totalgross';
+        if ($setting->apply_to_taxable_income) return 'taxable_income';
+        if ($setting->apply_to_net_pay) return 'net_pay';
+        if ($setting->apply_to_monthly_basic_salary) return 'monthly_basic_salary';
+
+        return 'totalgross'; // default
+    }
+
+    /**
+     * Get pay basis amount for deduction setting
+     */
+    private function getPayBasisAmount($setting, $basicPay, $overtimePay, $bonuses, $allowances, $grossPay)
+    {
+        if ($setting->apply_to_basic_pay) return $basicPay;
+        if ($setting->apply_to_gross_pay) return $grossPay;
+        if ($setting->apply_to_taxable_income) return $grossPay; // Will be calculated later
+        if ($setting->apply_to_net_pay) return $grossPay; // Will be calculated later
+        if ($setting->apply_to_monthly_basic_salary) return $grossPay; // Will be calculated later
+
+        return $grossPay; // default
     }
 
     /**
@@ -5268,7 +5343,7 @@ class PayrollController extends Controller
 
             // Calculate deductions breakdown after taxable income is finalized
             // Pass the calculated taxable income to ensure consistent deduction calculations
-            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome);
+            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome, $payroll);
 
             // Log taxable income calculation for debugging
             Log::info("Final taxable income calculation for employee {$employee->id}", [
@@ -5528,9 +5603,24 @@ class PayrollController extends Controller
     /**
      * Get deductions breakdown for employee
      */
-    private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null)
+    private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null, $payroll = null)
     {
         $breakdown = [];
+
+        // Detect pay frequency from payroll period if payroll object is provided
+        $payFrequency = 'semi_monthly'; // default
+        if ($payroll) {
+            $periodDays = \Carbon\Carbon::parse($payroll->period_start)->diffInDays(\Carbon\Carbon::parse($payroll->period_end)) + 1;
+            if ($periodDays <= 1) {
+                $payFrequency = 'daily';
+            } elseif ($periodDays <= 7) {
+                $payFrequency = 'weekly';
+            } elseif ($periodDays <= 16) {
+                $payFrequency = 'semi_monthly';
+            } else {
+                $payFrequency = 'monthly';
+            }
+        }
 
         // Get active deduction settings that apply to this employee's benefit status
         $deductionSettings = \App\Models\DeductionTaxSetting::active()
@@ -5546,80 +5636,117 @@ class PayrollController extends Controller
                 $taxableIncomeForDeductions = $taxableIncome;
             }
 
+            $governmentTotal = 0;
+
+            // First pass: Calculate government deductions (excluding withholding tax)
             foreach ($deductionSettings as $setting) {
-                // Calculate the pay basis amount and determine pay basis name
-                $payBasisAmount = 0;
-                $payBasisName = '';
+                if ($setting->tax_table_type !== 'withholding_tax') {
+                    // Calculate the pay basis amount and determine pay basis name
+                    $payBasisAmount = 0;
+                    $payBasisName = '';
 
-                // Determine pay basis based on the setting's configuration
-                if ($setting->apply_to_gross_pay) {
-                    $payBasisAmount = $detail->gross_pay ?? 0;
-                    $payBasisName = 'totalgross';
-                } elseif ($setting->apply_to_taxable_income) {
-                    $payBasisAmount = $taxableIncomeForDeductions;
-                    $payBasisName = 'taxableincome';
-                } elseif ($setting->apply_to_net_pay) {
-                    $payBasisAmount = $detail->net_pay ?? 0;
-                    $payBasisName = 'netpay';
-                } elseif ($setting->apply_to_monthly_basic_salary) {
-                    $payBasisAmount = $employee->basic_salary ?? 0;
-                    $payBasisName = 'mbs';
-                } else {
-                    // Calculate component-based pay basis
-                    $components = [];
-                    if ($setting->apply_to_basic_pay || $setting->apply_to_regular) {
-                        $payBasisAmount += ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
-                        $components[] = 'Basic Pay';
-                    }
-                    if ($setting->apply_to_overtime) {
-                        $payBasisAmount += $detail->overtime_pay ?? 0;
-                        $components[] = 'Overtime';
-                    }
-                    if ($setting->apply_to_bonus) {
-                        $payBasisAmount += $detail->bonuses ?? 0;
-                        $components[] = 'Bonuses';
-                    }
-                    if ($setting->apply_to_allowances) {
-                        $payBasisAmount += $detail->allowances ?? 0;
-                        $components[] = 'Allowances';
+                    // Determine pay basis based on the setting's configuration
+                    if ($setting->apply_to_gross_pay) {
+                        $payBasisAmount = $detail->gross_pay ?? 0;
+                        $payBasisName = 'totalgross';
+                    } elseif ($setting->apply_to_taxable_income) {
+                        $payBasisAmount = $taxableIncomeForDeductions;
+                        $payBasisName = 'taxableincome';
+                    } elseif ($setting->apply_to_net_pay) {
+                        $payBasisAmount = $detail->net_pay ?? 0;
+                        $payBasisName = 'netpay';
+                    } elseif ($setting->apply_to_monthly_basic_salary) {
+                        $payBasisAmount = $employee->basic_salary ?? 0;
+                        $payBasisName = 'mbs';
+                    } else {
+                        // Calculate component-based pay basis
+                        $components = [];
+                        if ($setting->apply_to_basic_pay || $setting->apply_to_regular) {
+                            $payBasisAmount += ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+                            $components[] = 'Basic Pay';
+                        }
+                        if ($setting->apply_to_overtime) {
+                            $payBasisAmount += $detail->overtime_pay ?? 0;
+                            $components[] = 'Overtime';
+                        }
+                        if ($setting->apply_to_bonus) {
+                            $payBasisAmount += $detail->bonuses ?? 0;
+                            $components[] = 'Bonuses';
+                        }
+                        if ($setting->apply_to_allowances) {
+                            $payBasisAmount += $detail->allowances ?? 0;
+                            $components[] = 'Allowances';
+                        }
+
+                        $payBasisName = !empty($components) ? implode(' + ', $components) : 'Basic Pay';
+
+                        // If no specific components selected, default to basic pay
+                        if (empty($components)) {
+                            $payBasisAmount = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+                        }
                     }
 
-                    $payBasisName = !empty($components) ? implode(' + ', $components) : 'Basic Pay';
+                    // Apply salary cap if set
+                    $cappedAmount = $payBasisAmount;
+                    if ($setting->salary_cap && $payBasisAmount > $setting->salary_cap) {
+                        $cappedAmount = $setting->salary_cap;
+                        $payBasisName .= ' (capped at ₱' . number_format($setting->salary_cap, 2) . ')';
+                    }
 
-                    // If no specific components selected, default to basic pay
-                    if (empty($components)) {
-                        $payBasisAmount = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+                    $amount = $setting->calculateDeduction(
+                        $taxableIncomeForDeductions, // Use taxable income (with allowances/bonuses) instead of just basic pay components
+                        $detail->overtime_pay ?? 0,
+                        $detail->bonuses ?? 0,
+                        $detail->allowances ?? 0,
+                        $detail->gross_pay ?? 0,
+                        null, // taxableIncome
+                        null, // netPay
+                        $employee->basic_salary, // monthlyBasicSalary
+                        $payFrequency // Add pay frequency parameter
+                    );
+
+                    if ($amount > 0) {
+                        $breakdown[] = [
+                            'name' => $setting->name,
+                            'code' => $setting->code ?? strtolower(str_replace(' ', '_', $setting->name)),
+                            'amount' => round($amount, 2), // Round to 2 decimal places
+                            'type' => $setting->type ?? 'government',
+                            'calculation_type' => $setting->calculation_type,
+                            'pay_basis' => $payBasisName,
+                            'pay_basis_amount' => round($cappedAmount, 2) // Round pay basis amount
+                        ];
+                        $governmentTotal += $amount;
                     }
                 }
+            }
 
-                // Apply salary cap if set
-                $cappedAmount = $payBasisAmount;
-                if ($setting->salary_cap && $payBasisAmount > $setting->salary_cap) {
-                    $cappedAmount = $setting->salary_cap;
-                    $payBasisName .= ' (capped at ₱' . number_format($setting->salary_cap, 2) . ')';
-                }
+            // Second pass: Calculate withholding tax deductions
+            // Withholding tax is calculated on the taxable income BEFORE government deductions
+            foreach ($deductionSettings as $setting) {
+                if ($setting->tax_table_type === 'withholding_tax') {
+                    $amount = $setting->calculateDeduction(
+                        $taxableIncomeForDeductions, // basicPay
+                        $detail->overtime_pay ?? 0,
+                        $detail->bonuses ?? 0,
+                        $detail->allowances ?? 0,
+                        $detail->gross_pay ?? 0,
+                        $taxableIncomeForDeductions, // Use the same taxable income - withholding tax is not calculated after government deductions
+                        null, // netPay
+                        $employee->basic_salary, // monthlyBasicSalary
+                        $payFrequency // Add pay frequency parameter
+                    );
 
-                $amount = $setting->calculateDeduction(
-                    $taxableIncomeForDeductions, // Use taxable income (with allowances/bonuses) instead of just basic pay components
-                    $detail->overtime_pay ?? 0,
-                    $detail->bonuses ?? 0,
-                    $detail->allowances ?? 0,
-                    $detail->gross_pay ?? 0,
-                    null, // taxableIncome
-                    null, // netPay
-                    $employee->basic_salary // monthlyBasicSalary
-                );
-
-                if ($amount > 0) {
-                    $breakdown[] = [
-                        'name' => $setting->name,
-                        'code' => $setting->code ?? strtolower(str_replace(' ', '_', $setting->name)),
-                        'amount' => $amount,
-                        'type' => $setting->type ?? 'government',
-                        'calculation_type' => $setting->calculation_type,
-                        'pay_basis' => $payBasisName,
-                        'pay_basis_amount' => $cappedAmount
-                    ];
+                    if ($amount > 0) {
+                        $breakdown[] = [
+                            'name' => $setting->name,
+                            'code' => $setting->code ?? strtolower(str_replace(' ', '_', $setting->name)),
+                            'amount' => round($amount, 2), // Round to 2 decimal places
+                            'type' => $setting->type ?? 'government',
+                            'calculation_type' => $setting->calculation_type,
+                            'pay_basis' => 'taxableincome', // Match other deductions' pay_basis format
+                            'pay_basis_amount' => round($taxableIncomeForDeductions, 2) // Use same as other deductions for consistency, rounded
+                        ];
+                    }
                 }
             }
         } else {

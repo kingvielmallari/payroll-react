@@ -706,10 +706,11 @@ function showTaxTableModal(tableType) {
             break;
             
         case 'withholding_tax':
-            title = 'BIR Withholding Tax Table (Semi-Monthly) 2023 onwards';
+            title = 'BIR Withholding Tax Table (All Pay Frequencies) 2023 onwards';
             content = `
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <h4 class="font-semibold text-lg mb-4">Semi-Monthly Brackets</h4>
+                    <table class="min-w-full divide-y divide-gray-200 text-sm mb-6">
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Compensation Range</th>
@@ -726,8 +727,9 @@ function showTaxTableModal(tableType) {
                             <tr><td class="px-3 py-2">₱333,333 and above</td><td class="px-3 py-2">35%</td><td class="px-3 py-2">₱91,770.70 +35% over ₱333,333</td></tr>
                         </tbody>
                     </table>
-                    <div class="mt-4 p-3 bg-yellow-50 rounded-md">
-                        <p class="text-sm text-yellow-800"><strong>Note:</strong> This applies to taxable income (gross pay minus SSS, PhilHealth, and Pag-IBIG contributions)</p>
+                    <div class="mt-4 p-3 bg-blue-50 rounded-md">
+                        <p class="text-sm text-blue-800"><strong>Auto-Detection:</strong> Pay frequency is automatically detected from payroll period (Daily, Weekly, Semi-Monthly, Monthly)</p>
+                        <p class="text-sm text-blue-800 mt-1"><strong>Calculation:</strong> Uses taxable income (gross pay minus SSS, PhilHealth, and Pag-IBIG contributions)</p>
                     </div>
                 </div>
             `;

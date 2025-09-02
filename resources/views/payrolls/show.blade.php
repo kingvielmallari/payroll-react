@@ -165,12 +165,43 @@
                                             // Calculate total gross pay like in the Gross Pay column
                                             $calculatedGrossPayForSummary = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
                                             
+                                            // Calculate taxable income for this detail (same logic as in detail columns)
+                                            $taxableIncomeForSummary = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay;
+                                            if (isset($allowanceBonusSettings) && $allowanceBonusSettings->isNotEmpty()) {
+                                                foreach($allowanceBonusSettings as $abSetting) {
+                                                    if ($abSetting->is_taxable) {
+                                                        $calculatedAllowanceAmount = $abSetting->calculateAmount(
+                                                            $basicPay, $overtimePay, $bonuses, $allowances, $calculatedGrossPayForSummary,
+                                                            null, null, $detail->employee->basic_salary
+                                                        );
+                                                        $taxableIncomeForSummary += $calculatedAllowanceAmount;
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Auto-detect pay frequency from payroll period
+                                            $payFrequency = 'semi_monthly'; // default
+                                            $periodDays = $payroll->period_start->diffInDays($payroll->period_end) + 1;
+                                            if ($periodDays <= 1) {
+                                                $payFrequency = 'daily';
+                                            } elseif ($periodDays <= 7) {
+                                                $payFrequency = 'weekly';
+                                            } elseif ($periodDays <= 16) {
+                                                $payFrequency = 'semi_monthly';
+                                            } else {
+                                                $payFrequency = 'monthly';
+                                            }
+                                            
                                             $calculatedAmount = $setting->calculateDeduction(
                                                 $basicPay, 
                                                 $overtimePay, 
                                                 $bonuses, 
                                                 $allowances, 
-                                                $calculatedGrossPayForSummary  // Use calculated gross pay instead of stored value
+                                                $calculatedGrossPayForSummary, // grossPay
+                                                $taxableIncomeForSummary, // taxableIncome
+                                                null, // netPay
+                                                $detail->employee->basic_salary, // monthlyBasicSalary
+                                                $payFrequency // payFrequency
                                             );
                                             $detailDeductionTotal += $calculatedAmount;
                                         }
@@ -1738,6 +1769,19 @@
                                                             $allowances = $detail->allowances ?? 0;
                                                             $bonuses = $detail->bonuses ?? 0;
                                                             
+                                                            // Auto-detect pay frequency from payroll period
+                                                            $payFrequency = 'semi_monthly'; // default
+                                                            $periodDays = $payroll->period_start->diffInDays($payroll->period_end) + 1;
+                                                            if ($periodDays <= 1) {
+                                                                $payFrequency = 'daily';
+                                                            } elseif ($periodDays <= 7) {
+                                                                $payFrequency = 'weekly';
+                                                            } elseif ($periodDays <= 16) {
+                                                                $payFrequency = 'semi_monthly';
+                                                            } else {
+                                                                $payFrequency = 'monthly';
+                                                            }
+                                                            
                                                             // Use the calculated taxable income from the previous column
                                                             $calculatedAmount = $setting->calculateDeduction(
                                                                 $basicPay, 
@@ -1747,7 +1791,8 @@
                                                                 $grossPayForDeduction,
                                                                 $taxableIncome,  // Pass calculated taxable income
                                                                 null, // netPay (not used for now)
-                                                                $detail->employee->basic_salary // monthlyBasicSalary
+                                                                $detail->employee->basic_salary, // monthlyBasicSalary
+                                                                $payFrequency // Pass auto-detected pay frequency
                                                             );
                                                             $calculatedDeductionTotal += $calculatedAmount;
                                                             
@@ -2060,6 +2105,19 @@
                                                     $allowancesForDeduction = $detail->allowances ?? 0;
                                                     $bonuses = $detail->bonuses ?? 0;
                                                     
+                                                    // Auto-detect pay frequency from payroll period (same logic as deduction column)
+                                                    $payFrequency = 'semi_monthly'; // default
+                                                    $periodDays = $payroll->period_start->diffInDays($payroll->period_end) + 1;
+                                                    if ($periodDays <= 1) {
+                                                        $payFrequency = 'daily';
+                                                    } elseif ($periodDays <= 7) {
+                                                        $payFrequency = 'weekly';
+                                                    } elseif ($periodDays <= 16) {
+                                                        $payFrequency = 'semi_monthly';
+                                                    } else {
+                                                        $payFrequency = 'monthly';
+                                                    }
+                                                    
                                                     $calculatedAmount = $setting->calculateDeduction(
                                                         $basicPayForDeduction, 
                                                         $overtimePayForDeduction, 
@@ -2067,7 +2125,9 @@
                                                         $allowancesForDeduction, 
                                                         $grossPayForDeduction,
                                                         $taxableIncome,  // Pass calculated taxable income
-                                                        null // netPay (not used for now)
+                                                        null, // netPay (not used for now)
+                                                        $detail->employee->basic_salary, // monthlyBasicSalary
+                                                        $payFrequency // Pass auto-detected pay frequency
                                                     );
                                                     $detailDeductionTotal += $calculatedAmount;
                                                 }

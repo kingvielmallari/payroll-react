@@ -460,6 +460,9 @@ class EmployeeController extends Controller
 
         // Only calculate deductions if employee has benefits
         if ($benefitsStatus === 'with_benefits') {
+            // Convert pay schedule to pay frequency
+            $payFrequency = $paySchedule ?? 'semi_monthly';
+
             // Get active government deductions (SSS, PhilHealth, Pag-IBIG)
             $governmentDeductions = \App\Models\DeductionTaxSetting::active()
                 ->where('type', 'government')
@@ -468,7 +471,7 @@ class EmployeeController extends Controller
             $governmentDeductionTotal = 0;
 
             foreach ($governmentDeductions as $setting) {
-                $amount = $setting->calculateDeduction($basicPay, $overtime, $bonus, $allowances, $grossPay);
+                $amount = $setting->calculateDeduction($basicPay, $overtime, $bonus, $allowances, $grossPay, null, null, $salary, $payFrequency);
 
                 if ($amount > 0) {
                     $deductions[] = [
@@ -492,7 +495,7 @@ class EmployeeController extends Controller
                 ->get();
 
             foreach ($taxDeductions as $setting) {
-                $amount = $setting->calculateDeduction($basicPay, $overtime, $bonus, $allowances, $grossPay, $taxableIncome);
+                $amount = $setting->calculateDeduction($basicPay, $overtime, $bonus, $allowances, $grossPay, $taxableIncome, null, $salary, $payFrequency);
 
                 if ($amount > 0) {
                     $deductions[] = [

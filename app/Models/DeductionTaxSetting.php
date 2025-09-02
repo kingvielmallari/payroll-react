@@ -18,6 +18,7 @@ class DeductionTaxSetting extends Model
         'category',
         'calculation_type',
         'tax_table_type',
+        'pay_frequency',
         'rate_percentage',
         'fixed_amount',
         'bracket_rates',
@@ -92,7 +93,7 @@ class DeductionTaxSetting extends Model
     /**
      * Calculate deduction amount based on salary components
      */
-    public function calculateDeduction($basicPay = 0, $overtime = 0, $bonus = 0, $allowances = 0, $grossPay = null, $taxableIncome = null, $netPay = null, $monthlyBasicSalary = null)
+    public function calculateDeduction($basicPay = 0, $overtime = 0, $bonus = 0, $allowances = 0, $grossPay = null, $taxableIncome = null, $netPay = null, $monthlyBasicSalary = null, $payFrequency = 'semi_monthly')
     {
         // Calculate gross pay if not provided
         if ($grossPay === null) {
@@ -132,9 +133,9 @@ class DeductionTaxSetting extends Model
                 if ($this->tax_table_type) {
                     // For PhilHealth and Pag-IBIG, always use monthly basic salary regardless of pay basis
                     if (($this->tax_table_type === 'philhealth' || $this->tax_table_type === 'pagibig') && $monthlyBasicSalary) {
-                        $deduction = $this->calculateTaxTableDeduction($monthlyBasicSalary, $this->tax_table_type);
+                        $deduction = $this->calculateTaxTableDeduction($monthlyBasicSalary, $this->tax_table_type, $payFrequency);
                     } else {
-                        $deduction = $this->calculateTaxTableDeduction($applicableSalary, $this->tax_table_type);
+                        $deduction = $this->calculateTaxTableDeduction($applicableSalary, $this->tax_table_type, $payFrequency);
                     }
                 } else {
                     $deduction = $this->calculateBracketDeduction($applicableSalary);
@@ -181,7 +182,7 @@ class DeductionTaxSetting extends Model
     /**
      * Calculate tax table-based deduction (SSS, PhilHealth, Pag-IBIG, Withholding Tax)
      */
-    private function calculateTaxTableDeduction($amount, $type)
+    private function calculateTaxTableDeduction($amount, $type, $payFrequency = 'semi_monthly')
     {
         switch ($type) {
             case 'sss':
@@ -191,7 +192,7 @@ class DeductionTaxSetting extends Model
             case 'pagibig':
                 return $this->calculatePagibigDeduction($amount);
             case 'withholding_tax':
-                return $this->calculateWithholdingTaxDeduction($amount);
+                return $this->calculateWithholdingTaxDeduction($amount, $payFrequency);
             default:
                 return 0;
         }
@@ -277,31 +278,13 @@ class DeductionTaxSetting extends Model
     }
 
     /**
-     * Calculate BIR Withholding Tax deduction
+     * Calculate BIR Withholding Tax deduction using the new WithholdingTaxTable
      */
-    private function calculateWithholdingTaxDeduction($taxableIncome)
+    private function calculateWithholdingTaxDeduction($taxableIncome, $payFrequency = 'semi_monthly')
     {
-        // BIR Withholding Tax Table for 2023 onwards
-        // Assuming semi-monthly pay period
-        $taxBrackets = [
-            ['min' => 0, 'max' => 10417, 'rate' => 0, 'baseAmount' => 0],
-            ['min' => 10417.01, 'max' => 16666, 'rate' => 15, 'baseAmount' => 0],
-            ['min' => 16666.01, 'max' => 33332, 'rate' => 20, 'baseAmount' => 937.50],
-            ['min' => 33332.01, 'max' => 83332, 'rate' => 25, 'baseAmount' => 4270.70],
-            ['min' => 83332.01, 'max' => 333332, 'rate' => 30, 'baseAmount' => 16770.70],
-            ['min' => 333332.01, 'max' => PHP_INT_MAX, 'rate' => 35, 'baseAmount' => 91770.70],
-        ];
-
-        foreach ($taxBrackets as $bracket) {
-            if ($taxableIncome >= $bracket['min'] && $taxableIncome <= $bracket['max']) {
-                $excess = max(0, $taxableIncome - $bracket['min']);
-                return $bracket['baseAmount'] + ($excess * ($bracket['rate'] / 100));
-            }
-        }
-
-        return 0;
+        // Use the WithholdingTaxTable model for calculation
+        return \App\Models\WithholdingTaxTable::calculateWithholdingTax($taxableIncome, $payFrequency);
     }
-
     /**
      * Calculate employer share
      */
