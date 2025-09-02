@@ -624,27 +624,85 @@ function showTaxTableModal(tableType) {
             break;
             
         case 'pagibig':
-            title = 'Pag-IBIG Contribution Table 2024-2025';
+            title = 'Pag-IBIG Contribution Table 2025';
+            // Show loading message
             content = `
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Salary Range</th>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Employee Share</th>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Employer Share</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <tr><td class="px-3 py-2">₱1,500 and below</td><td class="px-3 py-2">1%</td><td class="px-3 py-2">2%</td></tr>
-                            <tr><td class="px-3 py-2">Over ₱1,500</td><td class="px-3 py-2">2%</td><td class="px-3 py-2">2%</td></tr>
-                        </tbody>
-                    </table>
-                    <div class="mt-4 p-3 bg-blue-50 rounded-md">
-                        <p class="text-sm text-blue-800"><strong>Note:</strong> Maximum contribution is ₱200.00 for employee and ₱200.00 for employer</p>
-                    </div>
+                <div class="text-center py-8">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p class="mt-2 text-gray-600">Loading Pag-IBIG tax table...</p>
                 </div>
             `;
+            
+            // Set initial content while loading
+            modalTitle.textContent = title;
+            modalContent.innerHTML = content;
+            modal.classList.remove('hidden');
+            
+            // Fetch data from API
+            fetch('{{ route("settings.deductions.pagibig.tax-table") }}')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let tableRows = '';
+                        data.data.forEach(item => {
+                            let salaryRange = '';
+                            if (item.range_end === null || item.range_end >= 999999) {
+                                salaryRange = `₱${parseFloat(item.range_start).toLocaleString('en-PH', {minimumFractionDigits: 2})} - Above`;
+                            } else {
+                                salaryRange = `₱${parseFloat(item.range_start).toLocaleString('en-PH', {minimumFractionDigits: 2})} - ₱${parseFloat(item.range_end).toLocaleString('en-PH', {minimumFractionDigits: 2})}`;
+                            }
+                            
+                            tableRows += `
+                                <tr>
+                                    <td class="px-3 py-2">${salaryRange}</td>
+                                    <td class="px-3 py-2">${item.employee_share}</td>
+                                    <td class="px-3 py-2">${item.employer_share}</td>
+                                    <td class="px-3 py-2">${item.total_contribution}</td>
+                                    <td class="px-3 py-2">₱${parseFloat(item.max_contribution).toLocaleString('en-PH', {minimumFractionDigits: 2})}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        const dynamicContent = `
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Salary Range</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">EE Share</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">ER Share</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Max Contribution</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        ${tableRows}
+                                    </tbody>
+                                </table>
+                                <div class="mt-4 p-3 bg-blue-50 rounded-md">
+                                    <p class="text-sm text-blue-800"><strong>Note:</strong> Based on Monthly Basic Salary. Maximum contribution is ₱200.00 for both employee and employer</p>
+                                </div>
+                            </div>
+                        `;
+                        
+                        modalContent.innerHTML = dynamicContent;
+                    } else {
+                        modalContent.innerHTML = `
+                            <div class="text-center py-8">
+                                <p class="text-red-600">Error loading Pag-IBIG tax table data.</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching Pag-IBIG tax table:', error);
+                    modalContent.innerHTML = `
+                        <div class="text-center py-8">
+                            <p class="text-red-600">Error loading Pag-IBIG tax table data.</p>
+                        </div>
+                    `;
+                });
+            return; // Early return to avoid setting content again
             break;
             
         case 'withholding_tax':

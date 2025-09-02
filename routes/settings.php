@@ -35,6 +35,8 @@ Route::middleware(['auth', 'verified'])->prefix('settings')->name('settings.')->
         ->name('deductions.philhealth.tax-table');
     Route::get('deductions/sss/tax-table', [DeductionTaxSettingController::class, 'getSssTaxTable'])
         ->name('deductions.sss.tax-table');
+    Route::get('deductions/pagibig/tax-table', [DeductionTaxSettingController::class, 'getPagibigTaxTable'])
+        ->name('deductions.pagibig.tax-table');
 
     // Allowance/Bonus Settings
     Route::resource('allowances', AllowanceBonusSettingController::class);

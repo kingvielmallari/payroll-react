@@ -130,8 +130,8 @@ class DeductionTaxSetting extends Model
 
             case 'bracket':
                 if ($this->tax_table_type) {
-                    // For PhilHealth, always use monthly basic salary regardless of pay basis
-                    if ($this->tax_table_type === 'philhealth' && $monthlyBasicSalary) {
+                    // For PhilHealth and Pag-IBIG, always use monthly basic salary regardless of pay basis
+                    if (($this->tax_table_type === 'philhealth' || $this->tax_table_type === 'pagibig') && $monthlyBasicSalary) {
                         $deduction = $this->calculateTaxTableDeduction($monthlyBasicSalary, $this->tax_table_type);
                     } else {
                         $deduction = $this->calculateTaxTableDeduction($applicableSalary, $this->tax_table_type);
@@ -253,28 +253,25 @@ class DeductionTaxSetting extends Model
     }
 
     /**
-     * Calculate Pag-IBIG deduction based on sharing setting
+     * Calculate Pag-IBIG deduction using the Pag-IBIG tax table
      */
     private function calculatePagibigDeduction($salary)
     {
-        // Pag-IBIG rates for 2024-2025
-        $employeeRate = 0.02; // 2%
-        $employerRate = 0.02; // 2%
+        // Use the PagibigTaxTable model for calculation
+        $contribution = \App\Models\PagibigTaxTable::calculateContribution($salary);
 
-        // For salaries ≤ ₱1,500: 1% employee, 2% employer
-        if ($salary <= 1500) {
-            $employeeRate = 0.01; // 1%
+        if (!$contribution) {
+            return 0; // No contribution required (e.g., salary below minimum)
         }
 
-        // Calculate employee share with max of ₱200
-        $employeeShare = min($salary * $employeeRate, 200);
+        $employeeShare = $contribution['employee_share'];
+        $employerShare = $contribution['employer_share'];
 
         if ($this->share_with_employer) {
-            // If shared with employer, only deduct employee share
+            // If shared with employer, only deduct employee share from employee salary
             return $employeeShare;
         } else {
-            // If not shared, deduct both employee and employer shares from employee
-            $employerShare = min($salary * $employerRate, 200);
+            // If not shared, deduct both employee and employer shares from employee salary
             return $employeeShare + $employerShare;
         }
     }
