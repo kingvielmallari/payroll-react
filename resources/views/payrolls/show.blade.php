@@ -2607,9 +2607,38 @@
                                                             
                                                             $clockHoursForRegular = $baseWorkingHours; // Use dynamic overtime threshold
                                                             
-                                                            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                                                                // Add break duration to working hours to get total clock hours
-                                                                $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
+                                                            // Calculate break duration - prioritize actual break times over scheduled
+                                                            $breakDuration = 0;
+                                                            
+                                                            if (
+                                                                $timeLog->break_in && $timeLog->break_out &&
+                                                                $timeLog->break_in !== null && $timeLog->break_out !== null &&
+                                                                $timeLog->break_in !== '' && $timeLog->break_out !== ''
+                                                            ) {
+                                                                // Use actual logged break duration when available
+                                                                try {
+                                                                    $actualBreakIn = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_in)->format('H:i:s'));
+                                                                    $actualBreakOut = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_out)->format('H:i:s'));
+                                                                    
+                                                                    if ($actualBreakOut->gt($actualBreakIn)) {
+                                                                        $breakDuration = $actualBreakIn->diffInHours($actualBreakOut, true); // true for float result
+                                                                    }
+                                                                } catch (Exception $e) {
+                                                                    // If actual break parsing fails, fall back to scheduled break
+                                                                    if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                        $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                                    }
+                                                                }
+                                                            } else if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
+                                                                // Use break duration minutes (flexible timing)
+                                                                $breakDuration = $timeSchedule->break_duration_minutes / 60; // Convert minutes to hours
+                                                            } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                // Use fixed break times (when no actual break logged)
+                                                                $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                            }
+                                                            
+                                                            // Add break duration to working hours to get total clock hours
+                                                            if ($breakDuration > 0) {
                                                                 $clockHoursForRegular = $baseWorkingHours + $breakDuration; // dynamic working hours + break time
                                                             }
                                                             
@@ -2751,9 +2780,40 @@
                                                                 $baseWorkingHours = $overtimeThresholdMinutes / 60;
                                                                 
                                                                 $clockHoursForRegular = $baseWorkingHours;
-                                                                if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                                                                    $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                                                                    $clockHoursForRegular = $baseWorkingHours + $breakDuration;
+                                                                
+                                                                // Calculate break duration - prioritize actual break times over scheduled
+                                                                $breakDuration = 0;
+                                                                
+                                                                if (
+                                                                    $timeLog->break_in && $timeLog->break_out &&
+                                                                    $timeLog->break_in !== null && $timeLog->break_out !== null &&
+                                                                    $timeLog->break_in !== '' && $timeLog->break_out !== ''
+                                                                ) {
+                                                                    // Use actual logged break duration when available
+                                                                    try {
+                                                                        $actualBreakIn = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_in)->format('H:i:s'));
+                                                                        $actualBreakOut = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_out)->format('H:i:s'));
+                                                                        
+                                                                        if ($actualBreakOut->gt($actualBreakIn)) {
+                                                                            $breakDuration = $actualBreakIn->diffInHours($actualBreakOut, true); // true for float result
+                                                                        }
+                                                                    } catch (Exception $e) {
+                                                                        // If actual break parsing fails, fall back to scheduled break
+                                                                        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                            $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                                        }
+                                                                    }
+                                                                } else if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
+                                                                    // Use break duration minutes (flexible timing)
+                                                                    $breakDuration = $timeSchedule->break_duration_minutes / 60; // Convert minutes to hours
+                                                                } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                    // Use fixed break times (when no actual break logged)
+                                                                    $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                                }
+                                                                
+                                                                // Add break duration to working hours to get total clock hours
+                                                                if ($breakDuration > 0) {
+                                                                    $clockHoursForRegular = $baseWorkingHours + $breakDuration; // dynamic working hours + break time
                                                                 }
                                                                 
                                                                 $regularWorkEnd = $workStart->copy()->addHours($clockHoursForRegular);
@@ -2840,18 +2900,34 @@
                                                             $employee = $detail->employee;
                                                             $timeSchedule = $employee->timeSchedule ?? null;
                                                             
-                                                            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                                                                $defaultBreakStart = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_start->format('H:i'));
-                                                                $defaultBreakEnd = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_end->format('H:i'));
-                                                                $workStart = \Carbon\Carbon::parse($timeLog->time_in);
-                                                                $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
+                                                            // Only show break details for fixed break schedules, not for break duration schedules
+                                                            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end && 
+                                                                (!$timeSchedule->break_duration_minutes || $timeSchedule->break_duration_minutes == 0)) {
                                                                 
-                                                                // Only show default break time if employee was present during the scheduled break period
-                                                                if ($defaultBreakStart >= $workStart && $defaultBreakEnd <= $workEnd) {
-                                                                    $breakHours = $defaultBreakEnd->diffInMinutes($defaultBreakStart) / 60;
-                                                                    $showBreakTime = true;
-                                                                    $breakDisplayStart = $defaultBreakStart->format('g:i A');
-                                                                    $breakDisplayEnd = $defaultBreakEnd->format('g:i A');
+                                                                try {
+                                                                    // Safely parse break times - handle both string and Carbon object formats
+                                                                    $breakStartTime = is_string($timeSchedule->break_start) 
+                                                                        ? $timeSchedule->break_start 
+                                                                        : $timeSchedule->break_start->format('H:i:s');
+                                                                    $breakEndTime = is_string($timeSchedule->break_end) 
+                                                                        ? $timeSchedule->break_end 
+                                                                        : $timeSchedule->break_end->format('H:i:s');
+                                                                    
+                                                                    $defaultBreakStart = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $breakStartTime);
+                                                                    $defaultBreakEnd = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $breakEndTime);
+                                                                    $workStart = \Carbon\Carbon::parse($timeLog->time_in);
+                                                                    $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
+                                                                    
+                                                                    // Only show default break time if employee was present during the scheduled break period
+                                                                    if ($defaultBreakStart >= $workStart && $defaultBreakEnd <= $workEnd) {
+                                                                        $breakHours = $defaultBreakEnd->diffInMinutes($defaultBreakStart) / 60;
+                                                                        $showBreakTime = true;
+                                                                        $breakDisplayStart = $defaultBreakStart->format('g:i A');
+                                                                        $breakDisplayEnd = $defaultBreakEnd->format('g:i A');
+                                                                    }
+                                                                } catch (\Exception $e) {
+                                                                    // If parsing fails, don't show break time
+                                                                    $showBreakTime = false;
                                                                 }
                                                             }
                                                         }
@@ -2952,9 +3028,40 @@
                                                                 $baseWorkingHours = $overtimeThresholdMinutes / 60;
                                                                 
                                                                 $clockHoursForRegular = $baseWorkingHours;
-                                                                if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                                                                    $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                                                                    $clockHoursForRegular = $baseWorkingHours + $breakDuration;
+                                                                
+                                                                // Calculate break duration - prioritize actual break times over scheduled
+                                                                $breakDuration = 0;
+                                                                
+                                                                if (
+                                                                    $timeLog->break_in && $timeLog->break_out &&
+                                                                    $timeLog->break_in !== null && $timeLog->break_out !== null &&
+                                                                    $timeLog->break_in !== '' && $timeLog->break_out !== ''
+                                                                ) {
+                                                                    // Use actual logged break duration when available
+                                                                    try {
+                                                                        $actualBreakIn = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_in)->format('H:i:s'));
+                                                                        $actualBreakOut = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_out)->format('H:i:s'));
+                                                                        
+                                                                        if ($actualBreakOut->gt($actualBreakIn)) {
+                                                                            $breakDuration = $actualBreakIn->diffInHours($actualBreakOut, true); // true for float result
+                                                                        }
+                                                                    } catch (Exception $e) {
+                                                                        // If actual break parsing fails, fall back to scheduled break
+                                                                        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                            $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                                        }
+                                                                    }
+                                                                } else if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
+                                                                    // Use break duration minutes (flexible timing)
+                                                                    $breakDuration = $timeSchedule->break_duration_minutes / 60; // Convert minutes to hours
+                                                                } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                    // Use fixed break times (when no actual break logged)
+                                                                    $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                                }
+                                                                
+                                                                // Add break duration to working hours to get total clock hours
+                                                                if ($breakDuration > 0) {
+                                                                    $clockHoursForRegular = $baseWorkingHours + $breakDuration; // dynamic working hours + break time
                                                                 }
                                                                 
                                                                 // Use same logic as regular hours period calculation
@@ -3057,9 +3164,40 @@
                                                                     $baseWorkingHours = $overtimeThresholdMinutes / 60;
                                                                     
                                                                     $clockHoursForRegular = $baseWorkingHours;
-                                                                    if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                                                                        $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                                                                        $clockHoursForRegular = $baseWorkingHours + $breakDuration;
+                                                                    
+                                                                    // Calculate break duration - prioritize actual break times over scheduled
+                                                                    $breakDuration = 0;
+                                                                    
+                                                                    if (
+                                                                        $timeLog->break_in && $timeLog->break_out &&
+                                                                        $timeLog->break_in !== null && $timeLog->break_out !== null &&
+                                                                        $timeLog->break_in !== '' && $timeLog->break_out !== ''
+                                                                    ) {
+                                                                        // Use actual logged break duration when available
+                                                                        try {
+                                                                            $actualBreakIn = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_in)->format('H:i:s'));
+                                                                            $actualBreakOut = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_out)->format('H:i:s'));
+                                                                            
+                                                                            if ($actualBreakOut->gt($actualBreakIn)) {
+                                                                                $breakDuration = $actualBreakIn->diffInHours($actualBreakOut, true); // true for float result
+                                                                            }
+                                                                        } catch (Exception $e) {
+                                                                            // If actual break parsing fails, fall back to scheduled break
+                                                                            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                                $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                                            }
+                                                                        }
+                                                                    } else if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
+                                                                        // Use break duration minutes (flexible timing)
+                                                                        $breakDuration = $timeSchedule->break_duration_minutes / 60; // Convert minutes to hours
+                                                                    } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                        // Use fixed break times (when no actual break logged)
+                                                                        $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                                    }
+                                                                    
+                                                                    // Add break duration to working hours to get total clock hours
+                                                                    if ($breakDuration > 0) {
+                                                                        $clockHoursForRegular = $baseWorkingHours + $breakDuration; // dynamic working hours + break time
                                                                     }
                                                                     
                                                                     $scheduledStart = $timeSchedule ? 
@@ -3128,9 +3266,40 @@
                                                                 $baseWorkingHours = $overtimeThresholdMinutes / 60;
                                                                 
                                                                 $clockHoursForRegular = $baseWorkingHours;
-                                                                if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                                                                    $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                                                                    $clockHoursForRegular = $baseWorkingHours + $breakDuration;
+                                                                
+                                                                // Calculate break duration - prioritize actual break times over scheduled
+                                                                $breakDuration = 0;
+                                                                
+                                                                if (
+                                                                    $timeLog->break_in && $timeLog->break_out &&
+                                                                    $timeLog->break_in !== null && $timeLog->break_out !== null &&
+                                                                    $timeLog->break_in !== '' && $timeLog->break_out !== ''
+                                                                ) {
+                                                                    // Use actual logged break duration when available
+                                                                    try {
+                                                                        $actualBreakIn = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_in)->format('H:i:s'));
+                                                                        $actualBreakOut = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->break_out)->format('H:i:s'));
+                                                                        
+                                                                        if ($actualBreakOut->gt($actualBreakIn)) {
+                                                                            $breakDuration = $actualBreakIn->diffInHours($actualBreakOut, true); // true for float result
+                                                                        }
+                                                                    } catch (Exception $e) {
+                                                                        // If actual break parsing fails, fall back to scheduled break
+                                                                        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                            $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                                        }
+                                                                    }
+                                                                } else if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
+                                                                    // Use break duration minutes (flexible timing)
+                                                                    $breakDuration = $timeSchedule->break_duration_minutes / 60; // Convert minutes to hours
+                                                                } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                                                                    // Use fixed break times (when no actual break logged)
+                                                                    $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end, true);
+                                                                }
+                                                                
+                                                                // Add break duration to working hours to get total clock hours
+                                                                if ($breakDuration > 0) {
+                                                                    $clockHoursForRegular = $baseWorkingHours + $breakDuration; // dynamic working hours + break time
                                                                 }
                                                                 
                                                                 // Use same logic as regular hours period calculation

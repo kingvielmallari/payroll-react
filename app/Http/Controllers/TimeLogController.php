@@ -1787,75 +1787,111 @@ class TimeLogController extends Controller
             // If beyond grace period, use actual time out
         }
 
-        // STEP 2: Calculate working hours by skipping break period (no deduction, just skip)
+        // STEP 2: Calculate working hours with proper break handling
+        // ENFORCE TIME SCHEDULE BREAK TYPE PRIORITY - ignore conflicting time log data
         $totalWorkingMinutes = 0;
         $adjustedWorkEndTime = $workEndTime;
 
-        if (
-            $timeLog->break_in && $timeLog->break_out &&
-            $timeLog->break_in !== null && $timeLog->break_out !== null &&
-            $timeLog->break_in !== '' && $timeLog->break_out !== ''
-        ) {
-            // Use actual logged break times when available
-            try {
-                if (is_string($timeLog->break_in)) {
-                    $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
-                } else {
-                    $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in->format('H:i:s'));
-                }
+        // Determine break type from employee's time schedule (ignore time log break data that conflicts)
+        $breakType = 'none'; // Default: no break
 
-                if (is_string($timeLog->break_out)) {
-                    $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
-                } else {
-                    $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out->format('H:i:s'));
-                }
+        if ($timeSchedule) {
+            // Priority 1: Check if it's explicitly set to "no break" (neither break duration nor fixed times)
+            $hasBreakDuration = $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0;
+            $hasFixedBreakTimes = $timeSchedule->break_start && $timeSchedule->break_end;
 
-                if ($breakOut->gt($breakIn)) {
-                    // Calculate: (work start to break start) + (break end to work end)
-                    $beforeBreak = 0;
-                    $afterBreak = 0;
+            if ($hasBreakDuration && $hasFixedBreakTimes) {
+                // Both are set - prioritize break duration (flexible timing)
+                $breakType = 'duration';
+            } else if ($hasBreakDuration) {
+                // Only break duration is set
+                $breakType = 'duration';
+            } else if ($hasFixedBreakTimes) {
+                // Only fixed break times are set
+                $breakType = 'fixed';
+            }
+            // If neither is set, breakType remains 'none'
+        }
 
-                    if ($workStartTime->lt($breakIn)) {
-                        $beforeBreak = $workStartTime->diffInMinutes(min($breakIn, $workEndTime));
+        // Apply break calculation based on schedule type (ignore conflicting time log data)
+        if ($breakType === 'duration') {
+            // Break Duration (flexible timing) - IGNORE break_in/out, only use break_duration_minutes
+            $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
+            $totalWorkingMinutes -= $timeSchedule->break_duration_minutes;
+            $totalWorkingMinutes = max(0, $totalWorkingMinutes); // Ensure not negative
+
+        } else if ($breakType === 'fixed') {
+            // Fixed Break Times - use actual break_in/out if available, otherwise use scheduled times
+            $useActualBreakTimes = (
+                $timeLog->break_in && $timeLog->break_out &&
+                $timeLog->break_in !== null && $timeLog->break_out !== null &&
+                $timeLog->break_in !== '' && $timeLog->break_out !== ''
+            );
+
+            if ($useActualBreakTimes) {
+                // Use actual logged break times when available for fixed break schedules
+                try {
+                    if (is_string($timeLog->break_in)) {
+                        $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
+                    } else {
+                        $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in->format('H:i:s'));
                     }
 
-                    if ($workEndTime->gt($breakOut)) {
-                        $afterBreak = max($breakOut, $workStartTime)->diffInMinutes($workEndTime);
+                    if (is_string($timeLog->break_out)) {
+                        $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
+                    } else {
+                        $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out->format('H:i:s'));
                     }
 
-                    $totalWorkingMinutes = $beforeBreak + $afterBreak;
-                } else {
-                    // Invalid break times, just calculate normal work time
-                    $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
+                    if ($breakOut->gt($breakIn)) {
+                        // Calculate: (work start to break start) + (break end to work end)
+                        $beforeBreak = 0;
+                        $afterBreak = 0;
+
+                        if ($workStartTime->lt($breakIn)) {
+                            $beforeBreak = $workStartTime->diffInMinutes(min($breakIn, $workEndTime));
+                        }
+
+                        if ($workEndTime->gt($breakOut)) {
+                            $afterBreak = max($breakOut, $workStartTime)->diffInMinutes($workEndTime);
+                        }
+
+                        $totalWorkingMinutes = $beforeBreak + $afterBreak;
+                    } else {
+                        // Invalid actual break times, fall back to scheduled break times
+                        $useActualBreakTimes = false;
+                    }
+                } catch (Exception $e) {
+                    // If break parsing fails, fall back to scheduled break times
+                    $useActualBreakTimes = false;
                 }
-            } catch (Exception $e) {
-                // If break parsing fails, just calculate normal work time
-                $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
-            }
-        } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            // Use scheduled break period and skip it completely
-            $breakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
-            $breakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
-
-            // Calculate: (work start to break start) + (break end to work end)
-            $beforeBreak = 0;
-            $afterBreak = 0;
-
-            // Time worked before break period
-            if ($workStartTime->lt($breakStart)) {
-                $beforeBreakEnd = $workEndTime->lt($breakStart) ? $workEndTime : $breakStart;
-                $beforeBreak = $workStartTime->diffInMinutes($beforeBreakEnd);
             }
 
-            // Time worked after break period  
-            if ($workEndTime->gt($breakEnd)) {
-                $afterBreakStart = $workStartTime->gt($breakEnd) ? $workStartTime : $breakEnd;
-                $afterBreak = $afterBreakStart->diffInMinutes($workEndTime);
-            }
+            if (!$useActualBreakTimes) {
+                // Use scheduled fixed break period - skip the break window completely
+                $breakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
+                $breakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
 
-            $totalWorkingMinutes = $beforeBreak + $afterBreak;
+                // Calculate: (work start to break start) + (break end to work end)
+                $beforeBreak = 0;
+                $afterBreak = 0;
+
+                // Time worked before break period
+                if ($workStartTime->lt($breakStart)) {
+                    $beforeBreakEnd = $workEndTime->lt($breakStart) ? $workEndTime : $breakStart;
+                    $beforeBreak = $workStartTime->diffInMinutes($beforeBreakEnd);
+                }
+
+                // Time worked after break period  
+                if ($workEndTime->gt($breakEnd)) {
+                    $afterBreakStart = $workStartTime->gt($breakEnd) ? $workStartTime : $breakEnd;
+                    $afterBreak = $afterBreakStart->diffInMinutes($workEndTime);
+                }
+
+                $totalWorkingMinutes = $beforeBreak + $afterBreak;
+            }
         } else {
-            // No break period, calculate normal work time
+            // No Break Period - IGNORE all break data (break_in/out and break_duration_minutes)
             $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
         }
 
@@ -1878,9 +1914,15 @@ class TimeLogController extends Controller
 
         // STEP 5: Calculate standard work hours (scheduled hours minus break)
         $standardWorkMinutes = $schedStart->diffInMinutes($schedEnd);
-        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
-            $standardWorkMinutes -= $scheduledBreakMinutes;
+        if ($timeSchedule) {
+            if ($timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
+                // For break duration, subtract the fixed minutes
+                $standardWorkMinutes -= $timeSchedule->break_duration_minutes;
+            } else if ($timeSchedule->break_start && $timeSchedule->break_end) {
+                // For fixed break times, calculate the break duration
+                $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                $standardWorkMinutes -= $scheduledBreakMinutes;
+            }
         }
         $standardHours = max(0, $standardWorkMinutes / 60);
 
@@ -1907,11 +1949,52 @@ class TimeLogController extends Controller
             // Calculate when overtime period starts (after completing regular hours boundary)
             $overtimeStartTime = $workStartTime->copy()->addHours($regularHoursBoundary);
 
-            // If break was scheduled and taken, adjust the overtime start time
-            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
-                $overtimeStartTime->addMinutes($scheduledBreakMinutes);
+            // Adjust overtime start time for break duration - ENFORCE SCHEDULE BREAK TYPE PRIORITY
+            if ($breakType === 'duration') {
+                // Break Duration (flexible timing) - use break_duration_minutes
+                $overtimeStartTime->addMinutes($timeSchedule->break_duration_minutes);
+            } else if ($breakType === 'fixed') {
+                // Fixed Break Times - use actual break_in/out if available, otherwise use scheduled times
+                $useActualBreakTimes = (
+                    $timeLog->break_in && $timeLog->break_out &&
+                    $timeLog->break_in !== null && $timeLog->break_out !== null &&
+                    $timeLog->break_in !== '' && $timeLog->break_out !== ''
+                );
+
+                if ($useActualBreakTimes) {
+                    try {
+                        if (is_string($timeLog->break_in)) {
+                            $actualBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
+                        } else {
+                            $actualBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in->format('H:i:s'));
+                        }
+
+                        if (is_string($timeLog->break_out)) {
+                            $actualBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
+                        } else {
+                            $actualBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out->format('H:i:s'));
+                        }
+
+                        if ($actualBreakOut->gt($actualBreakIn)) {
+                            $actualBreakMinutes = $actualBreakIn->diffInMinutes($actualBreakOut);
+                            $overtimeStartTime->addMinutes($actualBreakMinutes);
+                        } else {
+                            // Invalid actual break times, fall back to scheduled break times
+                            $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                            $overtimeStartTime->addMinutes($scheduledBreakMinutes);
+                        }
+                    } catch (Exception $e) {
+                        // If actual break parsing fails, fall back to scheduled break times
+                        $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                        $overtimeStartTime->addMinutes($scheduledBreakMinutes);
+                    }
+                } else {
+                    // Use scheduled fixed break times
+                    $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                    $overtimeStartTime->addMinutes($scheduledBreakMinutes);
+                }
             }
+            // For 'none' break type, don't add any break time to overtime start
 
             // Calculate night differential for the overtime period
             $overtimeEndTime = $adjustedWorkEndTime;
@@ -1925,11 +2008,52 @@ class TimeLogController extends Controller
             // Calculate the actual time period for regular hours (considering breaks)
             $regularWorkEndTime = $workStartTime->copy()->addHours($regularHours);
 
-            // If break was scheduled and taken during regular hours, adjust the end time
-            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
-                $regularWorkEndTime->addMinutes($scheduledBreakMinutes);
+            // Adjust regular work end time for break duration - ENFORCE SCHEDULE BREAK TYPE PRIORITY
+            if ($breakType === 'duration') {
+                // Break Duration (flexible timing) - use break_duration_minutes
+                $regularWorkEndTime->addMinutes($timeSchedule->break_duration_minutes);
+            } else if ($breakType === 'fixed') {
+                // Fixed Break Times - use actual break_in/out if available, otherwise use scheduled times
+                $useActualBreakTimes = (
+                    $timeLog->break_in && $timeLog->break_out &&
+                    $timeLog->break_in !== null && $timeLog->break_out !== null &&
+                    $timeLog->break_in !== '' && $timeLog->break_out !== ''
+                );
+
+                if ($useActualBreakTimes) {
+                    try {
+                        if (is_string($timeLog->break_in)) {
+                            $actualBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
+                        } else {
+                            $actualBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in->format('H:i:s'));
+                        }
+
+                        if (is_string($timeLog->break_out)) {
+                            $actualBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
+                        } else {
+                            $actualBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out->format('H:i:s'));
+                        }
+
+                        if ($actualBreakOut->gt($actualBreakIn)) {
+                            $actualBreakMinutes = $actualBreakIn->diffInMinutes($actualBreakOut);
+                            $regularWorkEndTime->addMinutes($actualBreakMinutes);
+                        } else {
+                            // Invalid actual break times, fall back to scheduled break times
+                            $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                            $regularWorkEndTime->addMinutes($scheduledBreakMinutes);
+                        }
+                    } catch (Exception $e) {
+                        // If actual break parsing fails, fall back to scheduled break times
+                        $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                        $regularWorkEndTime->addMinutes($scheduledBreakMinutes);
+                    }
+                } else {
+                    // Use scheduled fixed break times
+                    $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                    $regularWorkEndTime->addMinutes($scheduledBreakMinutes);
+                }
             }
+            // For 'none' break type, don't add any break time to regular work end time
 
             $nightDiffRegularBreakdown = $this->calculateNightDifferentialForRegularHours($workStartTime, $regularWorkEndTime);
             $nightDiffRegularHours = $nightDiffRegularBreakdown['night_diff_regular_hours'];

@@ -81,18 +81,20 @@
                                 @php
                                     $scheduleStart = '08:00'; // Default fallback
                                     $scheduleEnd = '17:00';   // Default fallback
-                                    $scheduleBreakStart = '12:00'; // Default break start
-                                    $scheduleBreakEnd = '13:00';   // Default break end
+                                    $scheduleBreakStart = ''; // Empty for break duration schedules
+                                    $scheduleBreakEnd = '';   // Empty for break duration schedules
                                     
                                     if ($selectedEmployee->timeSchedule) {
                                         $scheduleStart = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->time_in)->format('H:i');
                                         $scheduleEnd = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->time_out)->format('H:i');
                                         
-                                        // Use break times from schedule if available
-                                        if ($selectedEmployee->timeSchedule->break_start) {
+                                        // Only use break times for fixed break schedules (not break duration schedules)
+                                        $hasBreakDuration = $selectedEmployee->timeSchedule->break_duration_minutes && $selectedEmployee->timeSchedule->break_duration_minutes > 0;
+                                        $hasFixedBreakTimes = $selectedEmployee->timeSchedule->break_start && $selectedEmployee->timeSchedule->break_end;
+                                        
+                                        // Only auto-fill break times for fixed break schedules, not break duration schedules
+                                        if ($hasFixedBreakTimes && !$hasBreakDuration) {
                                             $scheduleBreakStart = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_start)->format('H:i');
-                                        }
-                                        if ($selectedEmployee->timeSchedule->break_end) {
                                             $scheduleBreakEnd = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_end)->format('H:i');
                                         }
                                     }
@@ -302,8 +304,10 @@
                     // Only fill empty fields to avoid overwriting existing data
                     if (timeInInput && !timeInInput.value) timeInInput.value = timeIn;
                     if (timeOutInput && !timeOutInput.value) timeOutInput.value = timeOut;
-                    if (breakInInput && !breakInInput.value) breakInInput.value = breakIn;
-                    if (breakOutInput && !breakOutInput.value) breakOutInput.value = breakOut;
+                    
+                    // Only fill break times if they are provided (for fixed break schedules only)
+                    if (breakIn && breakInInput && !breakInInput.value) breakInInput.value = breakIn;
+                    if (breakOut && breakOutInput && !breakOutInput.value) breakOutInput.value = breakOut;
                 }
             });
         }
@@ -389,13 +393,24 @@
                 // Pass the employee schedule to JavaScript
                 $jsScheduleStart = $selectedEmployee->timeSchedule ? $selectedEmployee->timeSchedule->time_in : '08:00';
                 $jsScheduleEnd = $selectedEmployee->timeSchedule ? $selectedEmployee->timeSchedule->time_out : '17:00';
-                $jsBreakStart = ($selectedEmployee->timeSchedule && $selectedEmployee->timeSchedule->break_start) ? $selectedEmployee->timeSchedule->break_start : '12:00';
-                $jsBreakEnd = ($selectedEmployee->timeSchedule && $selectedEmployee->timeSchedule->break_end) ? $selectedEmployee->timeSchedule->break_end : '13:00';
+                
+                // Only pass break times for fixed break schedules, not break duration schedules
+                $jsBreakStart = '';
+                $jsBreakEnd = '';
+                
+                if ($selectedEmployee->timeSchedule) {
+                    $hasBreakDuration = $selectedEmployee->timeSchedule->break_duration_minutes && $selectedEmployee->timeSchedule->break_duration_minutes > 0;
+                    $hasFixedBreakTimes = $selectedEmployee->timeSchedule->break_start && $selectedEmployee->timeSchedule->break_end;
+                    
+                    // Only auto-fill break times for fixed break schedules, not break duration schedules
+                    if ($hasFixedBreakTimes && !$hasBreakDuration) {
+                        $jsBreakStart = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_start)->format('H:i');
+                        $jsBreakEnd = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_end)->format('H:i');
+                    }
+                }
                 
                 $jsScheduleStart = \Carbon\Carbon::parse($jsScheduleStart)->format('H:i');
                 $jsScheduleEnd = \Carbon\Carbon::parse($jsScheduleEnd)->format('H:i');
-                $jsBreakStart = \Carbon\Carbon::parse($jsBreakStart)->format('H:i');
-                $jsBreakEnd = \Carbon\Carbon::parse($jsBreakEnd)->format('H:i');
             @endphp
             
             // Set employee's scheduled working hours for a specific row
@@ -407,8 +422,10 @@
             // Use employee's actual schedule times
             if (timeInInput) timeInInput.value = '{{ $jsScheduleStart }}';
             if (timeOutInput) timeOutInput.value = '{{ $jsScheduleEnd }}';
-            if (breakInInput) breakInInput.value = '{{ $jsBreakStart }}';
-            if (breakOutInput) breakOutInput.value = '{{ $jsBreakEnd }}';
+            
+            // Only fill break times if they are provided (for fixed break schedules only)
+            if ('{{ $jsBreakStart }}' && breakInInput) breakInInput.value = '{{ $jsBreakStart }}';
+            if ('{{ $jsBreakEnd }}' && breakOutInput) breakOutInput.value = '{{ $jsBreakEnd }}';
             
             // Do NOT change the log type - preserve the current selection
             // This allows users to set regular times on Rest Days, Holidays, etc. without changing the type

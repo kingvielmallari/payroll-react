@@ -63,12 +63,22 @@ class TimeScheduleController extends Controller
         }
 
         // Prepare data for creation
-        $data = $request->only(['name', 'time_in', 'time_out', 'break_duration_minutes']);
+        $data = $request->only(['name', 'time_in', 'time_out']);
+
+        // Handle break duration minutes - only include if provided and not empty
+        if ($request->filled('break_duration_minutes')) {
+            $data['break_duration_minutes'] = $request->break_duration_minutes;
+        } else {
+            $data['break_duration_minutes'] = null;
+        }
 
         // Only include break times if they are provided and not empty
         if ($request->filled('break_start') && $request->filled('break_end')) {
             $data['break_start'] = $request->break_start;
             $data['break_end'] = $request->break_end;
+        } else {
+            $data['break_start'] = null;
+            $data['break_end'] = null;
         }
 
         // Set default active status
@@ -131,7 +141,14 @@ class TimeScheduleController extends Controller
         }
 
         // Prepare data for update
-        $data = $request->only(['name', 'time_in', 'time_out', 'break_duration_minutes']);
+        $data = $request->only(['name', 'time_in', 'time_out']);
+
+        // Handle break duration minutes - only include if provided and not empty
+        if ($request->filled('break_duration_minutes')) {
+            $data['break_duration_minutes'] = $request->break_duration_minutes;
+        } else {
+            $data['break_duration_minutes'] = null;
+        }
 
         // Only include break times if they are provided and not empty
         if ($request->filled('break_start') && $request->filled('break_end')) {
@@ -210,7 +227,14 @@ class TimeScheduleController extends Controller
         }
 
         // Prepare data for update
-        $data = ['break_duration_minutes' => $request->break_duration_minutes];
+        $data = [];
+
+        // Handle break duration minutes - only include if provided and not empty
+        if ($request->filled('break_duration_minutes')) {
+            $data['break_duration_minutes'] = $request->break_duration_minutes;
+        } else {
+            $data['break_duration_minutes'] = null;
+        }
 
         // Only include break times if they are provided and not empty
         if ($request->filled('break_start') && $request->filled('break_end')) {

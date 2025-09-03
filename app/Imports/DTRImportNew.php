@@ -248,8 +248,13 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
             if ($breakOut->gt($breakIn)) {
                 $breakMinutesToDeduct = $breakIn->diffInMinutes($breakOut);
             }
+        } else if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
+            // Handle break duration (flexible timing) - deduct fixed minutes from total
+            $rawWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
+            $totalWorkingMinutes = max(0, $rawWorkingMinutes - $timeSchedule->break_duration_minutes);
+            $totalHours = $totalWorkingMinutes / 60;
         } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            // Handle scheduled break logic
+            // Handle fixed break period - skip the break window completely
             $breakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
             $breakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
 
@@ -271,9 +276,11 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         }
 
         // STEP 3: Calculate total working hours
-        $rawWorkingMinutes = $workStartTime->diffInMinutes($adjustedWorkEndTime);
-        $totalWorkingMinutes = max(0, $rawWorkingMinutes - $breakMinutesToDeduct);
-        $totalHours = $totalWorkingMinutes / 60;
+        if (!isset($totalHours)) { // Only calculate if not already calculated for break duration
+            $rawWorkingMinutes = $workStartTime->diffInMinutes($adjustedWorkEndTime);
+            $totalWorkingMinutes = max(0, $rawWorkingMinutes - $breakMinutesToDeduct);
+            $totalHours = $totalWorkingMinutes / 60;
+        }
 
         // STEP 5: Calculate late hours (consistent with grace period logic for ALL day types)
         $lateMinutes = 0;
@@ -291,9 +298,15 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
 
         // STEP 6: Calculate standard work hours (scheduled hours minus break)
         $standardWorkMinutes = $schedStart->diffInMinutes($schedEnd);
-        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
-            $standardWorkMinutes -= $scheduledBreakMinutes;
+        if ($timeSchedule) {
+            if ($timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
+                // For break duration, subtract the fixed minutes
+                $standardWorkMinutes -= $timeSchedule->break_duration_minutes;
+            } else if ($timeSchedule->break_start && $timeSchedule->break_end) {
+                // For fixed break times, calculate the break duration
+                $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+                $standardWorkMinutes -= $scheduledBreakMinutes;
+            }
         }
         $standardHours = max(0, $standardWorkMinutes / 60);
 

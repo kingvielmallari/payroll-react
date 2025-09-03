@@ -82,15 +82,87 @@ class TimeLog extends Model
         $timeIn = \Carbon\Carbon::parse($this->time_in);
         $timeOut = \Carbon\Carbon::parse($this->time_out);
 
+        // Handle next day time out
+        if ($timeOut->lt($timeIn)) {
+            $timeOut->addDay();
+        }
+
         $totalMinutes = $timeOut->diffInMinutes($timeIn);
 
-        // Subtract break time if available
-        if ($this->break_in && $this->break_out) {
-            $breakIn = \Carbon\Carbon::parse($this->break_in);
-            $breakOut = \Carbon\Carbon::parse($this->break_out);
-            $breakMinutes = $breakOut->diffInMinutes($breakIn);
-            $totalMinutes -= $breakMinutes;
+        // Get employee's time schedule for break calculation
+        $timeSchedule = $this->employee ? $this->employee->timeSchedule : null;
+
+        // ENFORCE TIME SCHEDULE BREAK TYPE PRIORITY - ignore conflicting time log data
+        $breakType = 'none'; // Default: no break
+
+        if ($timeSchedule) {
+            // Priority 1: Check if it's explicitly set to "no break" (neither break duration nor fixed times)
+            $hasBreakDuration = $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0;
+            $hasFixedBreakTimes = $timeSchedule->break_start && $timeSchedule->break_end;
+
+            if ($hasBreakDuration && $hasFixedBreakTimes) {
+                // Both are set - prioritize break duration (flexible timing)
+                $breakType = 'duration';
+            } else if ($hasBreakDuration) {
+                // Only break duration is set
+                $breakType = 'duration';
+            } else if ($hasFixedBreakTimes) {
+                // Only fixed break times are set
+                $breakType = 'fixed';
+            }
+            // If neither is set, breakType remains 'none'
         }
+
+        // Apply break calculation based on schedule type (ignore conflicting time log data)
+        if ($breakType === 'duration') {
+            // Break Duration (flexible timing) - IGNORE break_in/out, only use break_duration_minutes
+            $totalMinutes -= $timeSchedule->break_duration_minutes;
+        } else if ($breakType === 'fixed') {
+            // Fixed Break Times - use actual break_in/out if available, otherwise use scheduled times
+            $useActualBreakTimes = ($this->break_in && $this->break_out);
+
+            if ($useActualBreakTimes) {
+                $breakIn = \Carbon\Carbon::parse($this->break_in);
+                $breakOut = \Carbon\Carbon::parse($this->break_out);
+
+                if ($breakOut->gt($breakIn)) {
+                    $breakMinutes = $breakOut->diffInMinutes($breakIn);
+                    $totalMinutes -= $breakMinutes;
+                } else {
+                    // Invalid actual break times, fall back to scheduled break times
+                    $useActualBreakTimes = false;
+                }
+            }
+
+            if (!$useActualBreakTimes) {
+                // Use scheduled fixed break times - calculate work time by excluding the fixed break period
+                $logDate = \Carbon\Carbon::parse($this->log_date);
+                $breakStart = \Carbon\Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
+                $breakEnd = \Carbon\Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
+
+                // Calculate: (time in to break start) + (break end to time out)
+                $beforeBreak = 0;
+                $afterBreak = 0;
+
+                // Time worked before break period
+                if ($timeIn->lt($breakStart)) {
+                    $beforeBreakEnd = $timeOut->lt($breakStart) ? $timeOut : $breakStart;
+                    $beforeBreak = $timeIn->diffInMinutes($beforeBreakEnd);
+                }
+
+                // Time worked after break period
+                if ($timeOut->gt($breakEnd)) {
+                    $afterBreakStart = $timeIn->gt($breakEnd) ? $timeIn : $breakEnd;
+                    $afterBreak = $afterBreakStart->diffInMinutes($timeOut);
+                }
+
+                $totalMinutes = $beforeBreak + $afterBreak;
+            }
+        }
+        // For 'none' break type, don't subtract any break time
+
+        // Ensure non-negative result
+        $totalMinutes = max(0, $totalMinutes);
 
         return round($totalMinutes / 60, 2);
     }
