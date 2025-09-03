@@ -39,7 +39,7 @@ class TimeLogSettingController extends Controller
         ];
 
         // Get night differential settings
-        $nightDifferentialSetting = NightDifferentialSetting::mostRecent();
+        $nightDifferentialSetting = NightDifferentialSetting::current();
 
         // Provide default values if no setting exists
         if (!$nightDifferentialSetting) {

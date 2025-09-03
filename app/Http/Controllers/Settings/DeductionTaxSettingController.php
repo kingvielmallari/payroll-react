@@ -4,7 +4,11 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\DeductionTaxSetting;
+use App\Models\PhilHealthTaxTable;
+use App\Models\SssTaxTable;
+use App\Models\PagibigTaxTable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DeductionTaxSettingController extends Controller
 {
@@ -182,6 +186,104 @@ class DeductionTaxSettingController extends Controller
             'employee_deduction' => $amount,
             'employer_share' => $employerShare,
             'total_cost' => $amount + $employerShare
+        ]);
+    }
+
+    public function getPhilHealthTaxTable()
+    {
+        $taxTable = PhilHealthTaxTable::where('is_active', true)
+            ->orderBy('range_start')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $taxTable->map(function ($item) {
+                return [
+                    'range_start' => $item->range_start,
+                    'range_end' => $item->range_end,
+                    'employee_share' => $item->employee_share,
+                    'employer_share' => $item->employer_share,
+                    'total_contribution' => $item->total_contribution,
+                    'min_contribution' => $item->min_contribution,
+                    'max_contribution' => $item->max_contribution,
+                ];
+            })
+        ]);
+    }
+
+    public function getSssTaxTable()
+    {
+        $taxTable = SssTaxTable::where('is_active', true)
+            ->orderBy('range_start')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $taxTable->map(function ($item) {
+                return [
+                    'range_start' => $item->range_start,
+                    'range_end' => $item->range_end,
+                    'employee_share' => $item->employee_share,
+                    'employer_share' => $item->employer_share,
+                    'total_contribution' => $item->total_contribution,
+                ];
+            })
+        ]);
+    }
+
+    public function getPagibigTaxTable()
+    {
+        $taxTable = PagibigTaxTable::where('is_active', true)
+            ->orderBy('range_start')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $taxTable->map(function ($item) {
+                return [
+                    'range_start' => $item->range_start,
+                    'range_end' => $item->range_end,
+                    'employee_share' => $item->employee_share . '%',
+                    'employer_share' => $item->employer_share . '%',
+                    'total_contribution' => $item->total_contribution . '%',
+                    'min_contribution' => $item->min_contribution,
+                    'max_contribution' => $item->max_contribution,
+                ];
+            })
+        ]);
+    }
+
+    public function getWithholdingTaxTable()
+    {
+        $taxTable = DB::table('withholding_tax_tables')
+            ->orderBy('pay_frequency')
+            ->orderBy('bracket')
+            ->get();
+
+        $groupedData = $taxTable->groupBy('pay_frequency');
+
+        return response()->json([
+            'success' => true,
+            'data' => $groupedData->map(function ($items, $frequency) {
+                return [
+                    'pay_frequency' => ucfirst($frequency),
+                    'brackets' => $items->map(function ($item) {
+                        $isAndAbove = $item->range_end === 'NULL' || $item->range_end === null || $item->range_end === '0.00';
+                        return [
+                            'bracket' => $item->bracket,
+                            'pay_frequency' => $item->pay_frequency,
+                            'range_start' => number_format((float)$item->range_start, 2),
+                            'range_end' => $isAndAbove ? 'and above' : number_format((float)$item->range_end, 2),
+                            'base_tax' => number_format((float)$item->base_tax, 2),
+                            'tax_rate' => number_format((float)$item->tax_rate, 2),
+                            'excess_over' => number_format((float)$item->excess_over, 2),
+                            'formatted_range' => $isAndAbove 
+                                ? '₱' . number_format((float)$item->range_start, 2) . ' and above'
+                                : '₱' . number_format((float)$item->range_start, 2) . ' - ₱' . number_format((float)$item->range_end, 2),
+                        ];
+                    })
+                ];
+            })
         ]);
     }
 }

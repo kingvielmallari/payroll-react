@@ -46,11 +46,6 @@ class TimeScheduleController extends Controller
             'is_active' => 'boolean',
         ]);
 
-        // Set is_active to true by default if not provided
-        if (!isset($validated['is_active'])) {
-            $validated['is_active'] = true;
-        }
-
         $timeSchedule = TimeSchedule::create($validated);
 
         return redirect()->route('time-schedules.index')->with('success', 'Time schedule created successfully.');

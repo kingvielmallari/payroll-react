@@ -39,7 +39,7 @@ class NightDifferentialController extends Controller
             'end_time' => $request->end_time . ':00',
             'rate_multiplier' => $request->rate_multiplier,
             'description' => $request->description,
-            'is_active' => $request->boolean('is_active')
+            'is_active' => $request->boolean('is_active', true)
         ]);
 
         $setting->save();

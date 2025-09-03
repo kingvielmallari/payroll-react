@@ -17,57 +17,154 @@ class ReportsController extends Controller
         $year = $request->input('year', date('Y'));
         $month = $request->input('month', null);
 
-        // Base query for payroll details - only include PAID payrolls
-        $query = PayrollDetail::join('payrolls', 'payroll_details.payroll_id', '=', 'payrolls.id')
+        // Base query for payroll snapshots - only include PAID payrolls
+        $query = \App\Models\PayrollSnapshot::join('payrolls', 'payroll_snapshots.payroll_id', '=', 'payrolls.id')
             ->whereYear('payrolls.period_start', $year)
-            ->where('payrolls.is_paid', true); // Only include paid payrolls
+            ->where('payrolls.is_paid', true) // Only include paid payrolls
+            ->whereNotNull('payroll_snapshots.employer_deductions_breakdown'); // Only include snapshots with employer breakdown
 
         // Apply month filter if provided
         if ($month) {
             $query->whereMonth('payrolls.period_start', $month);
         }
 
-        // Get ALL government deduction settings (regardless of sharing)
-        $allDeductions = DeductionTaxSetting::whereIn('name', ['SSS', 'PhilHealth', 'Pag-IBIG', 'BIR'])
+        // Get ALL government deduction settings and common deductions
+        $allDeductions = DeductionTaxSetting::whereIn('name', ['SSS', 'PhilHealth', 'Pag-IBIG', 'BIR', 'Withholding Tax'])
             ->get();
+
+        // If we don't have Withholding Tax in settings, create a virtual one for display
+        $withholdingTaxExists = $allDeductions->where('name', 'Withholding Tax')->first() || $allDeductions->where('name', 'BIR')->first();
+        if (!$withholdingTaxExists) {
+            $virtualWithholdingTax = new \stdClass();
+            $virtualWithholdingTax->id = 'withholding_tax';
+            $virtualWithholdingTax->name = 'Withholding Tax';
+            $virtualWithholdingTax->share_with_employer = false;
+            $allDeductions->push($virtualWithholdingTax);
+        }
 
         // Calculate totals for each deduction type
         $shareData = collect();
 
         foreach ($allDeductions as $deduction) {
-            $columnName = match ($deduction->name) {
-                'SSS' => 'sss_contribution',
-                'PhilHealth' => 'philhealth_contribution',
-                'Pag-IBIG' => 'pagibig_contribution',
-                'BIR' => 'withholding_tax',
-                default => null
-            };
+            // Get employee share from deductions_breakdown JSON field
+            $eeShare = 0;
+            $payrollCount = 0;
+            $employeeCount = 0;
 
-            if ($columnName) {
-                $totals = $query->clone()
-                    ->selectRaw("
-                        SUM({$columnName}) as total_ee_share,
-                        COUNT(DISTINCT payroll_details.payroll_id) as payroll_count,
-                        COUNT(payroll_details.id) as employee_count
-                    ")
-                    ->first();
+            $snapshots = $query->clone()
+                ->select('payroll_snapshots.deductions_breakdown', 'payroll_snapshots.payroll_id')
+                ->whereNotNull('payroll_snapshots.deductions_breakdown')
+                ->get();
 
-                // Calculate ER share based on sharing setting
-                $eeShare = $totals->total_ee_share ?: 0;
-                $erShare = $deduction->share_with_employer ? $eeShare : 0;
-                $sharePercentage = $deduction->share_with_employer ? 50 : 0;
+            $uniquePayrolls = collect();
 
-                $shareData->push((object)[
-                    'id' => $deduction->id,
-                    'name' => $deduction->name,
-                    'total_ee_share' => $eeShare,
-                    'total_er_share' => $erShare,
-                    'total_combined' => $eeShare + $erShare,
-                    'share_percentage' => $sharePercentage,
-                    'payroll_count' => $totals->payroll_count ?: 0,
-                    'employee_count' => $totals->employee_count ?: 0,
-                ]);
+            foreach ($snapshots as $snapshot) {
+                if ($snapshot->deductions_breakdown) {
+                    $deductionsBreakdown = is_string($snapshot->deductions_breakdown)
+                        ? json_decode($snapshot->deductions_breakdown, true)
+                        : $snapshot->deductions_breakdown;
+
+                    if (is_array($deductionsBreakdown)) {
+                        foreach ($deductionsBreakdown as $breakdown) {
+                            // Improved matching logic for deduction names and codes
+                            $isMatch = false;
+
+                            if (isset($breakdown['name']) && isset($breakdown['code'])) {
+                                // Direct name match
+                                if (strcasecmp($breakdown['name'], $deduction->name) === 0) {
+                                    $isMatch = true;
+                                }
+                                // Code-based matching
+                                elseif (strcasecmp($breakdown['code'], strtolower(str_replace(['-', ' '], '', $deduction->name))) === 0) {
+                                    $isMatch = true;
+                                }
+                                // Special cases for common deduction name variations
+                                elseif (
+                                    (strcasecmp($deduction->name, 'BIR') === 0 && strcasecmp($breakdown['name'], 'Withholding Tax') === 0) ||
+                                    (strcasecmp($deduction->name, 'Withholding Tax') === 0 && strcasecmp($breakdown['code'], 'withholding_tax') === 0) ||
+                                    (strcasecmp($deduction->name, 'Pag-IBIG') === 0 && strcasecmp($breakdown['code'], 'pagibig') === 0) ||
+                                    (strcasecmp($deduction->name, 'PhilHealth') === 0 && strcasecmp($breakdown['code'], 'philhealth') === 0) ||
+                                    (strcasecmp($deduction->name, 'SSS') === 0 && strcasecmp($breakdown['code'], 'sss') === 0)
+                                ) {
+                                    $isMatch = true;
+                                }
+                            }
+
+                            if ($isMatch) {
+                                $eeShare += $breakdown['amount'] ?? 0;
+                                $employeeCount++;
+
+                                // Track unique payrolls
+                                if (!$uniquePayrolls->contains($snapshot->payroll_id)) {
+                                    $uniquePayrolls->push($snapshot->payroll_id);
+                                }
+                            }
+                        }
+                    }
+                }
             }
+
+            $payrollCount = $uniquePayrolls->count();
+
+            // Calculate employer share from snapshots' employer_deductions_breakdown
+            $erShare = 0;
+            if ($deduction->share_with_employer) {
+                $erSnapshots = $query->clone()
+                    ->select('payroll_snapshots.employer_deductions_breakdown')
+                    ->whereNotNull('payroll_snapshots.employer_deductions_breakdown')
+                    ->get();
+
+                foreach ($erSnapshots as $snapshot) {
+                    if ($snapshot->employer_deductions_breakdown) {
+                        $employerBreakdown = is_string($snapshot->employer_deductions_breakdown)
+                            ? json_decode($snapshot->employer_deductions_breakdown, true)
+                            : $snapshot->employer_deductions_breakdown;
+
+                        if (is_array($employerBreakdown)) {
+                            foreach ($employerBreakdown as $breakdown) {
+                                // Use the same improved matching logic
+                                $isMatch = false;
+
+                                if (isset($breakdown['name'])) {
+                                    // Direct name match
+                                    if (strcasecmp($breakdown['name'], $deduction->name) === 0) {
+                                        $isMatch = true;
+                                    }
+                                    // Special cases for common deduction name variations
+                                    elseif (
+                                        (strcasecmp($deduction->name, 'BIR') === 0 && strcasecmp($breakdown['name'], 'Withholding Tax') === 0) ||
+                                        (strcasecmp($deduction->name, 'Withholding Tax') === 0 && strcasecmp($breakdown['name'], 'Withholding Tax') === 0) ||
+                                        (strcasecmp($deduction->name, 'Pag-IBIG') === 0 && strcasecmp($breakdown['name'], 'Pag-IBIG') === 0) ||
+                                        (strcasecmp($deduction->name, 'PhilHealth') === 0 && strcasecmp($breakdown['name'], 'PhilHealth') === 0) ||
+                                        (strcasecmp($deduction->name, 'SSS') === 0 && strcasecmp($breakdown['name'], 'SSS') === 0)
+                                    ) {
+                                        $isMatch = true;
+                                    }
+                                }
+
+                                if ($isMatch) {
+                                    $erShare += $breakdown['amount'] ?? 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            $sharePercentage = $deduction->share_with_employer ? 50 : 0;
+
+            $shareData->push((object)[
+                'id' => $deduction->id,
+                'name' => $deduction->name,
+                'total_ee_share' => round($eeShare, 2),
+                'total_er_share' => round($erShare, 2),
+                'total_combined' => round($eeShare + $erShare, 2),
+                'share_percentage' => $sharePercentage,
+                'payroll_count' => $payrollCount,
+                'employee_count' => $employeeCount,
+                'is_shared' => $deduction->share_with_employer ?? false,
+                'share_status' => ($deduction->share_with_employer ?? false) ? 'Shared' : 'Not Shared',
+            ]);
         }
 
         // Calculate grand totals

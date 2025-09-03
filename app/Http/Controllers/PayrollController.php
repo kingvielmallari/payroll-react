@@ -1167,6 +1167,12 @@ class PayrollController extends Controller
                 $lateHours += $dynamicCalculation['late_hours'];
                 $undertimeHours += $dynamicCalculation['undertime_hours'];
 
+                // IMPORTANT: Set dynamic night differential hours on TimeLog for gross pay calculation
+                $timeLog->dynamic_night_diff_regular_hours = $dynamicCalculation['night_diff_regular_hours'] ?? 0;
+                $timeLog->dynamic_night_diff_overtime_hours = $dynamicCalculation['night_diff_overtime_hours'] ?? 0;
+                $timeLog->dynamic_regular_hours = $dynamicCalculation['regular_hours'] ?? 0;
+                $timeLog->dynamic_regular_overtime_hours = $dynamicCalculation['regular_overtime_hours'] ?? 0;
+
                 if ($dynamicCalculation['total_hours'] > 0) {
                     $daysWorked++;
                 }
@@ -1225,7 +1231,19 @@ class PayrollController extends Controller
         // The grossPay already includes basic + holiday + rest + overtime
         $taxableIncomeForDeductions = $grossPay; // This includes basic + holiday + rest + overtime
 
-        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal);
+        // Detect pay frequency based on period duration
+        $periodDays = \Carbon\Carbon::parse($periodStart)->diffInDays(\Carbon\Carbon::parse($periodEnd)) + 1;
+        if ($periodDays <= 1) {
+            $payFrequency = 'daily';
+        } elseif ($periodDays <= 7) {
+            $payFrequency = 'weekly';
+        } elseif ($periodDays <= 16) {
+            $payFrequency = 'semi_monthly';
+        } else {
+            $payFrequency = 'monthly';
+        }
+
+        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal, $payFrequency);
 
         $netPay = $totalGrossPay - $deductions['total'] - $lateDeductions - $undertimeDeductions - $cashAdvanceDeductions;
 
@@ -1245,7 +1263,7 @@ class PayrollController extends Controller
             'philhealth_deduction' => $deductions['philhealth'],
             'pagibig_deduction' => $deductions['pagibig'],
             'other_deductions' => $deductions['other'],
-            'deductions_details' => $deductions['details'],
+            'deductions_details' => $deductions['deductions_details'],
             'total_deductions' => $deductions['total'] + $lateDeductions + $undertimeDeductions + $cashAdvanceDeductions,
             'net_pay' => $netPay,
             'hours_worked' => $hoursWorked,
@@ -1556,10 +1574,11 @@ class PayrollController extends Controller
     /**
      * Calculate deductions for an employee using dynamic settings
      */
-    private function calculateDeductions($employee, $grossPay, $basicPay = null, $overtimePay = 0, $allowances = 0, $bonuses = 0)
+    private function calculateDeductions($employee, $grossPay, $basicPay = null, $overtimePay = 0, $allowances = 0, $bonuses = 0, $payFrequency = 'semi_monthly')
     {
         $basicPay = $basicPay ?? $grossPay;
         $deductions = [];
+        $deductionDetails = [];
         $total = 0;
 
         // Get active deduction settings that apply to this employee's benefit status
@@ -1574,12 +1593,23 @@ class PayrollController extends Controller
         // Calculate government deductions (SSS, PhilHealth, Pag-IBIG)
         foreach ($deductionSettings as $setting) {
             if ($setting->tax_table_type !== 'withholding_tax') {
-                $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay);
+                $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, null, null, $employee->basic_salary, $payFrequency);
 
                 if ($amount > 0) {
                     $deductions[$setting->code] = $amount;
                     $total += $amount;
                     $governmentTotal += $amount;
+
+                    // Add to detailed breakdown for snapshot
+                    $deductionDetails[] = [
+                        'name' => $setting->name,
+                        'code' => $setting->code,
+                        'amount' => $amount,
+                        'type' => $setting->type,
+                        'calculation_type' => $setting->calculation_type,
+                        'pay_basis' => $this->getPayBasisName($setting),
+                        'pay_basis_amount' => $this->getPayBasisAmount($setting, $basicPay, $overtimePay, $bonuses, $allowances, $grossPay)
+                    ];
                 }
             }
         }
@@ -1595,11 +1625,22 @@ class PayrollController extends Controller
             ->get();
 
         foreach ($taxSettings as $setting) {
-            $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome);
+            $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome, null, $employee->basic_salary, $payFrequency);
 
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
                 $total += $amount;
+
+                // Add to detailed breakdown for snapshot
+                $deductionDetails[] = [
+                    'name' => $setting->name,
+                    'code' => $setting->code,
+                    'amount' => $amount,
+                    'type' => $setting->type,
+                    'calculation_type' => $setting->calculation_type,
+                    'pay_basis' => 'taxable_income', // Withholding tax uses taxable income
+                    'pay_basis_amount' => $taxableIncome
+                ];
             }
         }
 
@@ -1614,6 +1655,17 @@ class PayrollController extends Controller
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
                 $total += $amount;
+
+                // Add to detailed breakdown for snapshot
+                $deductionDetails[] = [
+                    'name' => $setting->name,
+                    'code' => $setting->code,
+                    'amount' => $amount,
+                    'type' => $setting->type,
+                    'calculation_type' => 'custom',
+                    'pay_basis' => 'custom',
+                    'pay_basis_amount' => $amount
+                ];
             }
         }
 
@@ -1627,8 +1679,37 @@ class PayrollController extends Controller
                 return !in_array($key, ['sss', 'philhealth', 'pagibig', 'withholding_tax']);
             }, ARRAY_FILTER_USE_KEY)),
             'total' => $total,
-            'details' => $deductions
+            'details' => $deductions,
+            'deductions_details' => $deductionDetails // Add this for snapshot compatibility
         ];
+    }
+
+    /**
+     * Get pay basis name for deduction setting
+     */
+    private function getPayBasisName($setting)
+    {
+        if ($setting->apply_to_basic_pay) return 'basic_pay';
+        if ($setting->apply_to_gross_pay) return 'totalgross';
+        if ($setting->apply_to_taxable_income) return 'taxable_income';
+        if ($setting->apply_to_net_pay) return 'net_pay';
+        if ($setting->apply_to_monthly_basic_salary) return 'monthly_basic_salary';
+
+        return 'totalgross'; // default
+    }
+
+    /**
+     * Get pay basis amount for deduction setting
+     */
+    private function getPayBasisAmount($setting, $basicPay, $overtimePay, $bonuses, $allowances, $grossPay)
+    {
+        if ($setting->apply_to_basic_pay) return $basicPay;
+        if ($setting->apply_to_gross_pay) return $grossPay;
+        if ($setting->apply_to_taxable_income) return $grossPay; // Will be calculated later
+        if ($setting->apply_to_net_pay) return $grossPay; // Will be calculated later
+        if ($setting->apply_to_monthly_basic_salary) return $grossPay; // Will be calculated later
+
+        return $grossPay; // default
     }
 
     /**
@@ -2632,6 +2713,32 @@ class PayrollController extends Controller
             'deleted_by' => Auth::id(),
             'deleted_by_name' => Auth::user()->name
         ]);
+
+        // If payroll was paid, reverse cash advance deductions
+        if ($payroll->is_paid) {
+            try {
+                DB::beginTransaction();
+
+                // Reverse cash advance deductions
+                $this->reverseCashAdvanceDeductions($payroll);
+
+                DB::commit();
+
+                Log::info('Cash advance deductions reversed for deleted payroll', [
+                    'payroll_id' => $payroll->id,
+                    'payroll_number' => $payroll->payroll_number
+                ]);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                Log::error('Failed to reverse cash advance deductions for deleted payroll', [
+                    'payroll_id' => $payroll->id,
+                    'error' => $e->getMessage()
+                ]);
+
+                return redirect()->route('payrolls.index')
+                    ->with('error', 'Failed to delete payroll: Could not reverse cash advance payments.');
+            }
+        }
 
         $payroll->delete();
 
@@ -4611,15 +4718,24 @@ class PayrollController extends Controller
         $year = $today->format('Y');
         $month = $today->format('m');
 
-        // Get the count of payrolls for this schedule in the current year
-        $count = \App\Models\Payroll::where('pay_schedule', $paySchedule)
-            ->whereYear('created_at', $year)
-            ->count() + 1;
-
         // Format: SCHEDULE-YEAR-MONTH-COUNT
         $scheduleCode = strtoupper(str_replace('_', '', $paySchedule));
+        $prefix = "{$scheduleCode}-{$year}{$month}";
 
-        return sprintf('%s-%s%s-%03d', $scheduleCode, $year, $month, $count);
+        // Find the last payroll with this prefix to determine next number
+        $lastPayroll = \App\Models\Payroll::where('payroll_number', 'like', "{$prefix}%")
+            ->orderBy('payroll_number', 'desc')
+            ->first();
+
+        if ($lastPayroll) {
+            // Extract the last 3 digits from the payroll number
+            $lastNumber = (int) substr($lastPayroll->payroll_number, -3);
+            $newNumber = sprintf('%03d', $lastNumber + 1);
+        } else {
+            $newNumber = '001';
+        }
+
+        return "{$prefix}-{$newNumber}";
     }
 
     /**
@@ -4970,19 +5086,23 @@ class PayrollController extends Controller
             $restPay = 0; // Rest day pay
             $overtimePay = 0; // Overtime pay
 
+            // Use the new TimeLog's calculatePerMinuteAmount method for consistency with the view
             foreach ($employeeBreakdown as $logType => $breakdown) {
                 $rateConfig = $breakdown['rate_config'];
                 if (!$rateConfig) continue;
 
-                // Calculate pay amounts using rate multipliers with PER-MINUTE precision (same as draft)
+                // Get rate multipliers
                 $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
                 $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
 
-                // PER-MINUTE CALCULATION for exact draft payroll matching
-                $actualMinutes = $breakdown['regular_hours'] * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = $hourlyRate / 60;
-                $regularPayAmount = $roundedMinutes * $ratePerMinute * $regularMultiplier;
+                // Calculate regular pay using TimeLog's per-minute precision method
+                $regularHours = $breakdown['regular_hours'];
+                if ($regularHours > 0) {
+                    $timeLogInstance = new \App\Models\TimeLog();
+                    $regularPayAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
+                } else {
+                    $regularPayAmount = 0;
+                }
 
                 // Calculate night differential regular hours pay separately
                 $nightDiffRegularPayAmount = 0;
@@ -4990,53 +5110,57 @@ class PayrollController extends Controller
                 if ($nightDiffRegularHours > 0) {
                     $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
                     $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
-                    $nightDiffRegularMinutes = round($nightDiffRegularHours * 60);
-                    // Use SAME formula as TimeLog method: base_multiplier + (night_diff_multiplier - 1)
+                    // Combined rate: regular rate + night differential bonus
                     $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
-                    $nightDiffRegularPayAmount = $nightDiffRegularMinutes * $ratePerMinute * $combinedMultiplier;
+                    $timeLogInstance = new \App\Models\TimeLog();
+                    $nightDiffRegularPayAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
                 }
 
-                // Calculate overtime pay with night differential breakdown using PER-MINUTE precision
+                // Calculate overtime pay with night differential breakdown
                 $overtimePayAmount = 0;
                 $regularOvertimeHours = $breakdown['regular_overtime_hours'] ?? 0;
                 $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
 
                 if ($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) {
-                    // Regular overtime pay (per-minute calculation)
+                    // Regular overtime pay
                     if ($regularOvertimeHours > 0) {
-                        $overtimeMinutes = round($regularOvertimeHours * 60);
-                        $overtimePayAmount += $overtimeMinutes * $ratePerMinute * $overtimeMultiplier;
+                        $timeLogInstance = new \App\Models\TimeLog();
+                        $overtimePayAmount += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOvertimeHours);
                     }
 
-                    // Night differential overtime pay (per-minute calculation)
+                    // Night differential overtime pay
                     if ($nightDiffOvertimeHours > 0) {
                         $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
                         $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
-                        $nightDiffOvertimeMinutes = round($nightDiffOvertimeHours * 60);
-                        $overtimePayAmount += $nightDiffOvertimeMinutes * $ratePerMinute * $combinedMultiplier;
+                        $timeLogInstance = new \App\Models\TimeLog();
+                        $overtimePayAmount += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOvertimeHours);
                     }
                 } else {
-                    // Fallback to simple calculation with per-minute precision
-                    $overtimeMinutes = round($breakdown['overtime_hours'] * 60);
-                    $overtimePayAmount = $overtimeMinutes * $ratePerMinute * $overtimeMultiplier;
+                    // Fallback to simple calculation
+                    $totalOvertimeHours = $breakdown['overtime_hours'];
+                    if ($totalOvertimeHours > 0) {
+                        $timeLogInstance = new \App\Models\TimeLog();
+                        $overtimePayAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $totalOvertimeHours);
+                    }
                 }
 
+                // Categorize pay by log type (same logic as view)
                 if ($logType === 'regular_workday') {
-                    $basicPay += $regularPayAmount + $nightDiffRegularPayAmount; // Include both regular and ND pay
-                    $overtimePay += $overtimePayAmount; // Overtime pay separate
+                    $basicPay += $regularPayAmount + $nightDiffRegularPayAmount; // Only regular pay goes to basic
+                    $overtimePay += $overtimePayAmount; // All overtime goes to overtime column
                 } elseif ($logType === 'rest_day') {
-                    $restPay += ($regularPayAmount + $nightDiffRegularPayAmount + $overtimePayAmount); // Rest day pay includes regular, ND, and overtime
+                    $restPay += $regularPayAmount + $nightDiffRegularPayAmount; // Only regular hours pay to rest day pay
+                    $overtimePay += $overtimePayAmount; // All overtime goes to overtime column
                 } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
-                    $holidayPay += ($regularPayAmount + $nightDiffRegularPayAmount + $overtimePayAmount); // Holiday pay includes regular, ND, and overtime
+                    $holidayPay += $regularPayAmount + $nightDiffRegularPayAmount; // Only regular hours pay to holiday pay
+                    $overtimePay += $overtimePayAmount; // All overtime goes to overtime column
                 }
             }
 
-            // Round to exactly match the draft display (ensure consistency to the cent)
-            $basicPay = round($basicPay, 2);
-            $holidayPay = round($holidayPay, 2);
-            $restPay = round($restPay, 2);
-            $overtimePay = round($overtimePay, 2);
+            // Do NOT round individual components to avoid rounding discrepancies
+            // The TimeLog::calculatePayAmount() already handles per-minute precision
+            // Additional rounding here causes the total to not match the sum of parts
 
             // Get deductions and other components using the existing payroll calculation method
             $payrollCalculation = $this->calculateEmployeePayrollForPeriod(
@@ -5099,8 +5223,14 @@ class PayrollController extends Controller
             // Use the calculated total deductions from the payroll calculation
             $totalDeductions = $payrollCalculation['total_deductions'] ?? 0;
 
-            // Calculate net pay exactly as it would be in draft mode
-            $grossPay = $payrollCalculation['gross_pay'] ?? 0;
+            // Calculate gross pay from the EXACT SAME components as the dynamic display
+            // This ensures no rounding discrepancies between display and snapshot
+            $allowancesTotal = $payrollCalculation['allowances'] ?? 0;
+            $bonusesTotal = $payrollCalculation['bonuses'] ?? 0;
+            $otherEarnings = $payrollCalculation['other_earnings'] ?? 0;
+
+            // Use exact component sum instead of payrollCalculation gross_pay to avoid rounding differences
+            $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $otherEarnings;
             $netPay = $grossPay - $totalDeductions;
 
             // Create pay breakdown for snapshot
@@ -5239,7 +5369,10 @@ class PayrollController extends Controller
 
             // Calculate deductions breakdown after taxable income is finalized
             // Pass the calculated taxable income to ensure consistent deduction calculations
-            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome);
+            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome, $payroll);
+
+            // Calculate employer deductions breakdown
+            $employerDeductionsBreakdown = $this->getEmployerDeductionsBreakdown($employee, $detail, $taxableIncome);
 
             // Log taxable income calculation for debugging
             Log::info("Final taxable income calculation for employee {$employee->id}", [
@@ -5303,6 +5436,7 @@ class PayrollController extends Controller
                 'other_earnings' => $payrollCalculation['other_earnings'] ?? 0,
                 'gross_pay' => $grossPay, // Use calculated gross pay
                 'deductions_breakdown' => $deductionsBreakdown,
+                'employer_deductions_breakdown' => $employerDeductionsBreakdown,
                 'sss_contribution' => $payrollCalculation['sss_contribution'] ?? 0,
                 'philhealth_contribution' => $payrollCalculation['philhealth_contribution'] ?? 0,
                 'pagibig_contribution' => $payrollCalculation['pagibig_contribution'] ?? 0,
@@ -5499,9 +5633,24 @@ class PayrollController extends Controller
     /**
      * Get deductions breakdown for employee
      */
-    private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null)
+    private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null, $payroll = null)
     {
         $breakdown = [];
+
+        // Detect pay frequency from payroll period if payroll object is provided
+        $payFrequency = 'semi_monthly'; // default
+        if ($payroll) {
+            $periodDays = \Carbon\Carbon::parse($payroll->period_start)->diffInDays(\Carbon\Carbon::parse($payroll->period_end)) + 1;
+            if ($periodDays <= 1) {
+                $payFrequency = 'daily';
+            } elseif ($periodDays <= 7) {
+                $payFrequency = 'weekly';
+            } elseif ($periodDays <= 16) {
+                $payFrequency = 'semi_monthly';
+            } else {
+                $payFrequency = 'monthly';
+            }
+        }
 
         // Get active deduction settings that apply to this employee's benefit status
         $deductionSettings = \App\Models\DeductionTaxSetting::active()
@@ -5517,33 +5666,133 @@ class PayrollController extends Controller
                 $taxableIncomeForDeductions = $taxableIncome;
             }
 
-            foreach ($deductionSettings as $setting) {
-                $amount = $setting->calculateDeduction(
-                    $taxableIncomeForDeductions, // Use taxable income (with allowances/bonuses) instead of just basic pay components
-                    $detail->overtime_pay ?? 0,
-                    $detail->bonuses ?? 0,
-                    $detail->allowances ?? 0,
-                    $detail->gross_pay ?? 0
-                );
+            $governmentTotal = 0;
 
-                if ($amount > 0) {
-                    $breakdown[] = [
-                        'name' => $setting->name,
-                        'code' => $setting->code ?? strtolower(str_replace(' ', '_', $setting->name)),
-                        'amount' => $amount,
-                        'type' => $setting->type ?? 'government',
-                        'calculation_type' => $setting->calculation_type
-                    ];
+            // First pass: Calculate government deductions (excluding withholding tax)
+            foreach ($deductionSettings as $setting) {
+                if ($setting->tax_table_type !== 'withholding_tax') {
+                    // Calculate the pay basis amount and determine pay basis name
+                    $payBasisAmount = 0;
+                    $payBasisName = '';
+
+                    // Determine pay basis based on the setting's configuration
+                    if ($setting->apply_to_gross_pay) {
+                        $payBasisAmount = $detail->gross_pay ?? 0;
+                        $payBasisName = 'totalgross';
+                    } elseif ($setting->apply_to_taxable_income) {
+                        $payBasisAmount = $taxableIncomeForDeductions;
+                        $payBasisName = 'taxableincome';
+                    } elseif ($setting->apply_to_net_pay) {
+                        $payBasisAmount = $detail->net_pay ?? 0;
+                        $payBasisName = 'netpay';
+                    } elseif ($setting->apply_to_monthly_basic_salary) {
+                        $payBasisAmount = $employee->basic_salary ?? 0;
+                        $payBasisName = 'mbs';
+                    } else {
+                        // Calculate component-based pay basis
+                        $components = [];
+                        if ($setting->apply_to_basic_pay || $setting->apply_to_regular) {
+                            $payBasisAmount += ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+                            $components[] = 'Basic Pay';
+                        }
+                        if ($setting->apply_to_overtime) {
+                            $payBasisAmount += $detail->overtime_pay ?? 0;
+                            $components[] = 'Overtime';
+                        }
+                        if ($setting->apply_to_bonus) {
+                            $payBasisAmount += $detail->bonuses ?? 0;
+                            $components[] = 'Bonuses';
+                        }
+                        if ($setting->apply_to_allowances) {
+                            $payBasisAmount += $detail->allowances ?? 0;
+                            $components[] = 'Allowances';
+                        }
+
+                        $payBasisName = !empty($components) ? implode(' + ', $components) : 'Basic Pay';
+
+                        // If no specific components selected, default to basic pay
+                        if (empty($components)) {
+                            $payBasisAmount = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+                        }
+                    }
+
+                    // Apply salary cap if set
+                    $cappedAmount = $payBasisAmount;
+                    if ($setting->salary_cap && $payBasisAmount > $setting->salary_cap) {
+                        $cappedAmount = $setting->salary_cap;
+                        $payBasisName .= ' (capped at ₱' . number_format($setting->salary_cap, 2) . ')';
+                    }
+
+                    $amount = $setting->calculateDeduction(
+                        $taxableIncomeForDeductions, // Use taxable income (with allowances/bonuses) instead of just basic pay components
+                        $detail->overtime_pay ?? 0,
+                        $detail->bonuses ?? 0,
+                        $detail->allowances ?? 0,
+                        $detail->gross_pay ?? 0,
+                        null, // taxableIncome
+                        null, // netPay
+                        $employee->basic_salary, // monthlyBasicSalary
+                        $payFrequency // Add pay frequency parameter
+                    );
+
+                    if ($amount > 0) {
+                        $breakdown[] = [
+                            'name' => $setting->name,
+                            'code' => $setting->code ?? strtolower(str_replace(' ', '_', $setting->name)),
+                            'amount' => round($amount, 2), // Round to 2 decimal places
+                            'type' => $setting->type ?? 'government',
+                            'calculation_type' => $setting->calculation_type,
+                            'pay_basis' => $payBasisName,
+                            'pay_basis_amount' => round($cappedAmount, 2) // Round pay basis amount
+                        ];
+                        $governmentTotal += $amount;
+                    }
+                }
+            }
+
+            // Second pass: Calculate withholding tax deductions
+            // Withholding tax is calculated on the taxable income BEFORE government deductions
+            foreach ($deductionSettings as $setting) {
+                if ($setting->tax_table_type === 'withholding_tax') {
+                    $amount = $setting->calculateDeduction(
+                        $taxableIncomeForDeductions, // basicPay
+                        $detail->overtime_pay ?? 0,
+                        $detail->bonuses ?? 0,
+                        $detail->allowances ?? 0,
+                        $detail->gross_pay ?? 0,
+                        $taxableIncomeForDeductions, // Use the same taxable income - withholding tax is not calculated after government deductions
+                        null, // netPay
+                        $employee->basic_salary, // monthlyBasicSalary
+                        $payFrequency // Add pay frequency parameter
+                    );
+
+                    if ($amount > 0) {
+                        $breakdown[] = [
+                            'name' => $setting->name,
+                            'code' => $setting->code ?? strtolower(str_replace(' ', '_', $setting->name)),
+                            'amount' => round($amount, 2), // Round to 2 decimal places
+                            'type' => $setting->type ?? 'government',
+                            'calculation_type' => $setting->calculation_type,
+                            'pay_basis' => 'taxableincome', // Match other deductions' pay_basis format
+                            'pay_basis_amount' => round($taxableIncomeForDeductions, 2) // Use same as other deductions for consistency, rounded
+                        ];
+                    }
                 }
             }
         } else {
             // Fallback to traditional static deductions if no active settings
+            // Calculate taxable income for fallback deductions
+            $taxableIncomeForFallback = $taxableIncome ?? (($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0));
+            $basicPayForFallback = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+
             if ($detail->sss_contribution > 0) {
                 $breakdown[] = [
                     'name' => 'SSS Contribution',
                     'code' => 'sss',
                     'amount' => $detail->sss_contribution,
-                    'type' => 'government'
+                    'type' => 'government',
+                    'pay_basis' => 'Basic Pay',
+                    'pay_basis_amount' => $basicPayForFallback
                 ];
             }
 
@@ -5552,7 +5801,9 @@ class PayrollController extends Controller
                     'name' => 'PhilHealth Contribution',
                     'code' => 'philhealth',
                     'amount' => $detail->philhealth_contribution,
-                    'type' => 'government'
+                    'type' => 'government',
+                    'pay_basis' => 'Basic Pay',
+                    'pay_basis_amount' => $basicPayForFallback
                 ];
             }
 
@@ -5561,7 +5812,9 @@ class PayrollController extends Controller
                     'name' => 'Pag-IBIG Contribution',
                     'code' => 'pagibig',
                     'amount' => $detail->pagibig_contribution,
-                    'type' => 'government'
+                    'type' => 'government',
+                    'pay_basis' => 'Basic Pay',
+                    'pay_basis_amount' => $basicPayForFallback
                 ];
             }
 
@@ -5570,7 +5823,9 @@ class PayrollController extends Controller
                     'name' => 'Withholding Tax',
                     'code' => 'withholding_tax',
                     'amount' => $detail->withholding_tax,
-                    'type' => 'tax'
+                    'type' => 'tax',
+                    'pay_basis' => 'Taxable Income',
+                    'pay_basis_amount' => $taxableIncomeForFallback
                 ];
             }
         }
@@ -5578,10 +5833,12 @@ class PayrollController extends Controller
         // Always include other deductions (excluding late/undertime as they're already accounted for in hours)
         if ($detail->cash_advance_deductions > 0) {
             $breakdown[] = [
-                'name' => 'Cash Advance',
+                'name' => 'CA',
                 'code' => 'cash_advance',
                 'amount' => $detail->cash_advance_deductions,
-                'type' => 'loan'
+                'type' => 'loan',
+                'pay_basis' => 'Fixed Amount',
+                'pay_basis_amount' => $detail->cash_advance_deductions
             ];
         }
 
@@ -5590,8 +5847,148 @@ class PayrollController extends Controller
                 'name' => 'Other Deductions',
                 'code' => 'other',
                 'amount' => $detail->other_deductions,
-                'type' => 'other'
+                'type' => 'other',
+                'pay_basis' => 'Fixed Amount',
+                'pay_basis_amount' => $detail->other_deductions
             ];
+        }
+
+        return $breakdown;
+    }
+
+    /**
+     * Get employer deductions breakdown for employee
+     */
+    private function getEmployerDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null)
+    {
+        $breakdown = [];
+        $payFrequency = $employee->pay_schedule ?? 'semi_monthly';
+
+        // Get active deduction settings that apply to this employee's benefit status
+        $deductionSettings = \App\Models\DeductionTaxSetting::active()
+            ->forBenefitStatus($employee->benefits_status)
+            ->where('share_with_employer', true) // Only get deductions that are shared with employer
+            ->orderBy('sort_order')
+            ->get();
+
+        if ($deductionSettings->isNotEmpty()) {
+            // Use the passed taxable income if provided, otherwise calculate it from detail components
+            if ($taxableIncome === null) {
+                $taxableIncomeForDeductions = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+            } else {
+                $taxableIncomeForDeductions = $taxableIncome;
+            }
+
+            foreach ($deductionSettings as $setting) {
+                // Calculate the pay basis amount
+                $payBasisAmount = 0;
+                $payBasisName = '';
+
+                // Determine pay basis based on the setting's configuration
+                if ($setting->apply_to_gross_pay) {
+                    $payBasisAmount = $detail->gross_pay ?? 0;
+                    $payBasisName = 'totalgross';
+                } elseif ($setting->apply_to_taxable_income) {
+                    $payBasisAmount = $taxableIncomeForDeductions;
+                    $payBasisName = 'taxableincome';
+                } elseif ($setting->apply_to_net_pay) {
+                    $payBasisAmount = $detail->net_pay ?? 0;
+                    $payBasisName = 'netpay';
+                } elseif ($setting->apply_to_monthly_basic_salary) {
+                    $payBasisAmount = $employee->basic_salary ?? 0;
+                    $payBasisName = 'mbs';
+                } else {
+                    // Calculate component-based pay basis
+                    $components = [];
+                    if ($setting->apply_to_basic_pay || $setting->apply_to_regular) {
+                        $payBasisAmount += ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+                        $components[] = 'Basic Pay';
+                    }
+                    if ($setting->apply_to_overtime) {
+                        $payBasisAmount += $detail->overtime_pay ?? 0;
+                        $components[] = 'Overtime';
+                    }
+                    if ($setting->apply_to_bonus) {
+                        $payBasisAmount += $detail->bonuses ?? 0;
+                        $components[] = 'Bonuses';
+                    }
+                    if ($setting->apply_to_allowances) {
+                        $payBasisAmount += $detail->allowances ?? 0;
+                        $components[] = 'Allowances';
+                    }
+
+                    $payBasisName = !empty($components) ? implode(' + ', $components) : 'Basic Pay';
+
+                    // If no specific components selected, default to basic pay
+                    if (empty($components)) {
+                        $payBasisAmount = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+                    }
+                }
+
+                // Apply salary cap if set
+                $cappedAmount = $payBasisAmount;
+                if ($setting->salary_cap && $payBasisAmount > $setting->salary_cap) {
+                    $cappedAmount = $setting->salary_cap;
+                    $payBasisName .= ' (capped at ₱' . number_format($setting->salary_cap, 2) . ')';
+                }
+
+                // Calculate employer share based on deduction type
+                $employerShare = 0;
+
+                if ($setting->tax_table_type === 'sss') {
+                    // Get SSS contribution details
+                    $sssContribution = \Illuminate\Support\Facades\DB::table('sss_tax_table')
+                        ->where('range_start', '<=', $cappedAmount)
+                        ->where(function ($query) use ($cappedAmount) {
+                            $query->where('range_end', '>=', $cappedAmount)
+                                ->orWhereNull('range_end');
+                        })
+                        ->where('is_active', true)
+                        ->first();
+
+                    if ($sssContribution) {
+                        $employerShare = (float) $sssContribution->employer_share;
+                    }
+                } elseif ($setting->tax_table_type === 'philhealth') {
+                    // Get PhilHealth contribution details
+                    $philHealthContribution = \App\Models\PhilHealthTaxTable::calculateContribution($cappedAmount);
+                    if ($philHealthContribution) {
+                        $employerShare = $philHealthContribution['employer_share'];
+                    }
+                } elseif ($setting->tax_table_type === 'pagibig') {
+                    // Get Pag-IBIG contribution details
+                    $pagibigContribution = \App\Models\PagibigTaxTable::calculateContribution($cappedAmount);
+                    if ($pagibigContribution) {
+                        $employerShare = $pagibigContribution['employer_share'];
+                    }
+                } else {
+                    // For other deductions, use the calculateEmployerShare method
+                    $employeeDeduction = $setting->calculateDeduction(
+                        $taxableIncomeForDeductions,
+                        $detail->overtime_pay ?? 0,
+                        $detail->bonuses ?? 0,
+                        $detail->allowances ?? 0,
+                        $detail->gross_pay ?? 0,
+                        null,
+                        null,
+                        $employee->basic_salary,
+                        $payFrequency
+                    );
+                    $employerShare = $setting->calculateEmployerShare($employeeDeduction, $cappedAmount);
+                }
+
+                if ($employerShare > 0) {
+                    $breakdown[] = [
+                        'name' => $setting->name,
+                        'code' => $setting->code ?? strtolower(str_replace(' ', '_', $setting->name)),
+                        'amount' => round($employerShare, 2),
+                        'type' => $setting->type ?? 'government',
+                        'calculation_type' => $setting->calculation_type,
+                        'pay_basis' => $payBasisName,
+                        'pay_basis_amount' => round($cappedAmount, 2)
+                    ];
+                }
+            }
         }
 
         return $breakdown;
@@ -6793,37 +7190,46 @@ class PayrollController extends Controller
 
             // Regular Workday (without night differential)
             if ($regularHours > 0) {
-                // Calculate per-minute amount with rounding (same as draft payroll)
-                $actualMinutes = $regularHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = $hourlyRate / 60;
-                $amount = $roundedMinutes * $ratePerMinute;
+                // Get rate configuration for regular workday
+                $rateConfig = $regularData['rate_config'] ?? null;
+                $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.01;
+
+                // Calculate per-minute amount using TimeLog's precision method
+                $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
 
                 $breakdown['Regular Workday'] = [
                     'hours' => $regularHours,
+                    'minutes' => round($regularHours * 60), // Add minutes for display
                     'rate' => $hourlyRate,
-                    'multiplier' => 1.0,
-                    'amount' => $amount
+                    'rate_per_minute' => round(($hourlyRate * $regularMultiplier) / 60, 4), // Round only for display
+                    'multiplier' => $regularMultiplier,
+                    'amount' => round($amount, 2) // Round final amount to 2 decimals
                 ];
             }
 
             // Regular Workday + Night Differential
             if ($nightDiffRegularHours > 0) {
+                // Get rate configuration for regular workday
+                $rateConfig = $regularData['rate_config'] ?? null;
+                $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.01;
+
                 // Get night differential settings for rate calculation
                 $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
                 $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
 
-                // Calculate per-minute amount with rounding (same as draft payroll)
-                $actualMinutes = $nightDiffRegularHours * 60;
-                $roundedMinutes = round($actualMinutes);
-                $ratePerMinute = ($hourlyRate * $nightDiffMultiplier) / 60;
-                $amount = $roundedMinutes * $ratePerMinute;
+                // Combined rate: regular workday rate + night differential bonus (SAME AS DRAFT AND VIEW CALCULATION)
+                $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
+
+                // Calculate per-minute amount using TimeLog's precision method
+                $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
 
                 $breakdown['Regular Workday+ND'] = [
                     'hours' => $nightDiffRegularHours,
+                    'minutes' => round($nightDiffRegularHours * 60), // Add minutes for display
                     'rate' => $hourlyRate,
-                    'multiplier' => $nightDiffMultiplier,
-                    'amount' => $amount
+                    'rate_per_minute' => round(($hourlyRate * $combinedMultiplier) / 60, 4), // Round only for display
+                    'multiplier' => $combinedMultiplier,
+                    'amount' => round($amount, 2) // Round final amount to 2 decimals
                 ];
             }
         }
@@ -6869,17 +7275,16 @@ class PayrollController extends Controller
 
                     // Regular holiday hours (without ND)
                     if ($regularHours > 0) {
-                        // Calculate per-minute amount with rounding (same as draft payroll)
-                        $actualMinutes = $regularHours * 60;
-                        $roundedMinutes = round($actualMinutes);
-                        $ratePerMinute = ($hourlyRate * $multiplier) / 60;
-                        $amount = $roundedMinutes * $ratePerMinute;
+                        // Calculate per-minute amount using TimeLog's precision method
+                        $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $multiplier, $regularHours);
 
                         $breakdown[$name] = [
                             'hours' => $regularHours,
-                            'rate' => number_format($hourlyRate, 2),
+                            'minutes' => round($regularHours * 60), // Add minutes for display
+                            'rate' => $hourlyRate,
+                            'rate_per_minute' => round(($hourlyRate * $multiplier) / 60, 4), // Round only for display
                             'multiplier' => $multiplier,
-                            'amount' => $amount
+                            'amount' => round($amount, 2) // Round final amount to 2 decimals
                         ];
                     }
 
@@ -6892,17 +7297,16 @@ class PayrollController extends Controller
                         // Combined rate: holiday rate + night differential bonus
                         $combinedMultiplier = $multiplier + ($nightDiffMultiplier - 1);
 
-                        // Calculate per-minute amount with rounding (same as draft payroll)
-                        $actualMinutes = $nightDiffRegularHours * 60;
-                        $roundedMinutes = round($actualMinutes);
-                        $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                        $amount = $roundedMinutes * $ratePerMinute;
+                        // Calculate per-minute amount using TimeLog's precision method
+                        $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
 
                         $breakdown[$name . '+ND'] = [
                             'hours' => $nightDiffRegularHours,
-                            'rate' => number_format($hourlyRate, 2),
+                            'minutes' => round($nightDiffRegularHours * 60), // Add minutes for display
+                            'rate' => $hourlyRate,
+                            'rate_per_minute' => round(($hourlyRate * $combinedMultiplier) / 60, 4), // Round only for display
                             'multiplier' => $combinedMultiplier,
-                            'amount' => $amount
+                            'amount' => round($amount, 2) // Round final amount to 2 decimals
                         ];
                     }
                 } else {
@@ -6985,17 +7389,16 @@ class PayrollController extends Controller
 
                 // Regular rest day hours (without ND)
                 if ($regularHours > 0) {
-                    // Calculate per-minute amount with rounding (same as draft payroll)
-                    $actualMinutes = $regularHours * 60;
-                    $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $multiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    // Calculate per-minute amount using TimeLog's precision method
+                    $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $multiplier, $regularHours);
 
                     $breakdown['Rest Day'] = [
                         'hours' => $regularHours,
-                        'rate' => number_format($hourlyRate, 2),
+                        'minutes' => round($regularHours * 60), // Add minutes for display
+                        'rate' => $hourlyRate,
+                        'rate_per_minute' => round(($hourlyRate * $multiplier) / 60, 4), // Round only for display
                         'multiplier' => $multiplier,
-                        'amount' => $amount
+                        'amount' => round($amount, 2) // Round final amount to 2 decimals
                     ];
                 }
 
@@ -7008,17 +7411,16 @@ class PayrollController extends Controller
                     // Combined rate: rest day rate + night differential bonus
                     $combinedMultiplier = $multiplier + ($nightDiffMultiplier - 1);
 
-                    // Calculate per-minute amount with rounding (same as draft payroll)
-                    $actualMinutes = $nightDiffRegularHours * 60;
-                    $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    // Calculate per-minute amount using TimeLog's precision method
+                    $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
 
                     $breakdown['Rest Day+ND'] = [
                         'hours' => $nightDiffRegularHours,
-                        'rate' => number_format($hourlyRate, 2),
+                        'minutes' => round($nightDiffRegularHours * 60), // Add minutes for display
+                        'rate' => $hourlyRate,
+                        'rate_per_minute' => round(($hourlyRate * $combinedMultiplier) / 60, 4), // Round only for display
                         'multiplier' => $combinedMultiplier,
-                        'amount' => $amount
+                        'amount' => round($amount, 2) // Round final amount to 2 decimals
                     ];
                 }
             } else {
@@ -7099,14 +7501,16 @@ class PayrollController extends Controller
                     // Calculate per-minute amount with rounding (same as draft payroll)
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60;
+                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60; // Keep full precision, no intermediate rounding
                     $amount = $roundedMinutes * $ratePerMinute;
 
                     $breakdown['Regular Workday OT'] = [
                         'hours' => $regularOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
                         'multiplier' => $overtimeMultiplier,
-                        'amount' => $amount
+                        'amount' => round($amount, 2) // Round final amount to 2 decimals
                     ];
                 }
 
@@ -7117,14 +7521,16 @@ class PayrollController extends Controller
                     // Calculate per-minute amount with rounding (same as draft payroll)
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60; // Keep full precision, no intermediate rounding
                     $amount = $roundedMinutes * $ratePerMinute;
 
                     $breakdown['Regular Workday OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
                         'multiplier' => $combinedMultiplier,
-                        'amount' => $amount
+                        'amount' => round($amount, 2) // Round final amount to 2 decimals
                     ];
                 }
             } else {
@@ -7133,14 +7539,16 @@ class PayrollController extends Controller
                 if ($regularOvertimeHours > 0) {
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * 1.25) / 60;
+                    $ratePerMinute = ($hourlyRate * 1.25) / 60; // Keep full precision, no intermediate rounding
                     $amount = $roundedMinutes * $ratePerMinute;
 
                     $breakdown['Regular Workday OT'] = [
                         'hours' => $regularOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
                         'multiplier' => 1.25,
-                        'amount' => $amount
+                        'amount' => round($amount, 2) // Round final amount to 2 decimals
                     ];
                 }
 
@@ -7150,14 +7558,16 @@ class PayrollController extends Controller
                     $combinedMultiplier = 1.25 + 0.10;
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
+                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60; // Keep full precision, no intermediate rounding
                     $amount = $roundedMinutes * $ratePerMinute;
 
                     $breakdown['Regular Workday OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
                         'multiplier' => $combinedMultiplier,
-                        'amount' => $amount
+                        'amount' => round($amount, 2) // Round final amount to 2 decimals
                     ];
                 }
             }
@@ -7825,8 +8235,8 @@ class PayrollController extends Controller
                 // Restore the outstanding balance
                 $cashAdvance->increment('outstanding_balance', $payment->payment_amount ?? $payment->amount);
 
-                // If cash advance was marked as completed, revert to approved
-                if ($cashAdvance->status === 'completed' && $cashAdvance->outstanding_balance > 0) {
+                // If cash advance was marked as fully_paid, revert to approved
+                if ($cashAdvance->status === 'fully_paid' && $cashAdvance->outstanding_balance > 0) {
                     $cashAdvance->update(['status' => 'approved']);
                 }
             }

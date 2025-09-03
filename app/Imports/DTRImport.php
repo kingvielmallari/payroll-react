@@ -369,72 +369,43 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
             // If beyond grace period, use actual time out
         }
 
-        // STEP 2: Calculate working time based on break type (duration vs fixed times)
-        $totalWorkingMinutes = 0;
+        // STEP 2: Calculate working time with proper break handling
+        $breakMinutesToDeduct = 0;
+        $adjustedWorkEndTime = $workEndTime;
 
-        // Check if schedule uses break duration (new system)
-        if ($timeSchedule && $timeSchedule->break_duration_minutes > 0) {
-            // BREAK DURATION SYSTEM: Calculate total time and subtract break duration
-            $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
-            $totalWorkingMinutes = max(0, $totalWorkingMinutes - $timeSchedule->break_duration_minutes);
-        }
-        // Check if schedule uses fixed break times (existing system) 
-        else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            // FIXED BREAK TIMES SYSTEM: Check if employee has actual break logs
-            $hasBreakLogs = $timeLog->break_in && $timeLog->break_out;
+        if ($timeLog->break_in && $timeLog->break_out) {
+            // If manual break times provided, use them
+            $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
+            $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
 
-            if ($hasBreakLogs) {
-                // Use actual logged break times when available
-                $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
-                $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
-
-                if ($breakOut->gt($breakIn)) {
-                    // Calculate: (work start to break start) + (break end to work end)
-                    $beforeBreak = 0;
-                    $afterBreak = 0;
-
-                    if ($workStartTime->lt($breakIn)) {
-                        $beforeBreak = $workStartTime->diffInMinutes(min($breakIn, $workEndTime));
-                    }
-
-                    if ($workEndTime->gt($breakOut)) {
-                        $afterBreak = max($breakOut, $workStartTime)->diffInMinutes($workEndTime);
-                    }
-
-                    $totalWorkingMinutes = $beforeBreak + $afterBreak;
-                } else {
-                    // Invalid break times, just calculate normal work time
-                    $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
-                }
-            } else {
-                // No break logs: Use scheduled break window and split calculation
-                $breakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
-                $breakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
-
-                // Calculate: (work start to break start) + (break end to work end)
-                $beforeBreak = 0;
-                $afterBreak = 0;
-
-                // Time worked before break period
-                if ($workStartTime->lt($breakStart)) {
-                    $beforeBreakEnd = $workEndTime->lt($breakStart) ? $workEndTime : $breakStart;
-                    $beforeBreak = $workStartTime->diffInMinutes($beforeBreakEnd);
-                }
-
-                // Time worked after break period  
-                if ($workEndTime->gt($breakEnd)) {
-                    $afterBreakStart = $workStartTime->gt($breakEnd) ? $workStartTime : $breakEnd;
-                    $afterBreak = $afterBreakStart->diffInMinutes($workEndTime);
-                }
-
-                $totalWorkingMinutes = $beforeBreak + $afterBreak;
+            if ($breakOut->gt($breakIn)) {
+                $breakMinutesToDeduct = $breakIn->diffInMinutes($breakOut);
             }
-        } else {
-            // No break configuration, calculate normal work time
-            $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
+        } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+            // Handle scheduled break logic
+            $breakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
+            $breakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
+
+            // Case 1: Employee worked before break started AND after break ended - deduct full break
+            if ($workStartTime->lt($breakStart) && $workEndTime->gt($breakEnd)) {
+                $breakMinutesToDeduct = $breakStart->diffInMinutes($breakEnd);
+            }
+            // Case 2: Employee left at or during break period - only count time before break
+            else if ($workStartTime->lt($breakStart) && $workEndTime->lte($breakEnd)) {
+                // Only count work time before break started
+                $adjustedWorkEndTime = $breakStart;
+            }
+            // Case 3: Employee came during or after break period - only count time after break
+            else if ($workStartTime->gte($breakStart) && $workStartTime->lt($breakEnd)) {
+                // Start counting from break end
+                $workStartTime = $breakEnd;
+            }
+            // Case 4: Employee came after break ended - no adjustment needed
         }
 
-        // STEP 3: Convert to hours
+        // STEP 3: Calculate total working hours
+        $rawWorkingMinutes = $workStartTime->diffInMinutes($adjustedWorkEndTime);
+        $totalWorkingMinutes = max(0, $rawWorkingMinutes - $breakMinutesToDeduct);
         $totalHours = $totalWorkingMinutes / 60;
 
         // STEP 4: Calculate late hours (consistent with grace period logic for ALL day types)
@@ -452,15 +423,9 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
 
         // STEP 5: Calculate standard work hours (scheduled hours minus break)
         $standardWorkMinutes = $schedStart->diffInMinutes($schedEnd);
-        if ($timeSchedule) {
-            if ($timeSchedule->break_duration_minutes > 0) {
-                // Break duration system
-                $standardWorkMinutes -= $timeSchedule->break_duration_minutes;
-            } else if ($timeSchedule->break_start && $timeSchedule->break_end) {
-                // Fixed break times system
-                $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
-                $standardWorkMinutes -= $scheduledBreakMinutes;
-            }
+        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+            $scheduledBreakMinutes = $timeSchedule->break_start->diffInMinutes($timeSchedule->break_end);
+            $standardWorkMinutes -= $scheduledBreakMinutes;
         }
         $standardHours = max(0, $standardWorkMinutes / 60);
 
@@ -475,7 +440,7 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
             $overtimeHours = $totalHours - $overtimeThresholdHours;
 
             // Calculate night differential period for overtime hours only
-            $nightDiffBreakdown = $this->calculateNightDifferentialHours($workStartTime, $workEndTime, $overtimeThresholdHours);
+            $nightDiffBreakdown = $this->calculateNightDifferentialHours($workStartTime, $adjustedWorkEndTime, $overtimeThresholdHours);
             $regularOvertimeHours = $nightDiffBreakdown['regular_overtime'];
             $nightDifferentialOvertimeHours = $nightDiffBreakdown['night_diff_overtime'];
         }

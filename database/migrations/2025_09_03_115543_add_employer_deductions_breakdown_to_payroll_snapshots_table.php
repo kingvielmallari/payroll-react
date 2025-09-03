@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('payroll_snapshots', function (Blueprint $table) {
-            //
+            $table->json('employer_deductions_breakdown')->nullable()->after('deductions_breakdown');
         });
     }
 
@@ -22,7 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('payroll_snapshots', function (Blueprint $table) {
-            //
+            $table->dropColumn('employer_deductions_breakdown');
         });
     }
 };

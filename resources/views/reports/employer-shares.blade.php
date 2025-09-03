@@ -163,24 +163,45 @@
                                             <td class="px-6 py-4 whitespace-nowrap">
                                                 <div class="flex items-center">
                                                     <div class="text-sm font-medium text-gray-900">{{ $data->name }}</div>
-                                                    <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                        Shared
-                                                    </span>
+                                                    @if($data->is_shared)
+                                                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                            Shared
+                                                        </span>
+                                                    {{-- @else
+                                                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                                            Not Shared
+                                                        </span> --}}
+                                                    @endif
                                                 </div>
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                 ₱{{ number_format($data->total_ee_share, 2) }}
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                ₱{{ number_format($data->total_er_share, 2) }}
+                                                @if($data->is_shared)
+                                                    ₱{{ number_format($data->total_er_share, 2) }}
+                                                @else
+                                                    <div class="flex items-center">
+                                                        {{-- <span class="text-gray-500">₱0.00</span> --}}
+                                                        <span class=" inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                            Not Shared
+                                                        </span>
+                                                    </div>
+                                                @endif
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                                 ₱{{ number_format($data->total_combined, 2) }}
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap">
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                    {{ $data->share_percentage }}% each
-                                                </span>
+                                                @if($data->is_shared)
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        EE & ER Share
+                                                    </span>
+                                                @else
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        EE Only
+                                                    </span>
+                                                @endif
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                 {{ number_format($data->employee_count) }}
