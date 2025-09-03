@@ -83,24 +83,31 @@
                                     $scheduleEnd = '17:00';   // Default fallback
                                     $scheduleBreakStart = '12:00'; // Default break start
                                     $scheduleBreakEnd = '13:00';   // Default break end
+                                    $hasFixedBreakTimes = false; // Flag to determine if we should auto-fill break times
                                     
                                     if ($selectedEmployee->timeSchedule) {
                                         $scheduleStart = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->time_in)->format('H:i');
                                         $scheduleEnd = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->time_out)->format('H:i');
                                         
-                                        // Use break times from schedule if available
-                                        if ($selectedEmployee->timeSchedule->break_start) {
+                                        // Check break configuration type
+                                        if ($selectedEmployee->timeSchedule->break_duration_minutes > 0) {
+                                            // Break duration system: Don't auto-fill break times
+                                            $hasFixedBreakTimes = false;
+                                        } elseif ($selectedEmployee->timeSchedule->break_start && $selectedEmployee->timeSchedule->break_end) {
+                                            // Fixed break times system: Auto-fill break times
+                                            $hasFixedBreakTimes = true;
                                             $scheduleBreakStart = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_start)->format('H:i');
-                                        }
-                                        if ($selectedEmployee->timeSchedule->break_end) {
                                             $scheduleBreakEnd = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_end)->format('H:i');
+                                        } else {
+                                            // No break configuration: Don't auto-fill break times
+                                            $hasFixedBreakTimes = false;
                                         }
                                     }
                                     
                                     $displayStart = \Carbon\Carbon::parse($scheduleStart)->format('g:i A');
                                     $displayEnd = \Carbon\Carbon::parse($scheduleEnd)->format('g:i A');
                                 @endphp
-                                <button type="button" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600" onclick="fillRegularHours('{{ $scheduleStart }}', '{{ $scheduleEnd }}', '{{ $scheduleBreakStart }}', '{{ $scheduleBreakEnd }}')">
+                                <button type="button" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600" onclick="fillRegularHours('{{ $scheduleStart }}', '{{ $scheduleEnd }}', '{{ $scheduleBreakStart }}', '{{ $scheduleBreakEnd }}', {{ $hasFixedBreakTimes ? 'true' : 'false' }})">
                                     Fill Time & Break Fields ({{ $displayStart }} - {{ $displayEnd }})
                                 </button>
                                 <button type="button" class="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600" onclick="resetAll()">
@@ -108,7 +115,13 @@
                                 </button>
                             </div>
                             <p class="text-xs text-blue-700 mt-2">
-                                <strong>Fill Time & Break:</strong> Fills empty fields with employee's scheduled work hours and break times.<br>
+                                <strong>Fill Time & Break:</strong> 
+                                @if($hasFixedBreakTimes)
+                                    Fills empty fields with employee's scheduled work hours and break times.
+                                @else
+                                    Fills empty fields with employee's scheduled work hours only (break times not auto-filled for duration-based break schedules).
+                                @endif
+                                <br>
                                 <strong>Reset All:</strong> Clears all fields and resets types to default based on employee's day schedule.
                             </p>
                         </div>
@@ -287,7 +300,7 @@
     </div>
 
     <script>
-        function fillRegularHours(timeIn, timeOut, breakIn, breakOut) {
+        function fillRegularHours(timeIn, timeOut, breakIn, breakOut, shouldFillBreakTimes) {
             const rows = document.querySelectorAll('tbody tr');
             rows.forEach((row, index) => {
                 const isWeekend = row.classList.contains('bg-gray-100');
@@ -299,16 +312,20 @@
                     const breakInInput = row.querySelector(`input[name="time_logs[${index}][break_in]"]`);
                     const breakOutInput = row.querySelector(`input[name="time_logs[${index}][break_out]"]`);
                     
-                    // Only fill empty fields to avoid overwriting existing data
+                    // Always fill time in/out if empty
                     if (timeInInput && !timeInInput.value) timeInInput.value = timeIn;
                     if (timeOutInput && !timeOutInput.value) timeOutInput.value = timeOut;
-                    if (breakInInput && !breakInInput.value) breakInInput.value = breakIn;
-                    if (breakOutInput && !breakOutInput.value) breakOutInput.value = breakOut;
+                    
+                    // Only fill break times if employee has fixed break schedule (not break duration)
+                    if (shouldFillBreakTimes) {
+                        if (breakInInput && !breakInInput.value) breakInInput.value = breakIn;
+                        if (breakOutInput && !breakOutInput.value) breakOutInput.value = breakOut;
+                    }
                 }
             });
         }
 
-        function fillRegularHoursAll(timeIn, timeOut) {
+        function fillRegularHoursAll(timeIn, timeOut, shouldFillBreakTimes = true) {
             // Alternative function to fill all fields (overwrite existing)
             const rows = document.querySelectorAll('tbody tr');
             rows.forEach((row, index) => {
@@ -321,10 +338,14 @@
                     const breakInInput = row.querySelector(`input[name="time_logs[${index}][break_in]"]`);
                     const breakOutInput = row.querySelector(`input[name="time_logs[${index}][break_out]"]`);
                     
-                    if (timeInInput) timeInInput.value = timeIn;       // 8:00 (8:00 AM)
-                    if (timeOutInput) timeOutInput.value = timeOut;    // 17:00 (5:00 PM)
-                    if (breakInInput) breakInInput.value = '12:00';    // 12:00 PM
-                    if (breakOutInput) breakOutInput.value = '13:00';  // 1:00 PM
+                    if (timeInInput) timeInInput.value = timeIn;       // Employee's scheduled time in
+                    if (timeOutInput) timeOutInput.value = timeOut;    // Employee's scheduled time out
+                    
+                    // Only fill break times if employee has fixed break schedule (not break duration)
+                    if (shouldFillBreakTimes) {
+                        if (breakInInput) breakInInput.value = '12:00';    // 12:00 PM
+                        if (breakOutInput) breakOutInput.value = '13:00';  // 1:00 PM
+                    }
                 }
             });
         }
@@ -396,6 +417,12 @@
                 $jsScheduleEnd = \Carbon\Carbon::parse($jsScheduleEnd)->format('H:i');
                 $jsBreakStart = \Carbon\Carbon::parse($jsBreakStart)->format('H:i');
                 $jsBreakEnd = \Carbon\Carbon::parse($jsBreakEnd)->format('H:i');
+                
+                // Check if this employee has fixed break times or break duration
+                $jsHasFixedBreakTimes = $selectedEmployee->timeSchedule && 
+                                       $selectedEmployee->timeSchedule->break_start && 
+                                       $selectedEmployee->timeSchedule->break_end && 
+                                       !($selectedEmployee->timeSchedule->break_duration_minutes > 0);
             @endphp
             
             // Set employee's scheduled working hours for a specific row
@@ -407,8 +434,12 @@
             // Use employee's actual schedule times
             if (timeInInput) timeInInput.value = '{{ $jsScheduleStart }}';
             if (timeOutInput) timeOutInput.value = '{{ $jsScheduleEnd }}';
+            
+            // Only auto-fill break times if employee has fixed break schedule (not break duration)
+            @if($hasFixedBreakTimes)
             if (breakInInput) breakInInput.value = '{{ $jsBreakStart }}';
             if (breakOutInput) breakOutInput.value = '{{ $jsBreakEnd }}';
+            @endif
             
             // Do NOT change the log type - preserve the current selection
             // This allows users to set regular times on Rest Days, Holidays, etc. without changing the type
