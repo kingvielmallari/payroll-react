@@ -189,6 +189,8 @@ function showContextMenu(event, element) {
                         </div>
                         
                         <div class="flex items-center">
+                            <!-- Hidden field to ensure false value is sent when checkbox is unchecked -->
+                            <input type="hidden" name="is_active" value="0">
                             <input type="checkbox" id="nd_is_active" name="is_active" value="1" 
                                    {{ $nightDifferentialData['is_active'] ? 'checked' : '' }}
                                    class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
@@ -202,14 +204,7 @@ function showContextMenu(event, element) {
                         </button>
                     </form>
                     
-                    <div class="mt-4 p-3 bg-purple-50 rounded-md">
-                        <p class="text-sm text-purple-800">
-                            <strong>Example:</strong> 10 PM - 5 AM with 10% differential applies premium to all hours worked during night shift.
-                        </p>
-                        <p class="text-xs text-purple-600 mt-1">
-                            OT + ND: Regular OT (25%) + ND (10%) = Combined premium for overtime during night shift
-                        </p>
-                    </div>
+             
                 </div>
             </div>
         </div>

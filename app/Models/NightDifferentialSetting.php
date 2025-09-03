@@ -23,10 +23,18 @@ class NightDifferentialSetting extends Model
     ];
 
     /**
-     * Get the current active night differential setting
+     * Get the current night differential setting
      */
     public static function current()
     {
         return static::where('is_active', true)->first();
+    }
+
+    /**
+     * Get the most recent night differential setting regardless of active status
+     */
+    public static function mostRecent()
+    {
+        return static::orderBy('created_at', 'desc')->first();
     }
 }
