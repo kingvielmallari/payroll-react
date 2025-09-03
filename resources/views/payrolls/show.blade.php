@@ -305,30 +305,19 @@
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <p class="text-sm text-green-700">
+                                {{-- <p class="text-sm text-green-700">
                                     <span class="font-medium">Marked as paid on:</span><br>
                                     {{ $payroll->marked_paid_at->format('M d, Y g:i A') }}
-                                </p>
+                                </p> --}}
                                 @if($payroll->markedPaidBy)
-                                <p class="text-sm text-green-700 mt-1">
-                                    <span class="font-medium">Marked by:</span><br>
-                                    {{ $payroll->markedPaidBy->name }}
+                                <p class="text-sm text-green-700 mt-1 ">
+                                    <span class="font-medium">Marked by:</span>
+                                    {{ $payroll->markedPaidBy->name }} on {{ $payroll->marked_paid_at->format('M d, Y g:i A') }}
                                 </p>
                                 @endif
                             </div>
-                            
-                            @if($payroll->payment_notes)
-                            <div>
-                                <p class="text-sm text-green-700">
-                                    <span class="font-medium">Payment Notes:</span><br>
-                                    {{ $payroll->payment_notes }}
-                                </p>
-                            </div>
-                            @endif
-                        </div>
-
-                        @if($payroll->payment_proof_files && count($payroll->payment_proof_files) > 0)
-                        <div class="mt-4">
+                              @if($payroll->payment_proof_files && count($payroll->payment_proof_files) > 0)
+                        <div >
                             <p class="text-sm font-medium text-green-900 mb-2">Payment Proof Files:</p>
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                 @foreach($payroll->payment_proof_files as $file)
@@ -350,6 +339,17 @@
                             </div>
                         </div>
                         @endif
+                            @if($payroll->payment_notes)
+                            <div>
+                                <p class="text-sm text-green-700">
+                                    <span class="font-medium">Payment Notes:</span><br>
+                                    {{ $payroll->payment_notes }}
+                                </p>
+                            </div>
+                            @endif
+                        </div>
+
+                      
                     </div>
                     @endif
 

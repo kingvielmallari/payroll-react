@@ -7,6 +7,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use App\Models\TimeSchedule;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Validator;
 
 class TimeScheduleController extends Controller
 {
@@ -31,7 +32,16 @@ class TimeScheduleController extends Controller
     {
         $this->authorize('edit settings');
 
-        $request->validate([
+        // Prepare validation data - convert empty strings to null for time fields
+        $validationData = $request->all();
+        if (empty($validationData['break_start'])) {
+            $validationData['break_start'] = null;
+        }
+        if (empty($validationData['break_end'])) {
+            $validationData['break_end'] = null;
+        }
+
+        $validator = Validator::make($validationData, [
             'name' => 'required|string|max:255|unique:time_schedules',
             'time_in' => 'required|date_format:H:i',
             'time_out' => 'required|date_format:H:i|after:time_in',
@@ -40,17 +50,28 @@ class TimeScheduleController extends Controller
             'break_end' => 'nullable|date_format:H:i',
         ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Clean up empty break times
+        $breakStart = $validationData['break_start'];
+        $breakEnd = $validationData['break_end'];
+
         // Validate break times if provided
-        if ($request->break_start && $request->break_end) {
+        if ($breakStart && $breakEnd) {
             $timeIn = Carbon::createFromFormat('H:i', $request->time_in);
             $timeOut = Carbon::createFromFormat('H:i', $request->time_out);
-            $breakStart = Carbon::createFromFormat('H:i', $request->break_start);
-            $breakEnd = Carbon::createFromFormat('H:i', $request->break_end);
+            $breakStartTime = Carbon::createFromFormat('H:i', $breakStart);
+            $breakEndTime = Carbon::createFromFormat('H:i', $breakEnd);
 
             if (
-                $breakStart->lt($timeIn) || $breakStart->gt($timeOut) ||
-                $breakEnd->lt($timeIn) || $breakEnd->gt($timeOut) ||
-                $breakEnd->lt($breakStart)
+                $breakStartTime->lt($timeIn) || $breakStartTime->gt($timeOut) ||
+                $breakEndTime->lt($timeIn) || $breakEndTime->gt($timeOut) ||
+                $breakEndTime->lt($breakStartTime)
             ) {
                 return response()->json([
                     'message' => 'Break times must be within work hours and break end must be after break start.',
@@ -62,7 +83,14 @@ class TimeScheduleController extends Controller
             }
         }
 
-        $timeSchedule = TimeSchedule::create($request->all());
+        $timeSchedule = TimeSchedule::create([
+            'name' => $request->name,
+            'time_in' => $request->time_in,
+            'time_out' => $request->time_out,
+            'break_duration_minutes' => $request->break_duration_minutes,
+            'break_start' => $breakStart,
+            'break_end' => $breakEnd,
+        ]);
 
         return response()->json([
             'message' => 'Time schedule created successfully.',
@@ -87,7 +115,16 @@ class TimeScheduleController extends Controller
     {
         $this->authorize('edit settings');
 
-        $request->validate([
+        // Prepare validation data - convert empty strings to null for time fields
+        $validationData = $request->all();
+        if (empty($validationData['break_start'])) {
+            $validationData['break_start'] = null;
+        }
+        if (empty($validationData['break_end'])) {
+            $validationData['break_end'] = null;
+        }
+
+        $validator = Validator::make($validationData, [
             'name' => 'required|string|max:255|unique:time_schedules,name,' . $timeSchedule->id,
             'time_in' => 'required|date_format:H:i',
             'time_out' => 'required|date_format:H:i|after:time_in',
@@ -96,17 +133,28 @@ class TimeScheduleController extends Controller
             'break_end' => 'nullable|date_format:H:i',
         ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Clean up empty break times
+        $breakStart = $validationData['break_start'];
+        $breakEnd = $validationData['break_end'];
+
         // Validate break times if provided
-        if ($request->break_start && $request->break_end) {
+        if ($breakStart && $breakEnd) {
             $timeIn = Carbon::createFromFormat('H:i', $request->time_in);
             $timeOut = Carbon::createFromFormat('H:i', $request->time_out);
-            $breakStart = Carbon::createFromFormat('H:i', $request->break_start);
-            $breakEnd = Carbon::createFromFormat('H:i', $request->break_end);
+            $breakStartTime = Carbon::createFromFormat('H:i', $breakStart);
+            $breakEndTime = Carbon::createFromFormat('H:i', $breakEnd);
 
             if (
-                $breakStart->lt($timeIn) || $breakStart->gt($timeOut) ||
-                $breakEnd->lt($timeIn) || $breakEnd->gt($timeOut) ||
-                $breakEnd->lt($breakStart)
+                $breakStartTime->lt($timeIn) || $breakStartTime->gt($timeOut) ||
+                $breakEndTime->lt($timeIn) || $breakEndTime->gt($timeOut) ||
+                $breakEndTime->lt($breakStartTime)
             ) {
                 return response()->json([
                     'message' => 'Break times must be within work hours and break end must be after break start.',
@@ -118,7 +166,14 @@ class TimeScheduleController extends Controller
             }
         }
 
-        $timeSchedule->update($request->all());
+        $timeSchedule->update([
+            'name' => $request->name,
+            'time_in' => $request->time_in,
+            'time_out' => $request->time_out,
+            'break_duration_minutes' => $request->break_duration_minutes,
+            'break_start' => $breakStart,
+            'break_end' => $breakEnd,
+        ]);
 
         return response()->json([
             'message' => 'Time schedule updated successfully.',

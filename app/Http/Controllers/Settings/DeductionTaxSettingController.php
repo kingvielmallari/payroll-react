@@ -4,9 +4,6 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\DeductionTaxSetting;
-use App\Models\PhilHealthTaxTable;
-use App\Models\SssTaxTable;
-use App\Models\PagibigTaxTable;
 use Illuminate\Http\Request;
 
 class DeductionTaxSettingController extends Controller
@@ -185,70 +182,6 @@ class DeductionTaxSettingController extends Controller
             'employee_deduction' => $amount,
             'employer_share' => $employerShare,
             'total_cost' => $amount + $employerShare
-        ]);
-    }
-
-    public function getPhilHealthTaxTable()
-    {
-        $taxTable = PhilHealthTaxTable::where('is_active', true)
-            ->orderBy('range_start')
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => $taxTable->map(function ($item) {
-                return [
-                    'range_start' => $item->range_start,
-                    'range_end' => $item->range_end,
-                    'employee_share' => $item->employee_share,
-                    'employer_share' => $item->employer_share,
-                    'total_contribution' => $item->total_contribution,
-                    'min_contribution' => $item->min_contribution,
-                    'max_contribution' => $item->max_contribution,
-                ];
-            })
-        ]);
-    }
-
-    public function getSssTaxTable()
-    {
-        $taxTable = SssTaxTable::where('is_active', true)
-            ->orderBy('range_start')
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => $taxTable->map(function ($item) {
-                return [
-                    'range_start' => $item->range_start,
-                    'range_end' => $item->range_end,
-                    'employee_share' => $item->employee_share,
-                    'employer_share' => $item->employer_share,
-                    'total_contribution' => $item->total_contribution,
-                ];
-            })
-        ]);
-    }
-
-    public function getPagibigTaxTable()
-    {
-        $taxTable = PagibigTaxTable::where('is_active', true)
-            ->orderBy('range_start')
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => $taxTable->map(function ($item) {
-                return [
-                    'range_start' => $item->range_start,
-                    'range_end' => $item->range_end,
-                    'employee_share' => $item->employee_share . '%',
-                    'employer_share' => $item->employer_share . '%',
-                    'total_contribution' => $item->total_contribution . '%',
-                    'min_contribution' => $item->min_contribution,
-                    'max_contribution' => $item->max_contribution,
-                ];
-            })
         ]);
     }
 }

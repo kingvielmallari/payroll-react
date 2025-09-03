@@ -98,9 +98,9 @@
                                                 </span>
                                                 @else
                                                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                    50% EE
+                                                    100% EE
                                                 </span>
-                                            @endif
+                                            @endif  
                                         </div>
                                     @elseif($deduction->calculation_type === 'bracket')
                                         <span class="text-gray-500 italic">Bracket-based</span>
