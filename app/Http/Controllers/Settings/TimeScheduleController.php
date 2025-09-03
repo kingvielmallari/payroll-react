@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use App\Models\TimeSchedule;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class TimeScheduleController extends Controller
 {
@@ -40,11 +41,15 @@ class TimeScheduleController extends Controller
         if (empty($validationData['break_end'])) {
             $validationData['break_end'] = null;
         }
+        if (empty($validationData['break_duration_minutes'])) {
+            $validationData['break_duration_minutes'] = null;
+        }
 
         $validator = Validator::make($validationData, [
             'name' => 'required|string|max:255|unique:time_schedules',
             'time_in' => 'required|date_format:H:i',
             'time_out' => 'required|date_format:H:i|after:time_in',
+            'break_option' => 'required|in:duration,fixed,none',
             'break_duration_minutes' => 'nullable|integer|min:0|max:480', // Max 8 hours break
             'break_start' => 'nullable|date_format:H:i',
             'break_end' => 'nullable|date_format:H:i',
@@ -57,27 +62,52 @@ class TimeScheduleController extends Controller
             ], 422);
         }
 
-        // Clean up empty break times
-        $breakStart = $validationData['break_start'];
-        $breakEnd = $validationData['break_end'];
+        // Handle break option logic
+        $breakStart = null;
+        $breakEnd = null;
+        $breakDurationMinutes = null;
 
-        // Validate break times if provided
-        if ($breakStart && $breakEnd) {
-            $timeIn = Carbon::createFromFormat('H:i', $request->time_in);
-            $timeOut = Carbon::createFromFormat('H:i', $request->time_out);
-            $breakStartTime = Carbon::createFromFormat('H:i', $breakStart);
-            $breakEndTime = Carbon::createFromFormat('H:i', $breakEnd);
+        if ($request->break_option === 'fixed') {
+            $breakStart = $validationData['break_start'];
+            $breakEnd = $validationData['break_end'];
 
-            if (
-                $breakStartTime->lt($timeIn) || $breakStartTime->gt($timeOut) ||
-                $breakEndTime->lt($timeIn) || $breakEndTime->gt($timeOut) ||
-                $breakEndTime->lt($breakStartTime)
-            ) {
+            // Validate break times if using fixed option
+            if ($breakStart && $breakEnd) {
+                $timeIn = Carbon::createFromFormat('H:i', $request->time_in);
+                $timeOut = Carbon::createFromFormat('H:i', $request->time_out);
+                $breakStartTime = Carbon::createFromFormat('H:i', $breakStart);
+                $breakEndTime = Carbon::createFromFormat('H:i', $breakEnd);
+
+                if (
+                    $breakStartTime->lt($timeIn) || $breakStartTime->gt($timeOut) ||
+                    $breakEndTime->lt($timeIn) || $breakEndTime->gt($timeOut) ||
+                    $breakEndTime->lte($breakStartTime)
+                ) {
+                    return response()->json([
+                        'message' => 'Break times must be within work hours and break end must be after break start.',
+                        'errors' => [
+                            'break_start' => ['Break times must be within work hours.'],
+                            'break_end' => ['Break end must be after break start.']
+                        ]
+                    ], 422);
+                }
+            } else {
                 return response()->json([
-                    'message' => 'Break times must be within work hours and break end must be after break start.',
+                    'message' => 'Both break start and end times are required for fixed break option.',
                     'errors' => [
-                        'break_start' => ['Break times must be within work hours.'],
-                        'break_end' => ['Break end must be after break start.']
+                        'break_start' => ['Break start time is required for fixed break option.'],
+                        'break_end' => ['Break end time is required for fixed break option.']
+                    ]
+                ], 422);
+            }
+        } elseif ($request->break_option === 'duration') {
+            $breakDurationMinutes = $validationData['break_duration_minutes'];
+
+            if (!$breakDurationMinutes) {
+                return response()->json([
+                    'message' => 'Break duration is required when using duration option.',
+                    'errors' => [
+                        'break_duration_minutes' => ['Break duration is required for duration option.']
                     ]
                 ], 422);
             }
@@ -87,9 +117,11 @@ class TimeScheduleController extends Controller
             'name' => $request->name,
             'time_in' => $request->time_in,
             'time_out' => $request->time_out,
-            'break_duration_minutes' => $request->break_duration_minutes,
+            'break_duration_minutes' => $breakDurationMinutes,
             'break_start' => $breakStart,
             'break_end' => $breakEnd,
+            'is_active' => $request->has('is_active'),
+            'created_by' => Auth::id(),
         ]);
 
         return response()->json([
@@ -123,11 +155,15 @@ class TimeScheduleController extends Controller
         if (empty($validationData['break_end'])) {
             $validationData['break_end'] = null;
         }
+        if (empty($validationData['break_duration_minutes'])) {
+            $validationData['break_duration_minutes'] = null;
+        }
 
         $validator = Validator::make($validationData, [
             'name' => 'required|string|max:255|unique:time_schedules,name,' . $timeSchedule->id,
             'time_in' => 'required|date_format:H:i',
             'time_out' => 'required|date_format:H:i|after:time_in',
+            'break_option' => 'required|in:duration,fixed,none',
             'break_duration_minutes' => 'nullable|integer|min:0|max:480',
             'break_start' => 'nullable|date_format:H:i',
             'break_end' => 'nullable|date_format:H:i',
@@ -140,27 +176,52 @@ class TimeScheduleController extends Controller
             ], 422);
         }
 
-        // Clean up empty break times
-        $breakStart = $validationData['break_start'];
-        $breakEnd = $validationData['break_end'];
+        // Handle break option logic
+        $breakStart = null;
+        $breakEnd = null;
+        $breakDurationMinutes = null;
 
-        // Validate break times if provided
-        if ($breakStart && $breakEnd) {
-            $timeIn = Carbon::createFromFormat('H:i', $request->time_in);
-            $timeOut = Carbon::createFromFormat('H:i', $request->time_out);
-            $breakStartTime = Carbon::createFromFormat('H:i', $breakStart);
-            $breakEndTime = Carbon::createFromFormat('H:i', $breakEnd);
+        if ($request->break_option === 'fixed') {
+            $breakStart = $validationData['break_start'];
+            $breakEnd = $validationData['break_end'];
 
-            if (
-                $breakStartTime->lt($timeIn) || $breakStartTime->gt($timeOut) ||
-                $breakEndTime->lt($timeIn) || $breakEndTime->gt($timeOut) ||
-                $breakEndTime->lt($breakStartTime)
-            ) {
+            // Validate break times if using fixed option
+            if ($breakStart && $breakEnd) {
+                $timeIn = Carbon::createFromFormat('H:i', $request->time_in);
+                $timeOut = Carbon::createFromFormat('H:i', $request->time_out);
+                $breakStartTime = Carbon::createFromFormat('H:i', $breakStart);
+                $breakEndTime = Carbon::createFromFormat('H:i', $breakEnd);
+
+                if (
+                    $breakStartTime->lt($timeIn) || $breakStartTime->gt($timeOut) ||
+                    $breakEndTime->lt($timeIn) || $breakEndTime->gt($timeOut) ||
+                    $breakEndTime->lte($breakStartTime)
+                ) {
+                    return response()->json([
+                        'message' => 'Break times must be within work hours and break end must be after break start.',
+                        'errors' => [
+                            'break_start' => ['Break times must be within work hours.'],
+                            'break_end' => ['Break end must be after break start.']
+                        ]
+                    ], 422);
+                }
+            } else {
                 return response()->json([
-                    'message' => 'Break times must be within work hours and break end must be after break start.',
+                    'message' => 'Both break start and end times are required for fixed break option.',
                     'errors' => [
-                        'break_start' => ['Break times must be within work hours.'],
-                        'break_end' => ['Break end must be after break start.']
+                        'break_start' => ['Break start time is required for fixed break option.'],
+                        'break_end' => ['Break end time is required for fixed break option.']
+                    ]
+                ], 422);
+            }
+        } elseif ($request->break_option === 'duration') {
+            $breakDurationMinutes = $validationData['break_duration_minutes'];
+
+            if (!$breakDurationMinutes) {
+                return response()->json([
+                    'message' => 'Break duration is required when using duration option.',
+                    'errors' => [
+                        'break_duration_minutes' => ['Break duration is required for duration option.']
                     ]
                 ], 422);
             }
@@ -170,9 +231,10 @@ class TimeScheduleController extends Controller
             'name' => $request->name,
             'time_in' => $request->time_in,
             'time_out' => $request->time_out,
-            'break_duration_minutes' => $request->break_duration_minutes,
+            'break_duration_minutes' => $breakDurationMinutes,
             'break_start' => $breakStart,
             'break_end' => $breakEnd,
+            'is_active' => $request->has('is_active'),
         ]);
 
         return response()->json([

@@ -348,54 +348,6 @@ function showContextMenu(event, element) {
     </div>
 </div>
 
-<!-- Break Period Modal -->
-<div id="breakPeriodModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
-    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div class="mt-3">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-medium text-gray-900">Edit Break Period</h3>
-                <button onclick="closeBreakPeriodModal()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-            
-            <form id="breakPeriodForm">
-                @csrf
-                <div class="mb-4">
-                    <label for="break_duration_edit" class="block text-sm font-medium text-gray-700">Break Duration (minutes)</label>
-                    <input type="number" id="break_duration_edit" name="break_duration_minutes" min="0" max="480"
-                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                </div>
-                
-                <div class="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label for="break_start_edit" class="block text-sm font-medium text-gray-700">Break Start</label>
-                        <input type="time" id="break_start_edit" name="break_start"
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                    </div>
-                    <div>
-                        <label for="break_end_edit" class="block text-sm font-medium text-gray-700">Break End</label>
-                        <input type="time" id="break_end_edit" name="break_end"
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                    </div>
-                </div>
-                
-                <div class="flex justify-end space-x-3">
-                    <button type="button" onclick="closeBreakPeriodModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 border border-gray-300 rounded-md hover:bg-gray-50">
-                        Cancel
-                    </button>
-                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700">
-                        Update Break Period
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-</div>
-
 <!-- Context Menu -->
 <div id="contextMenu" class="fixed bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50 hidden min-w-[160px]">
     <div id="contextMenuItems"></div>
@@ -451,12 +403,6 @@ function showContextMenu(event, element) {
                 </svg>
                 Edit Schedule
             </button>
-            <button data-action="break" data-schedule-id="${scheduleId}" data-schedule-type="time" class="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center">
-                <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                Edit Break Period
-            </button>
             <button data-action="delete" data-schedule-id="${scheduleId}" data-schedule-type="time" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center">
                 <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -490,8 +436,6 @@ function showContextMenu(event, element) {
             } else if (schedType === 'time') {
                 if (action === 'edit') {
                     editTimeSchedule(schedId);
-                } else if (action === 'break') {
-                    editBreakPeriod(schedId);
                 } else if (action === 'delete') {
                     deleteTimeSchedule(schedId);
                 }
@@ -676,24 +620,6 @@ function deleteTimeSchedule(id) {
     }
 }
 
-// Break Period Functions
-function editBreakPeriod(id) {
-    fetch(`{{ url('settings/time-logs/time-schedules') }}/${id}`)
-        .then(response => response.json())
-        .then(schedule => {
-            document.getElementById('break_duration_edit').value = schedule.break_duration_minutes || '';
-            document.getElementById('break_start_edit').value = schedule.break_start || '';
-            document.getElementById('break_end_edit').value = schedule.break_end || '';
-            
-            currentEditingId = id;
-            document.getElementById('breakPeriodModal').classList.remove('hidden');
-        });
-}
-
-function closeBreakPeriodModal() {
-    document.getElementById('breakPeriodModal').classList.add('hidden');
-}
-
 // Form Submissions
 document.getElementById('dayScheduleForm').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -750,32 +676,6 @@ document.getElementById('timeScheduleForm').addEventListener('submit', function(
         if (data.message) {
             alert(data.message);
             closeTimeScheduleModal();
-            location.reload();
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-    });
-});
-
-document.getElementById('breakPeriodForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(this);
-    
-    fetch(`{{ url('settings/time-logs/time-schedules') }}/${currentEditingId}/break-periods`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-            'Accept': 'application/json',
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.message) {
-            alert(data.message);
-            closeBreakPeriodModal();
             location.reload();
         }
     })
