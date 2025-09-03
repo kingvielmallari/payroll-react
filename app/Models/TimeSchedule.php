@@ -57,15 +57,17 @@ class TimeSchedule extends Model
     {
         $timeIn = $this->time_in;
         $timeOut = $this->time_out;
-        $breakStart = $this->break_start;
-        $breakEnd = $this->break_end;
 
         // Calculate total working hours
         $totalMinutes = $timeOut->diffInMinutes($timeIn);
 
-        // Subtract break time if applicable
-        if ($breakStart && $breakEnd) {
-            $breakMinutes = $breakEnd->diffInMinutes($breakStart);
+        // Subtract break time based on break type
+        if ($this->break_duration_minutes > 0) {
+            // Break duration system
+            $totalMinutes -= $this->break_duration_minutes;
+        } else if ($this->break_start && $this->break_end) {
+            // Fixed break times system
+            $breakMinutes = $this->break_end->diffInMinutes($this->break_start);
             $totalMinutes -= $breakMinutes;
         }
 

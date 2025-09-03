@@ -84,7 +84,9 @@ function showContextMenu(event, element) {
                                 <div class="font-medium text-gray-900">{{ $schedule->name }}</div>
                                 <div class="text-sm text-gray-600">{{ $schedule->time_range_display }}</div>
                                 @if($schedule->break_duration_minutes > 0)
-                                <div class="text-xs text-blue-600">Break: {{ $schedule->break_duration_minutes }} min</div>
+                                    <div class="text-xs text-blue-600">Break: {{ $schedule->break_duration_minutes }} min</div>
+                                @elseif($schedule->break_start && $schedule->break_end)
+                                    <div class="text-xs text-blue-600">Break: {{ \Carbon\Carbon::parse($schedule->break_start)->format('g:iA') }} - {{ \Carbon\Carbon::parse($schedule->break_end)->format('g:iA') }}</div>
                                 @endif
                             </div>
                         </div>
@@ -295,6 +297,8 @@ function showContextMenu(event, element) {
             
             <form id="timeScheduleForm">
                 @csrf
+                <input type="hidden" id="time_schedule_break_option" name="break_option" value="none">
+                
                 <div class="mb-4">
                     <label for="time_schedule_name" class="block text-sm font-medium text-gray-700">Schedule Name</label>
                     <input type="text" id="time_schedule_name" name="name" required
@@ -315,23 +319,69 @@ function showContextMenu(event, element) {
                     </div>
                 </div>
                 
+                <!-- Break Period Section -->
                 <div class="mb-4">
-                    <label for="break_duration_minutes" class="block text-sm font-medium text-gray-700">Break Duration (minutes)</label>
-                    <input type="number" id="break_duration_minutes" name="break_duration_minutes" min="0" max="480"
-                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                           placeholder="e.g., 60">
-                </div>
-                
-                <div class="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label for="break_start" class="block text-sm font-medium text-gray-700">Break Start</label>
-                        <input type="time" id="break_start" name="break_start"
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                    </div>
-                    <div>
-                        <label for="break_end" class="block text-sm font-medium text-gray-700">Break End</label>
-                        <input type="time" id="break_end" name="break_end"
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Break Period</label>
+                    
+                    <!-- Break Period Options -->
+                    <div class="space-y-2">
+                        <!-- Option 1: Break Duration -->
+                        <div class="border rounded p-2">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="radio" 
+                                       name="time_schedule_break_option_radio" 
+                                       value="duration" 
+                                       id="time_schedule_break_option_duration"
+                                       class="text-blue-600 focus:ring-blue-500">
+                                <span class="ml-2 text-sm text-gray-700">Break Duration (flexible)</span>
+                            </label>
+                            <div class="mt-2 ml-5" id="time_schedule_break_duration_section" style="display: none;">
+                                <input type="number" 
+                                       id="break_duration_minutes" 
+                                       name="break_duration_minutes" 
+                                       min="0" 
+                                       max="480" 
+                                       placeholder="60 minutes"
+                                       class="block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                        
+                        <!-- Option 2: Fixed Break Times -->
+                        <div class="border rounded p-2">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="radio" 
+                                       name="time_schedule_break_option_radio" 
+                                       value="fixed" 
+                                       id="time_schedule_break_option_fixed"
+                                       class="text-blue-600 focus:ring-blue-500">
+                                <span class="ml-2 text-sm text-gray-700">Fixed Break Times</span>
+                            </label>
+                            <div class="mt-2 ml-5 grid grid-cols-2 gap-2" id="time_schedule_break_times_section" style="display: none;">
+                                <input type="time" 
+                                       id="break_start" 
+                                       name="break_start" 
+                                       placeholder="Start"
+                                       class="block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <input type="time" 
+                                       id="break_end" 
+                                       name="break_end" 
+                                       placeholder="End"
+                                       class="block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                        
+                        <!-- Option 3: No Break -->
+                        <div class="border rounded p-2">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="radio" 
+                                       name="time_schedule_break_option_radio" 
+                                       value="none" 
+                                       id="time_schedule_break_option_none"
+                                       checked
+                                       class="text-blue-600 focus:ring-blue-500">
+                                <span class="ml-2 text-sm text-gray-700">No Break Period</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
                 
@@ -563,6 +613,13 @@ function openTimeScheduleModal() {
     document.getElementById('timeScheduleModal').classList.remove('hidden');
     document.getElementById('timeScheduleModalTitle').textContent = 'Add Time Schedule';
     document.getElementById('timeScheduleForm').reset();
+    
+    // Reset break options to default (none)
+    document.getElementById('time_schedule_break_option_none').checked = true;
+    document.getElementById('time_schedule_break_option').value = 'none';
+    document.getElementById('time_schedule_break_duration_section').style.display = 'none';
+    document.getElementById('time_schedule_break_times_section').style.display = 'none';
+    
     currentEditingId = null;
     currentEditingType = 'time';
 }
@@ -570,6 +627,37 @@ function openTimeScheduleModal() {
 function closeTimeScheduleModal() {
     document.getElementById('timeScheduleModal').classList.add('hidden');
 }
+
+// Time Schedule Break Option Handling
+document.addEventListener('DOMContentLoaded', function() {
+    const breakOptions = document.querySelectorAll('input[name="time_schedule_break_option_radio"]');
+    const breakDurationSection = document.getElementById('time_schedule_break_duration_section');
+    const breakTimesSection = document.getElementById('time_schedule_break_times_section');
+    const breakOptionValue = document.getElementById('time_schedule_break_option');
+    
+    breakOptions.forEach(option => {
+        option.addEventListener('change', function() {
+            // Hide all sections first
+            breakDurationSection.style.display = 'none';
+            breakTimesSection.style.display = 'none';
+            
+            // Clear values when switching options
+            document.getElementById('break_duration_minutes').value = '';
+            document.getElementById('break_start').value = '';
+            document.getElementById('break_end').value = '';
+            
+            // Update hidden field value
+            breakOptionValue.value = this.value;
+            
+            // Show appropriate section based on selection
+            if (this.value === 'duration') {
+                breakDurationSection.style.display = 'block';
+            } else if (this.value === 'fixed') {
+                breakTimesSection.style.display = 'block';
+            }
+        });
+    });
+});
 
 function editTimeSchedule(id) {
     console.log('editTimeSchedule called with ID:', id);
@@ -585,9 +673,27 @@ function editTimeSchedule(id) {
             document.getElementById('time_schedule_name').value = schedule.name;
             document.getElementById('time_in').value = schedule.time_in;
             document.getElementById('time_out').value = schedule.time_out;
-            document.getElementById('break_duration_minutes').value = schedule.break_duration_minutes || '';
-            document.getElementById('break_start').value = schedule.break_start || '';
-            document.getElementById('break_end').value = schedule.break_end || '';
+            
+            // Handle break options based on existing data
+            if (schedule.break_duration_minutes) {
+                document.getElementById('time_schedule_break_option_duration').checked = true;
+                document.getElementById('time_schedule_break_option').value = 'duration';
+                document.getElementById('break_duration_minutes').value = schedule.break_duration_minutes;
+                document.getElementById('time_schedule_break_duration_section').style.display = 'block';
+                document.getElementById('time_schedule_break_times_section').style.display = 'none';
+            } else if (schedule.break_start && schedule.break_end) {
+                document.getElementById('time_schedule_break_option_fixed').checked = true;
+                document.getElementById('time_schedule_break_option').value = 'fixed';
+                document.getElementById('break_start').value = schedule.break_start;
+                document.getElementById('break_end').value = schedule.break_end;
+                document.getElementById('time_schedule_break_times_section').style.display = 'block';
+                document.getElementById('time_schedule_break_duration_section').style.display = 'none';
+            } else {
+                document.getElementById('time_schedule_break_option_none').checked = true;
+                document.getElementById('time_schedule_break_option').value = 'none';
+                document.getElementById('time_schedule_break_duration_section').style.display = 'none';
+                document.getElementById('time_schedule_break_times_section').style.display = 'none';
+            }
             
             currentEditingId = id;
             currentEditingType = 'time';

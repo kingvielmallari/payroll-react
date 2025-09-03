@@ -120,7 +120,7 @@ class TimeScheduleController extends Controller
             'break_duration_minutes' => $breakDurationMinutes,
             'break_start' => $breakStart,
             'break_end' => $breakEnd,
-            'is_active' => $request->has('is_active'),
+            'is_active' => true, // Set to active by default when creating
             'created_by' => Auth::id(),
         ]);
 

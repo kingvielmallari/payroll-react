@@ -2841,17 +2841,24 @@
                                                             $timeSchedule = $employee->timeSchedule ?? null;
                                                             
                                                             if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                                                                $defaultBreakStart = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_start->format('H:i'));
-                                                                $defaultBreakEnd = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_end->format('H:i'));
-                                                                $workStart = \Carbon\Carbon::parse($timeLog->time_in);
-                                                                $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
-                                                                
-                                                                // Only show default break time if employee was present during the scheduled break period
-                                                                if ($defaultBreakStart >= $workStart && $defaultBreakEnd <= $workEnd) {
-                                                                    $breakHours = $defaultBreakEnd->diffInMinutes($defaultBreakStart) / 60;
-                                                                    $showBreakTime = true;
-                                                                    $breakDisplayStart = $defaultBreakStart->format('g:i A');
-                                                                    $breakDisplayEnd = $defaultBreakEnd->format('g:i A');
+                                                                try {
+                                                                    // Format the log date properly and combine with time schedule break times
+                                                                    $logDate = \Carbon\Carbon::parse($timeLog->log_date)->format('Y-m-d');
+                                                                    $defaultBreakStart = \Carbon\Carbon::parse($logDate . ' ' . $timeSchedule->break_start->format('H:i:s'));
+                                                                    $defaultBreakEnd = \Carbon\Carbon::parse($logDate . ' ' . $timeSchedule->break_end->format('H:i:s'));
+                                                                    $workStart = \Carbon\Carbon::parse($timeLog->time_in);
+                                                                    $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
+                                                                    
+                                                                    // Only show default break time if employee was present during the scheduled break period
+                                                                    if ($defaultBreakStart >= $workStart && $defaultBreakEnd <= $workEnd) {
+                                                                        $breakHours = $defaultBreakEnd->diffInMinutes($defaultBreakStart) / 60;
+                                                                        $showBreakTime = true;
+                                                                        $breakDisplayStart = $defaultBreakStart->format('g:i A');
+                                                                        $breakDisplayEnd = $defaultBreakEnd->format('g:i A');
+                                                                    }
+                                                                } catch (\Exception $e) {
+                                                                    // If parsing fails, skip break time display
+                                                                    $showBreakTime = false;
                                                                 }
                                                             }
                                                         }
