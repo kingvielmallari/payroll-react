@@ -29,4 +29,12 @@ class NightDifferentialSetting extends Model
     {
         return static::where('is_active', true)->first();
     }
+
+    /**
+     * Get the current night differential setting (regardless of active status)
+     */
+    public static function currentSetting()
+    {
+        return static::first();
+    }
 }

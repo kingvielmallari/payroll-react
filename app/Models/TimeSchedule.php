@@ -15,6 +15,7 @@ class TimeSchedule extends Model
         'time_out',
         'break_start',
         'break_end',
+        'break_duration_minutes',
         'is_active',
         'created_by',
     ];
@@ -61,7 +62,7 @@ class TimeSchedule extends Model
 
         // Calculate total working hours
         $totalMinutes = $timeOut->diffInMinutes($timeIn);
-        
+
         // Subtract break time if applicable
         if ($breakStart && $breakEnd) {
             $breakMinutes = $breakEnd->diffInMinutes($breakStart);
@@ -69,5 +70,21 @@ class TimeSchedule extends Model
         }
 
         return round($totalMinutes / 60, 2);
+    }
+
+    /**
+     * Mutator to handle empty break_start values
+     */
+    public function setBreakStartAttribute($value)
+    {
+        $this->attributes['break_start'] = empty($value) ? null : $value;
+    }
+
+    /**
+     * Mutator to handle empty break_end values
+     */
+    public function setBreakEndAttribute($value)
+    {
+        $this->attributes['break_end'] = empty($value) ? null : $value;
     }
 }

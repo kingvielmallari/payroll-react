@@ -62,7 +62,19 @@ class TimeScheduleController extends Controller
             }
         }
 
-        $timeSchedule = TimeSchedule::create($request->all());
+        // Prepare data for creation
+        $data = $request->only(['name', 'time_in', 'time_out', 'break_duration_minutes']);
+
+        // Only include break times if they are provided and not empty
+        if ($request->filled('break_start') && $request->filled('break_end')) {
+            $data['break_start'] = $request->break_start;
+            $data['break_end'] = $request->break_end;
+        }
+
+        // Set default active status
+        $data['is_active'] = true;
+
+        $timeSchedule = TimeSchedule::create($data);
 
         return response()->json([
             'message' => 'Time schedule created successfully.',
@@ -118,7 +130,20 @@ class TimeScheduleController extends Controller
             }
         }
 
-        $timeSchedule->update($request->all());
+        // Prepare data for update
+        $data = $request->only(['name', 'time_in', 'time_out', 'break_duration_minutes']);
+
+        // Only include break times if they are provided and not empty
+        if ($request->filled('break_start') && $request->filled('break_end')) {
+            $data['break_start'] = $request->break_start;
+            $data['break_end'] = $request->break_end;
+        } else {
+            // If break times are not provided, set them to null
+            $data['break_start'] = null;
+            $data['break_end'] = null;
+        }
+
+        $timeSchedule->update($data);
 
         return response()->json([
             'message' => 'Time schedule updated successfully.',
@@ -184,11 +209,20 @@ class TimeScheduleController extends Controller
             }
         }
 
-        $timeSchedule->update([
-            'break_duration_minutes' => $request->break_duration_minutes,
-            'break_start' => $request->break_start,
-            'break_end' => $request->break_end,
-        ]);
+        // Prepare data for update
+        $data = ['break_duration_minutes' => $request->break_duration_minutes];
+
+        // Only include break times if they are provided and not empty
+        if ($request->filled('break_start') && $request->filled('break_end')) {
+            $data['break_start'] = $request->break_start;
+            $data['break_end'] = $request->break_end;
+        } else {
+            // If break times are not provided, set them to null
+            $data['break_start'] = null;
+            $data['break_end'] = null;
+        }
+
+        $timeSchedule->update($data);
 
         return response()->json([
             'message' => 'Break periods updated successfully.',
