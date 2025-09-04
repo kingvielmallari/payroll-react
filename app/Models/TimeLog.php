@@ -315,29 +315,52 @@ class TimeLog extends Model
         $employee = $this->employee;
         $timeSchedule = $employee ? $employee->timeSchedule : null;
 
-        // Default to 8-hour schedule if no schedule is set
-        $scheduledStart = $timeSchedule ?
-            \Carbon\Carbon::parse($this->log_date . ' ' . $timeSchedule->start_time) :
-            \Carbon\Carbon::parse($this->log_date . ' 08:00');
-        $scheduledEnd = $timeSchedule ?
-            \Carbon\Carbon::parse($this->log_date . ' ' . $timeSchedule->end_time) :
-            \Carbon\Carbon::parse($this->log_date . ' 17:00');
-
-        // Handle next day scheduled end time
-        if ($scheduledEnd->lte($scheduledStart)) {
-            $scheduledEnd->addDay();
+        // Calculate overtime start time using dynamic calculation for accuracy
+        $overtimeStartTime = null;
+        if ($forceDynamicValues && isset($forceDynamicValues['overtime_start_time'])) {
+            // Use the accurate overtime start time from dynamic calculation if provided
+            $overtimeStartTime = $forceDynamicValues['overtime_start_time'];
+        } else {
+            // Fallback: Use TimeLogController's dynamic calculation for accurate overtime start time
+            try {
+                $controller = app(\App\Http\Controllers\TimeLogController::class);
+                $reflection = new \ReflectionClass($controller);
+                $method = $reflection->getMethod('calculateDynamicWorkingHours');
+                $method->setAccessible(true);
+                $dynamicCalc = $method->invoke($controller, $this);
+                $overtimeStartTime = $dynamicCalc['overtime_start_time'] ?? null;
+            } catch (\Exception $e) {
+                // Fallback to simple calculation if dynamic calculation fails
+                $overtimeThreshold = 8;
+                if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                    $scheduledStart = \Carbon\Carbon::parse(\Carbon\Carbon::parse($this->log_date)->format('Y-m-d') . ' ' . $timeSchedule->start_time);
+                    $scheduledEnd = \Carbon\Carbon::parse(\Carbon\Carbon::parse($this->log_date)->format('Y-m-d') . ' ' . $timeSchedule->end_time);
+                    if ($scheduledEnd->lte($scheduledStart)) {
+                        $scheduledEnd->addDay();
+                    }
+                    $scheduledHours = $scheduledStart->diffInHours($scheduledEnd);
+                    $breakHours = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
+                    $overtimeThreshold = $scheduledHours - $breakHours;
+                }
+                $overtimeStartTime = $workStart->copy()->addHours($overtimeThreshold);
+            }
         }
 
-        // Get overtime threshold (default 8 hours)
-        $overtimeThreshold = 8;
-        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            $scheduledHours = $scheduledStart->diffInHours($scheduledEnd);
-            $breakHours = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-            $overtimeThreshold = $scheduledHours - $breakHours;
+        // If we still don't have overtime start time, use fallback calculation
+        if (!$overtimeStartTime) {
+            $overtimeThreshold = 8;
+            if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                $scheduledStart = \Carbon\Carbon::parse(\Carbon\Carbon::parse($this->log_date)->format('Y-m-d') . ' ' . $timeSchedule->start_time);
+                $scheduledEnd = \Carbon\Carbon::parse(\Carbon\Carbon::parse($this->log_date)->format('Y-m-d') . ' ' . $timeSchedule->end_time);
+                if ($scheduledEnd->lte($scheduledStart)) {
+                    $scheduledEnd->addDay();
+                }
+                $scheduledHours = $scheduledStart->diffInHours($scheduledEnd);
+                $breakHours = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
+                $overtimeThreshold = $scheduledHours - $breakHours;
+            }
+            $overtimeStartTime = $workStart->copy()->addHours($overtimeThreshold);
         }
-
-        // Calculate overtime start time
-        $overtimeStartTime = $workStart->copy()->addHours($overtimeThreshold);
 
         // Get night differential settings
         $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
@@ -349,18 +372,70 @@ class TimeLog extends Model
         $regularOvertimeHours = $forceDynamicValues['regular_overtime_hours'] ?? $this->dynamic_regular_overtime_hours ?? $this->regular_overtime_hours ?? 0;
         $nightDiffOvertimeHours = $forceDynamicValues['night_diff_overtime_hours'] ?? $this->dynamic_night_diff_overtime_hours ?? $this->night_diff_overtime_hours ?? 0;
         $overtimeHours = $forceDynamicValues['overtime_hours'] ?? $this->dynamic_overtime_hours ?? $this->overtime_hours ?? 0;
+        $nightDiffRegularHours = $forceDynamicValues['night_diff_regular_hours'] ?? $this->dynamic_night_diff_regular_hours ?? $this->night_diff_regular_hours ?? 0;
 
-        // Regular work period
-        $regularEndTime = min($workEnd, $overtimeStartTime);
-        if ($workStart->lt($regularEndTime)) {
-            $breakdown[] = [
-                'type' => 'regular',
-                'label' => 'Regular Hours',
-                'start_time' => $workStart->format('g:i A'),
-                'end_time' => $regularEndTime->format('g:i A'),
-                'hours' => $regularHours,
-                'color_class' => 'text-green-600'
-            ];
+        // Calculate regular work period end time
+        // If there are night differential regular hours, regular period should end before ND starts
+        $regularWorkEndTime = $overtimeStartTime;
+        if ($nightDiffRegularHours > 0 && $nightDiffSetting && $nightDiffSetting->is_active) {
+            $logDateOnly = \Carbon\Carbon::parse($this->log_date)->format('Y-m-d');
+            $nightStart = \Carbon\Carbon::parse($logDateOnly . ' ' . $nightDiffSetting->start_time);
+
+            // Handle next day night start
+            if ($nightStart->lt($workStart)) {
+                $nightStart->addDay();
+            }
+
+            // Regular work should end at night start if employee works into ND period
+            if ($workEnd->gt($nightStart) && $nightStart->lt($overtimeStartTime)) {
+                $regularWorkEndTime = $nightStart;
+            }
+        }
+
+        // Regular work period (excluding night differential regular hours)
+        if ($workStart->lt($regularWorkEndTime)) {
+            $regularPeriodHours = $regularHours - $nightDiffRegularHours; // Exclude ND regular hours from this period
+            if ($regularPeriodHours > 0) {
+                $breakdown[] = [
+                    'type' => 'regular',
+                    'label' => 'Regular Hours',
+                    'start_time' => $workStart->format('g:i A'),
+                    'end_time' => $regularWorkEndTime->format('g:i A'),
+                    'hours' => $regularPeriodHours,
+                    'color_class' => 'text-green-600'
+                ];
+            }
+        }
+
+        // Night Differential Regular Hours (regular hours that fall within ND period)
+        if ($nightDiffRegularHours > 0 && $nightDiffSetting && $nightDiffSetting->is_active) {
+            $logDateOnly = \Carbon\Carbon::parse($this->log_date)->format('Y-m-d');
+            $nightStart = \Carbon\Carbon::parse($logDateOnly . ' ' . $nightDiffSetting->start_time);
+            $nightEnd = \Carbon\Carbon::parse($logDateOnly . ' ' . $nightDiffSetting->end_time);
+
+            // Handle next day times
+            if ($nightEnd->lte($nightStart)) {
+                $nightEnd->addDay();
+            }
+            if ($nightStart->lt($workStart)) {
+                $nightStart->addDay();
+            }
+
+            // Calculate ND regular period - from night start to overtime start (or work end if no overtime)
+            $ndRegularStart = max($workStart, $nightStart);
+            $ndRegularEnd = min($overtimeStartTime, $workEnd, $nightEnd);
+
+            if ($ndRegularStart->lt($ndRegularEnd)) {
+                $breakdown[] = [
+                    'type' => 'night_diff_regular',
+                    'label' => 'Regular + Night Differential',
+                    'start_time' => $ndRegularStart->format('g:i A'),
+                    'end_time' => $ndRegularEnd->format('g:i A'),
+                    'hours' => $nightDiffRegularHours,
+                    'color_class' => 'text-purple-600',
+                    'night_diff_rate' => $nightDiffSetting->rate_multiplier ?? 1.2
+                ];
+            }
         }
 
         // Overtime periods
@@ -368,8 +443,9 @@ class TimeLog extends Model
             // If we have breakdown data and night differential is enabled
             if (($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) && $nightDiffSetting && $nightDiffSetting->is_active) {
                 // Night differential time boundaries
-                $nightStart = \Carbon\Carbon::parse($this->log_date . ' ' . $nightDiffSetting->start_time);
-                $nightEnd = \Carbon\Carbon::parse($this->log_date . ' ' . $nightDiffSetting->end_time);
+                $logDateOnly = \Carbon\Carbon::parse($this->log_date)->format('Y-m-d');
+                $nightStart = \Carbon\Carbon::parse($logDateOnly . ' ' . $nightDiffSetting->start_time);
+                $nightEnd = \Carbon\Carbon::parse($logDateOnly . ' ' . $nightDiffSetting->end_time);
 
                 // Handle next day end time
                 if ($nightEnd->lte($nightStart)) {
@@ -406,7 +482,9 @@ class TimeLog extends Model
                 // Night differential overtime period
                 if ($nightDiffOvertimeHours > 0) {
                     $nightOTStart = max($overtimeStartTime, $nightStart);
-                    $nightOTEnd = min($workEnd, $nightEnd);
+                    // Fix: Use actual work end time instead of night differential end time
+                    // Employee should see their actual time out, not the ND boundary
+                    $nightOTEnd = $workEnd;
 
                     if ($nightOTStart->lt($nightOTEnd)) {
                         $breakdown[] = [

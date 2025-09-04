@@ -1808,7 +1808,8 @@ class TimeLogController extends Controller
             $hasFixedBreak = ($timeSchedule->break_start && $timeSchedule->break_end);
 
             if ($hasFlexibleBreak && !$hasFixedBreak) {
-                // FLEXIBLE BREAK: Deduct duration from total time worked
+                // ===== FLEXIBLE BREAK LOGIC (ALWAYS USE DURATION DEDUCTION) =====
+                // Flexible break employees NEVER use actual break logs - always use scheduled duration
                 $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
                 $totalWorkingMinutes = max(0, $totalWorkingMinutes - $timeSchedule->break_duration_minutes);
             } else if ($hasFixedBreak) {
@@ -2038,11 +2039,11 @@ class TimeLogController extends Controller
                     $overtimeStartTime = $schedBreakEnd->copy()->addMinutes($remainingMinutesAfterBreak);
                 }
             } else {
-                // No fixed break or flexible break - simple calculation
+                // No break logs OR flexible break - simple calculation
                 $overtimeStartTime = $workStartTime->copy()->addMinutes($regularHoursBoundaryMinutes);
 
                 // For flexible break, add the break duration
-                if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
+                if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0 && !($timeSchedule->break_start && $timeSchedule->break_end)) {
                     $overtimeStartTime->addMinutes($timeSchedule->break_duration_minutes);
                 }
             }

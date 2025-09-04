@@ -252,7 +252,8 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
             $hasFixedBreak = ($timeSchedule->break_start && $timeSchedule->break_end);
 
             if ($hasFlexibleBreak && !$hasFixedBreak) {
-                // FLEXIBLE BREAK: Deduct duration from total time worked
+                // ===== FLEXIBLE BREAK LOGIC (ALWAYS USE DURATION DEDUCTION) =====
+                // Flexible break employees NEVER use actual break logs - always use scheduled duration
                 $breakMinutesToDeduct = $timeSchedule->break_duration_minutes;
             } else if ($hasFixedBreak) {
                 // FIXED BREAK: Handle based on whether employee has break logs
