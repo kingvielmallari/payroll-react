@@ -82,70 +82,15 @@ class TimeLog extends Model
         $timeIn = \Carbon\Carbon::parse($this->time_in);
         $timeOut = \Carbon\Carbon::parse($this->time_out);
 
-        // Handle next day time out
-        if ($timeOut->lt($timeIn)) {
-            $timeOut->addDay();
-        }
-
         $totalMinutes = $timeOut->diffInMinutes($timeIn);
 
-        // Get employee's time schedule for break calculation
-        $timeSchedule = $this->employee ? $this->employee->timeSchedule : null;
-
-        // ENFORCE TIME SCHEDULE BREAK TYPE PRIORITY - ignore conflicting time log data
-        $breakType = 'none'; // Default: no break
-
-        if ($timeSchedule) {
-            // Priority 1: Check if it's explicitly set to "no break" (neither break duration nor fixed times)
-            $hasBreakDuration = $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0;
-            $hasFixedBreakTimes = $timeSchedule->break_start && $timeSchedule->break_end;
-
-            if ($hasBreakDuration && $hasFixedBreakTimes) {
-                // Both are set - prioritize break duration (flexible timing)
-                $breakType = 'duration';
-            } else if ($hasBreakDuration) {
-                // Only break duration is set
-                $breakType = 'duration';
-            } else if ($hasFixedBreakTimes) {
-                // Only fixed break times are set
-                $breakType = 'fixed';
-            }
-            // If neither is set, breakType remains 'none'
+        // Subtract break time if available
+        if ($this->break_in && $this->break_out) {
+            $breakIn = \Carbon\Carbon::parse($this->break_in);
+            $breakOut = \Carbon\Carbon::parse($this->break_out);
+            $breakMinutes = $breakOut->diffInMinutes($breakIn);
+            $totalMinutes -= $breakMinutes;
         }
-
-        // Apply break calculation based on schedule type (ignore conflicting time log data)
-        if ($breakType === 'duration') {
-            // Break Duration (flexible timing) - IGNORE break_in/out, only use break_duration_minutes
-            $totalMinutes -= $timeSchedule->break_duration_minutes;
-        } else if ($breakType === 'fixed') {
-            // Fixed Break Times - ALWAYS use scheduled break duration, ignore actual break_in/out
-            // For fixed breaks, the scheduled break duration is what counts regardless of actual timing
-            $logDate = \Carbon\Carbon::parse($this->log_date);
-            $breakStart = \Carbon\Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
-            $breakEnd = \Carbon\Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
-
-            // Calculate: (time in to break start) + (break end to time out)
-            $beforeBreak = 0;
-            $afterBreak = 0;
-
-            // Time worked before break period
-            if ($timeIn->lt($breakStart)) {
-                $beforeBreakEnd = $timeOut->lt($breakStart) ? $timeOut : $breakStart;
-                $beforeBreak = $timeIn->diffInMinutes($beforeBreakEnd);
-            }
-
-            // Time worked after break period
-            if ($timeOut->gt($breakEnd)) {
-                $afterBreakStart = $timeIn->gt($breakEnd) ? $timeIn : $breakEnd;
-                $afterBreak = $afterBreakStart->diffInMinutes($timeOut);
-            }
-
-            $totalMinutes = $beforeBreak + $afterBreak;
-        }
-        // For 'none' break type, don't subtract any break time
-
-        // Ensure non-negative result
-        $totalMinutes = max(0, $totalMinutes);
 
         return round($totalMinutes / 60, 2);
     }
@@ -370,59 +315,25 @@ class TimeLog extends Model
         $employee = $this->employee;
         $timeSchedule = $employee ? $employee->timeSchedule : null;
 
-        // Default to 8-hour schedule if no schedule is set - properly format log_date as date only
-        $logDateFormatted = \Carbon\Carbon::parse($this->log_date)->format('Y-m-d');
+        // Default to 8-hour schedule if no schedule is set
         $scheduledStart = $timeSchedule ?
-            \Carbon\Carbon::parse($logDateFormatted . ' ' . $timeSchedule->start_time) :
-            \Carbon\Carbon::parse($logDateFormatted . ' 08:00');
+            \Carbon\Carbon::parse($this->log_date . ' ' . $timeSchedule->start_time) :
+            \Carbon\Carbon::parse($this->log_date . ' 08:00');
         $scheduledEnd = $timeSchedule ?
-            \Carbon\Carbon::parse($logDateFormatted . ' ' . $timeSchedule->end_time) :
-            \Carbon\Carbon::parse($logDateFormatted . ' 17:00');
+            \Carbon\Carbon::parse($this->log_date . ' ' . $timeSchedule->end_time) :
+            \Carbon\Carbon::parse($this->log_date . ' 17:00');
 
         // Handle next day scheduled end time
         if ($scheduledEnd->lte($scheduledStart)) {
             $scheduledEnd->addDay();
         }
 
-        // Get overtime threshold - implement break type enforcement logic
-        $overtimeThreshold = 8; // Default
-
-        if ($timeSchedule) {
+        // Get overtime threshold (default 8 hours)
+        $overtimeThreshold = 8;
+        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
             $scheduledHours = $scheduledStart->diffInHours($scheduledEnd);
-
-            // Determine break type and calculate proper overtime threshold
-            $breakType = 'none'; // Default: no break
-
-            if ($timeSchedule) {
-                $hasBreakDuration = $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0;
-                $hasBreakTimes = $timeSchedule->break_start && $timeSchedule->break_end;
-
-                if ($hasBreakDuration && $hasBreakTimes) {
-                    // Both are set - prioritize break_duration_minutes
-                    $breakType = 'duration';
-                } else if ($hasBreakDuration) {
-                    // Only break duration is set
-                    $breakType = 'duration';
-                } else if ($hasBreakTimes) {
-                    // Only break times are set
-                    $breakType = 'fixed';
-                }
-                // If neither is set, breakType remains 'none'
-            }
-
-            // Calculate overtime threshold based on break type
-            if ($breakType === 'duration') {
-                // Break Duration (flexible timing) - subtract minutes from total scheduled hours
-                $breakHours = $timeSchedule->break_duration_minutes / 60;
-                $overtimeThreshold = $scheduledHours - $breakHours;
-            } else if ($breakType === 'fixed') {
-                // Fixed Break Times - calculate break duration from start/end times
-                $breakHours = \Carbon\Carbon::parse($timeSchedule->break_start)->diffInHours(\Carbon\Carbon::parse($timeSchedule->break_end), true);
-                $overtimeThreshold = $scheduledHours - $breakHours;
-            } else {
-                // No break - overtime threshold is just scheduled hours
-                $overtimeThreshold = $scheduledHours;
-            }
+            $breakHours = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
+            $overtimeThreshold = $scheduledHours - $breakHours;
         }
 
         // Calculate overtime start time
@@ -456,10 +367,9 @@ class TimeLog extends Model
         if ($overtimeStartTime->lt($workEnd)) {
             // If we have breakdown data and night differential is enabled
             if (($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) && $nightDiffSetting && $nightDiffSetting->is_active) {
-                // Night differential time boundaries - properly format log_date as date only
-                $logDateFormatted = \Carbon\Carbon::parse($this->log_date)->format('Y-m-d');
-                $nightStart = \Carbon\Carbon::parse($logDateFormatted . ' ' . $nightDiffSetting->start_time);
-                $nightEnd = \Carbon\Carbon::parse($logDateFormatted . ' ' . $nightDiffSetting->end_time);
+                // Night differential time boundaries
+                $nightStart = \Carbon\Carbon::parse($this->log_date . ' ' . $nightDiffSetting->start_time);
+                $nightEnd = \Carbon\Carbon::parse($this->log_date . ' ' . $nightDiffSetting->end_time);
 
                 // Handle next day end time
                 if ($nightEnd->lte($nightStart)) {

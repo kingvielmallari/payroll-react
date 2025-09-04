@@ -369,51 +369,111 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
             // If beyond grace period, use actual time out
         }
 
-        // STEP 2: Calculate working time with proper break handling
+        // STEP 2: Calculate working time based on employee's schedule break configuration
         $breakMinutesToDeduct = 0;
         $adjustedWorkEndTime = $workEndTime;
 
-        if ($timeLog->break_in && $timeLog->break_out) {
-            // If manual break times provided, use them
+        // Get employee's time schedule for break configuration
+        $timeSchedule = $employee->timeSchedule ?? null;
+
+        // Check if employee has actual break in/out logs
+        $hasActualBreakLogs = ($timeLog->break_in && $timeLog->break_out);
+
+        if ($timeSchedule) {
+            // Check schedule break configuration type
+            $hasFlexibleBreak = ($timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0);
+            $hasFixedBreak = ($timeSchedule->break_start && $timeSchedule->break_end);
+
+            if ($hasFlexibleBreak && !$hasFixedBreak) {
+                // FLEXIBLE BREAK: Deduct duration from total time worked
+                $breakMinutesToDeduct = $timeSchedule->break_duration_minutes;
+            } else if ($hasFixedBreak) {
+                // FIXED BREAK: Handle based on whether employee has break logs
+                $breakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
+                $breakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
+
+                if ($hasActualBreakLogs) {
+                    // Employee has break logs - use hybrid approach
+                    // This will be handled in the split calculation below
+                    $breakMinutesToDeduct = 0; // Don't deduct, will split calculation
+
+                } else {
+                    // No employee break logs - use scheduled break window
+                    // Handle scheduled break logic for fixed breaks
+                    if ($workStartTime->lt($breakStart) && $workEndTime->gt($breakEnd)) {
+                        // Employee worked before break started AND after break ended - exclude break window
+                        $breakMinutesToDeduct = 0; // Will be handled by adjusting work times
+                        // Split calculation around break window
+                    } else if ($workStartTime->lt($breakStart) && $workEndTime->lte($breakEnd)) {
+                        // Employee left at or during break period - only count time before break
+                        $adjustedWorkEndTime = $breakStart;
+                    } else if ($workStartTime->gte($breakStart) && $workStartTime->lt($breakEnd)) {
+                        // Employee came during or after break period - start counting from break end
+                        $workStartTime = $breakEnd;
+                    }
+                    // Case 4: Employee came after break ended - no adjustment needed
+                }
+            }
+            // If no break configured, no adjustments needed
+
+        } else if ($hasActualBreakLogs) {
+            // No schedule but has break logs - use actual break times
             $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
             $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
 
             if ($breakOut->gt($breakIn)) {
                 $breakMinutesToDeduct = $breakIn->diffInMinutes($breakOut);
             }
-        } else if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
-            // Handle break duration (flexible timing) - deduct fixed minutes from total
-            $rawWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
-            $totalWorkingMinutes = max(0, $rawWorkingMinutes - $timeSchedule->break_duration_minutes);
-            $totalHours = $totalWorkingMinutes / 60;
-        } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-            // Handle fixed break period - skip the break window completely
+        }
+
+        // STEP 3: Calculate total working hours based on break configuration
+        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end && $hasActualBreakLogs) {
+            // Fixed break with employee break logs - use hybrid calculation
+            $schedBreakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
+            $empBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
+            $empBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
+
+            // Calculate time before break (stop at the EARLIER of: scheduled break start OR employee break in)
+            $beforeBreak = 0;
+            $stopCountingAt = min($schedBreakStart, $empBreakIn);
+            if ($workStartTime->lt($stopCountingAt)) {
+                $beforeBreak = $workStartTime->diffInMinutes(min($stopCountingAt, $workEndTime));
+            }
+
+            // Calculate time from employee's break out to work end
+            $afterEmployeeBreak = 0;
+            if ($workEndTime->gt($empBreakOut)) {
+                $afterEmployeeBreak = $empBreakOut->diffInMinutes($workEndTime);
+            }
+
+            $rawWorkingMinutes = $beforeBreak + $afterEmployeeBreak;
+        } else if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end && !$hasActualBreakLogs) {
+            // Fixed break without employee break logs - split around break window
             $breakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
             $breakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
 
-            // Case 1: Employee worked before break started AND after break ended - deduct full break
-            if ($workStartTime->lt($breakStart) && $workEndTime->gt($breakEnd)) {
-                $breakMinutesToDeduct = $breakStart->diffInMinutes($breakEnd);
+            $beforeBreak = 0;
+            $afterBreak = 0;
+
+            // Time worked before break period
+            if ($workStartTime->lt($breakStart)) {
+                $beforeBreak = $workStartTime->diffInMinutes(min($breakStart, $workEndTime));
             }
-            // Case 2: Employee left at or during break period - only count time before break
-            else if ($workStartTime->lt($breakStart) && $workEndTime->lte($breakEnd)) {
-                // Only count work time before break started
-                $adjustedWorkEndTime = $breakStart;
+
+            // Time worked after break period
+            if ($workEndTime->gt($breakEnd)) {
+                $afterBreakStart = max($breakEnd, $workStartTime);
+                $afterBreak = $afterBreakStart->diffInMinutes($workEndTime);
             }
-            // Case 3: Employee came during or after break period - only count time after break
-            else if ($workStartTime->gte($breakStart) && $workStartTime->lt($breakEnd)) {
-                // Start counting from break end
-                $workStartTime = $breakEnd;
-            }
-            // Case 4: Employee came after break ended - no adjustment needed
+
+            $rawWorkingMinutes = $beforeBreak + $afterBreak;
+        } else {
+            // Standard calculation with deduction
+            $rawWorkingMinutes = $workStartTime->diffInMinutes($adjustedWorkEndTime);
         }
 
-        // STEP 3: Calculate total working hours
-        if (!isset($totalHours)) { // Only calculate if not already calculated for break duration
-            $rawWorkingMinutes = $workStartTime->diffInMinutes($adjustedWorkEndTime);
-            $totalWorkingMinutes = max(0, $rawWorkingMinutes - $breakMinutesToDeduct);
-            $totalHours = $totalWorkingMinutes / 60;
-        }
+        $totalWorkingMinutes = max(0, $rawWorkingMinutes - $breakMinutesToDeduct);
+        $totalHours = $totalWorkingMinutes / 60;
 
         // STEP 4: Calculate late hours (consistent with grace period logic for ALL day types)
         $lateMinutes = 0;
