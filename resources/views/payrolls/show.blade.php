@@ -2913,8 +2913,8 @@
                                                                         ? $timeSchedule->break_end 
                                                                         : $timeSchedule->break_end->format('H:i:s');
                                                                     
-                                                                    $defaultBreakStart = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $breakStartTime);
-                                                                    $defaultBreakEnd = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $breakEndTime);
+                                                                    $defaultBreakStart = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $breakStartTime);
+                                                                    $defaultBreakEnd = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $breakEndTime);
                                                                     $workStart = \Carbon\Carbon::parse($timeLog->time_in);
                                                                     $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
                                                                     

@@ -387,25 +387,59 @@ class TimeLog extends Model
         $employee = $this->employee;
         $timeSchedule = $employee ? $employee->timeSchedule : null;
 
-        // Default to 8-hour schedule if no schedule is set
+        // Default to 8-hour schedule if no schedule is set - properly format log_date as date only
+        $logDateFormatted = \Carbon\Carbon::parse($this->log_date)->format('Y-m-d');
         $scheduledStart = $timeSchedule ?
-            \Carbon\Carbon::parse($this->log_date . ' ' . $timeSchedule->start_time) :
-            \Carbon\Carbon::parse($this->log_date . ' 08:00');
+            \Carbon\Carbon::parse($logDateFormatted . ' ' . $timeSchedule->start_time) :
+            \Carbon\Carbon::parse($logDateFormatted . ' 08:00');
         $scheduledEnd = $timeSchedule ?
-            \Carbon\Carbon::parse($this->log_date . ' ' . $timeSchedule->end_time) :
-            \Carbon\Carbon::parse($this->log_date . ' 17:00');
+            \Carbon\Carbon::parse($logDateFormatted . ' ' . $timeSchedule->end_time) :
+            \Carbon\Carbon::parse($logDateFormatted . ' 17:00');
 
         // Handle next day scheduled end time
         if ($scheduledEnd->lte($scheduledStart)) {
             $scheduledEnd->addDay();
         }
 
-        // Get overtime threshold (default 8 hours)
-        $overtimeThreshold = 8;
-        if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+        // Get overtime threshold - implement break type enforcement logic
+        $overtimeThreshold = 8; // Default
+
+        if ($timeSchedule) {
             $scheduledHours = $scheduledStart->diffInHours($scheduledEnd);
-            $breakHours = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-            $overtimeThreshold = $scheduledHours - $breakHours;
+
+            // Determine break type and calculate proper overtime threshold
+            $breakType = 'none'; // Default: no break
+
+            if ($timeSchedule) {
+                $hasBreakDuration = $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0;
+                $hasBreakTimes = $timeSchedule->break_start && $timeSchedule->break_end;
+
+                if ($hasBreakDuration && $hasBreakTimes) {
+                    // Both are set - prioritize break_duration_minutes
+                    $breakType = 'duration';
+                } else if ($hasBreakDuration) {
+                    // Only break duration is set
+                    $breakType = 'duration';
+                } else if ($hasBreakTimes) {
+                    // Only break times are set
+                    $breakType = 'fixed';
+                }
+                // If neither is set, breakType remains 'none'
+            }
+
+            // Calculate overtime threshold based on break type
+            if ($breakType === 'duration') {
+                // Break Duration (flexible timing) - subtract minutes from total scheduled hours
+                $breakHours = $timeSchedule->break_duration_minutes / 60;
+                $overtimeThreshold = $scheduledHours - $breakHours;
+            } else if ($breakType === 'fixed') {
+                // Fixed Break Times - calculate break duration from start/end times
+                $breakHours = \Carbon\Carbon::parse($timeSchedule->break_start)->diffInHours(\Carbon\Carbon::parse($timeSchedule->break_end), true);
+                $overtimeThreshold = $scheduledHours - $breakHours;
+            } else {
+                // No break - overtime threshold is just scheduled hours
+                $overtimeThreshold = $scheduledHours;
+            }
         }
 
         // Calculate overtime start time
@@ -439,9 +473,10 @@ class TimeLog extends Model
         if ($overtimeStartTime->lt($workEnd)) {
             // If we have breakdown data and night differential is enabled
             if (($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) && $nightDiffSetting && $nightDiffSetting->is_active) {
-                // Night differential time boundaries
-                $nightStart = \Carbon\Carbon::parse($this->log_date . ' ' . $nightDiffSetting->start_time);
-                $nightEnd = \Carbon\Carbon::parse($this->log_date . ' ' . $nightDiffSetting->end_time);
+                // Night differential time boundaries - properly format log_date as date only
+                $logDateFormatted = \Carbon\Carbon::parse($this->log_date)->format('Y-m-d');
+                $nightStart = \Carbon\Carbon::parse($logDateFormatted . ' ' . $nightDiffSetting->start_time);
+                $nightEnd = \Carbon\Carbon::parse($logDateFormatted . ' ' . $nightDiffSetting->end_time);
 
                 // Handle next day end time
                 if ($nightEnd->lte($nightStart)) {
