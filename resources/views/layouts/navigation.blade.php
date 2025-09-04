@@ -91,26 +91,26 @@
                                 </a>
                                 
                                 <a href="{{ route('payrolls.automation.index') }}" 
-                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150">
+                                  class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-t border-gray-100">
                                     <svg class="mr-4 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                                     </svg>
                                     <div class="flex-1">
-                                        <div class="font-medium text-gray-900">Automate Payroll</div>
-                                        <div class="text-xs text-gray-500 mt-1">Auto-create payrolls for active employees</div>
+                                        <div class="font-medium text-green-700">Automate Payroll</div>
+                                        <div class="text-xs text-green-600 mt-1">Auto-create payrolls for active employees</div>
                                     </div>
                                 </a>
                                 
-                                <a href="{{ route('payrolls.manual.index') }}" 
+                                {{-- <a href="{{ route('payrolls.manual.index') }}" 
                                    class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150">
                                     <svg class="mr-4 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"/>
                                     </svg>
-                                    <div class="flex-1">
+                                     <div class="flex-1">
                                         <div class="font-medium text-gray-900">Manual Payroll</div>
                                         <div class="text-xs text-gray-500 mt-1">Manually select employees for payroll</div>
-                                    </div>
-                                </a>
+                                    </div> 
+                               </a> --}} 
 
 
                             </div>
@@ -148,13 +148,13 @@
                                 </a>
                                 
                                 <a href="{{ route('cash-advances.create') }}" 
-                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors duration-150">
+                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-t border-gray-100">
                                     <svg class="mr-4 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
                                     </svg>
                                     <div class="flex-1">
-                                        <div class="font-medium text-gray-900">Add Cash Advance</div>
-                                        <div class="text-xs text-gray-500 mt-1">Submit a new cash advance request</div>
+                                        <div class="font-medium text-green-700">Add Cash Advance</div>
+                                        <div class="text-xs text-green-600 mt-1">Submit a new cash advance request</div>
                                     </div>
                                 </a>
                             </div>
