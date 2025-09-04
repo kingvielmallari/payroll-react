@@ -118,46 +118,29 @@ class TimeLog extends Model
             // Break Duration (flexible timing) - IGNORE break_in/out, only use break_duration_minutes
             $totalMinutes -= $timeSchedule->break_duration_minutes;
         } else if ($breakType === 'fixed') {
-            // Fixed Break Times - use actual break_in/out if available, otherwise use scheduled times
-            $useActualBreakTimes = ($this->break_in && $this->break_out);
+            // Fixed Break Times - ALWAYS use scheduled break duration, ignore actual break_in/out
+            // For fixed breaks, the scheduled break duration is what counts regardless of actual timing
+            $logDate = \Carbon\Carbon::parse($this->log_date);
+            $breakStart = \Carbon\Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
+            $breakEnd = \Carbon\Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
 
-            if ($useActualBreakTimes) {
-                $breakIn = \Carbon\Carbon::parse($this->break_in);
-                $breakOut = \Carbon\Carbon::parse($this->break_out);
+            // Calculate: (time in to break start) + (break end to time out)
+            $beforeBreak = 0;
+            $afterBreak = 0;
 
-                if ($breakOut->gt($breakIn)) {
-                    $breakMinutes = $breakOut->diffInMinutes($breakIn);
-                    $totalMinutes -= $breakMinutes;
-                } else {
-                    // Invalid actual break times, fall back to scheduled break times
-                    $useActualBreakTimes = false;
-                }
+            // Time worked before break period
+            if ($timeIn->lt($breakStart)) {
+                $beforeBreakEnd = $timeOut->lt($breakStart) ? $timeOut : $breakStart;
+                $beforeBreak = $timeIn->diffInMinutes($beforeBreakEnd);
             }
 
-            if (!$useActualBreakTimes) {
-                // Use scheduled fixed break times - calculate work time by excluding the fixed break period
-                $logDate = \Carbon\Carbon::parse($this->log_date);
-                $breakStart = \Carbon\Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
-                $breakEnd = \Carbon\Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
-
-                // Calculate: (time in to break start) + (break end to time out)
-                $beforeBreak = 0;
-                $afterBreak = 0;
-
-                // Time worked before break period
-                if ($timeIn->lt($breakStart)) {
-                    $beforeBreakEnd = $timeOut->lt($breakStart) ? $timeOut : $breakStart;
-                    $beforeBreak = $timeIn->diffInMinutes($beforeBreakEnd);
-                }
-
-                // Time worked after break period
-                if ($timeOut->gt($breakEnd)) {
-                    $afterBreakStart = $timeIn->gt($breakEnd) ? $timeIn : $breakEnd;
-                    $afterBreak = $afterBreakStart->diffInMinutes($timeOut);
-                }
-
-                $totalMinutes = $beforeBreak + $afterBreak;
+            // Time worked after break period
+            if ($timeOut->gt($breakEnd)) {
+                $afterBreakStart = $timeIn->gt($breakEnd) ? $timeIn : $breakEnd;
+                $afterBreak = $afterBreakStart->diffInMinutes($timeOut);
             }
+
+            $totalMinutes = $beforeBreak + $afterBreak;
         }
         // For 'none' break type, don't subtract any break time
 
