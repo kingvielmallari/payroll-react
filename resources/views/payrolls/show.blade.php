@@ -761,8 +761,8 @@
                                                 @endforeach
                                                 <div class="text-xs border-t pt-1">
                                                     <?php 
-                                                        // More generous rounding to handle floating point precision
-                                                        $totalMinutes = round($basicRegularHours * 60 + 0.5);
+                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        $totalMinutes = round($basicRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
                                                     ?>
@@ -771,8 +771,8 @@
                                             @else
                                                 <div class="text-xs text-gray-500">
                                                     <?php 
-                                                        // More generous rounding to handle floating point precision
-                                                        $totalMinutes = round($basicRegularHours * 60 + 0.5);
+                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        $totalMinutes = round($basicRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
                                                     ?>
@@ -925,8 +925,8 @@
                                                 
                                                 <div class="text-xs border-t pt-1">
                                                     <?php 
-                                                        // More generous rounding to handle floating point precision
-                                                        $totalMinutes = round($totalHolidayRegularHours * 60 + 0.5);
+                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        $totalMinutes = round($totalHolidayRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
                                                     ?>
@@ -1051,8 +1051,8 @@
                                                 
                                                 <div class="text-xs border-t pt-1">
                                                     <?php 
-                                                        // More generous rounding to handle floating point precision
-                                                        $totalMinutes = round($totalRestRegularHours * 60 + 0.5);
+                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        $totalMinutes = round($totalRestRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
                                                     ?>
@@ -1062,8 +1062,8 @@
                                             @else
                                                 @if($totalRestRegularHours > 0)
                                                     <?php 
-                                                        // More generous rounding to handle floating point precision
-                                                        $totalMinutes = round($totalRestRegularHours * 60 + 0.5);
+                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        $totalMinutes = round($totalRestRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
                                                     ?>
@@ -1126,7 +1126,8 @@
                                                         
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Workday OT+ND',
@@ -1154,7 +1155,8 @@
                                                     if ($regularOTHours > 0) {
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Special Holiday OT',
@@ -1173,7 +1175,8 @@
                                                         
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Special Holiday OT+ND',
@@ -1201,7 +1204,8 @@
                                                     if ($regularOTHours > 0) {
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Holiday OT',
@@ -1220,7 +1224,8 @@
                                                         
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Holiday OT+ND',
@@ -1248,7 +1253,8 @@
                                                     if ($regularOTHours > 0) {
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Rest Day OT',
@@ -1267,7 +1273,8 @@
                                                         
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Rest Day OT+ND',
@@ -1321,8 +1328,8 @@
                                                 
                                                 <div class="text-xs border-t pt-1">
                                                     <?php 
-                                                        // More generous rounding to handle floating point precision
-                                                        $totalMinutes = round($totalOvertimeHours * 60 + 0.5);
+                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        $totalMinutes = round($totalOvertimeHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
                                                     ?>
@@ -2338,13 +2345,72 @@
                                 <div class="w-3 h-3 rounded-full bg-blue-600 mr-2"></div>
                                 <span class="text-blue-600 font-medium">Regular + ND Hours</span>
                             </div>
+
+                             @php
+                            // Get break time description for the first employee (assuming all employees have similar break configuration)
+                            $breakTimeDescription = 'Not Set';
+                            $firstEmployee = $payroll->payrollDetails->first();
+                            
+                            if ($firstEmployee && $firstEmployee->employee && $firstEmployee->employee->timeSchedule) {
+                                $timeSchedule = $firstEmployee->employee->timeSchedule;
+                                
+                                // Check if employee has flexible break (break_duration_minutes without fixed times)
+                                if ($timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0 && !($timeSchedule->break_start && $timeSchedule->break_end)) {
+                                    // Flexible break
+                                    $breakMinutes = $timeSchedule->break_duration_minutes;
+                                    $breakHours = floor($breakMinutes / 60);
+                                    $breakMins = $breakMinutes % 60;
+                                    
+                                    if ($breakHours > 0 && $breakMins > 0) {
+                                        $breakTimeDescription = "Flexible {$breakHours}h {$breakMins}m";
+                                    } elseif ($breakHours > 0) {
+                                        $breakTimeDescription = "Flexible {$breakHours}h";
+                                    } else {
+                                        $breakTimeDescription = "Flexible {$breakMins}m";
+                                    }
+                                } elseif ($timeSchedule->break_start && $timeSchedule->break_end) {
+                                    // Fixed break - check if any employee has actual break logs
+                                    $hasActualBreakLogs = false;
+                                    $actualBreakStart = '';
+                                    $actualBreakEnd = '';
+                                    
+                                    // Check the first few time logs to see if there are actual break logs
+                                    foreach ($payroll->payrollDetails->take(5) as $detail) {
+                                        foreach ($periodDates as $date) {
+                                            $timeLogData = $dtrData[$detail->employee_id][$date] ?? null;
+                                            if ($timeLogData) {
+                                                $timeLog = is_array($timeLogData) ? (object) $timeLogData : $timeLogData;
+                                                if (isset($timeLog->break_in) && isset($timeLog->break_out) && $timeLog->break_in && $timeLog->break_out) {
+                                                    $hasActualBreakLogs = true;
+                                                    $actualBreakStart = \Carbon\Carbon::parse($timeLog->break_in)->format('g:i A');
+                                                    $actualBreakEnd = \Carbon\Carbon::parse($timeLog->break_out)->format('g:i A');
+                                                    break 2; // Break out of both loops
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    if ($hasActualBreakLogs) {
+                                        // Show actual break logs
+                                        $breakTimeDescription = "Fixed {$actualBreakStart} - {$actualBreakEnd}";
+                                    } else {
+                                        // Show default schedule break times
+                                        $defaultBreakStart = $timeSchedule->break_start->format('g:i A');
+                                        $defaultBreakEnd = $timeSchedule->break_end->format('g:i A');
+                                        $breakTimeDescription = "Fixed {$defaultBreakStart} - {$defaultBreakEnd}";
+                                    }
+                                } else {
+                                    $breakTimeDescription = 'No Break';
+                                }
+                            }
+                        @endphp
                             <div class="flex items-center">
                                 <div class="w-3 h-3 rounded-full bg-red-600 mr-2"></div>
-                                <span class="text-red-600 font-medium">Break Time</span>
+                                <span class="text-red-600 font-medium">Break Time: {{$breakTimeDescription}} </span>
                             </div>
                         </div>
-                    </div>
-                    
+                        
+      
                     <div class="overflow-x-auto">
                         <style>
                             .dtr-table {
@@ -2952,14 +3018,14 @@
                                                                 }
                                                             }
                                                         @endphp
-                                                        @if($regularOTStart && $regularOTEnd)
+                                                        {{-- @if($regularOTStart && $regularOTEnd)
                                                         <div class="text-orange-600 text-xs">
-                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($regularOvertimeHours * 60, 0) }}m) {{ floor($regularOvertimeHours) }}h {{ round(($regularOvertimeHours - floor($regularOvertimeHours)) * 60) }}m
+                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($regularOvertimeHours * 60, 0) }}m) {{ floor($regularOvertimeHours) }}hs {{ round(($regularOvertimeHours - floor($regularOvertimeHours)) * 60) }}m
                                                         </div>
-                                                        {{-- <div class="text-orange-600 text-xs">
+                                                        <div class="text-orange-600 text-xs">
                                                             Regular Workday OT
-                                                        </div> --}}
-                                                        @endif
+                                                        </div>
+                                                        @endif --}}
                                                         @endif
                                                         
                                                         {{-- Display Night Differential OT (during ND period) --}}
@@ -3006,15 +3072,15 @@
                                                                 }
                                                             }
                                                         @endphp
-                                                        @if($nightOTStart && $nightOTEnd)
+                                                        {{-- @if($nightOTStart && $nightOTEnd)
                                                         <div class="text-purple-600 text-xs">
-                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} ({{ number_format($nightDiffOvertimeHours * 60, 0) }}m) {{ floor($nightDiffOvertimeHours) }}h {{ round(($nightDiffOvertimeHours - floor($nightDiffOvertimeHours)) * 60) }}m
+                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} ({{ number_format($nightDiffOvertimeHours * 60, 0) }}m) {{ floor($nightDiffOvertimeHours) }}h {{ round(($nightDiffOvertimeHours - floor($nightDiffOvertimeHours)) * 60) }}ms
                                                         </div>
-                                                        {{-- <div class="text-purple-600 text-xs">
+                                                        <div class="text-purple-600 text-xs">
                                                             Regular Workday OT + ND
-                                                        </div> --}}
-                                                        @endif
-                                                        @endif
+                                                        </div>
+                                                        @endif --}}
+                                                        @endif 
                                                         
                                                         {{-- If we have total overtime but no breakdown, show total --}}
                                                         @if($regularOvertimeHours == 0 && $nightDiffOvertimeHours == 0 && $displayOvertimeHours > 0)

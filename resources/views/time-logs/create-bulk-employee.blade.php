@@ -35,8 +35,8 @@
                         <h3 class="text-lg font-medium text-gray-900 mb-2">Employee Details</h3>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                             <div>
-                                <span class="font-medium text-gray-700">Employee #:</span>
-                                <span class="text-gray-900">{{ $selectedEmployee->employee_number }}</span>
+                                <span class="font-medium text-gray-700">Employee:</span>
+                                <span class="text-gray-900">{{ $selectedEmployee->first_name }} {{ $selectedEmployee->last_name }}</span>
                             </div>
                             <div>
                                 <span class="font-medium text-gray-700">Schedule:</span>
@@ -84,15 +84,20 @@
                                     $scheduleBreakStart = '12:00'; // Default break start
                                     $scheduleBreakEnd = '13:00';   // Default break end
                                     
+                                    // Determine break type
+                                    $isFlexibleBreak = false;
+                                    $isFixedBreak = false;
+                                    
                                     if ($selectedEmployee->timeSchedule) {
                                         $scheduleStart = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->time_in)->format('H:i');
                                         $scheduleEnd = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->time_out)->format('H:i');
                                         
-                                        // Use break times from schedule if available
-                                        if ($selectedEmployee->timeSchedule->break_start) {
+                                        // Check if employee has flexible break (break_duration_minutes without fixed times)
+                                        if ($selectedEmployee->timeSchedule->break_duration_minutes && $selectedEmployee->timeSchedule->break_duration_minutes > 0 && !($selectedEmployee->timeSchedule->break_start && $selectedEmployee->timeSchedule->break_end)) {
+                                            $isFlexibleBreak = true;
+                                        } elseif ($selectedEmployee->timeSchedule->break_start && $selectedEmployee->timeSchedule->break_end) {
+                                            $isFixedBreak = true;
                                             $scheduleBreakStart = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_start)->format('H:i');
-                                        }
-                                        if ($selectedEmployee->timeSchedule->break_end) {
                                             $scheduleBreakEnd = \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_end)->format('H:i');
                                         }
                                     }
@@ -100,17 +105,29 @@
                                     $displayStart = \Carbon\Carbon::parse($scheduleStart)->format('g:i A');
                                     $displayEnd = \Carbon\Carbon::parse($scheduleEnd)->format('g:i A');
                                 @endphp
-                                <button type="button" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600" onclick="fillRegularHours('{{ $scheduleStart }}', '{{ $scheduleEnd }}', '{{ $scheduleBreakStart }}', '{{ $scheduleBreakEnd }}')">
-                                    Fill Time & Break Fields ({{ $displayStart }} - {{ $displayEnd }})
-                                </button>
+                                
+                                @if($isFlexibleBreak)
+                                    <button type="button" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600" onclick="fillTimeOnly('{{ $scheduleStart }}', '{{ $scheduleEnd }}')">
+                                        Fill Time Fields ({{ $displayStart }} - {{ $displayEnd }})
+                                    </button>
+                                @elseif($isFixedBreak)
+                                    <button type="button" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600" onclick="fillRegularHours('{{ $scheduleStart }}', '{{ $scheduleEnd }}', '{{ $scheduleBreakStart }}', '{{ $scheduleBreakEnd }}')">
+                                        Fill Time & Break Fields ({{ $displayStart }} - {{ $displayEnd }})
+                                    </button>
+                                @else
+                                    <button type="button" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600" onclick="fillTimeOnly('{{ $scheduleStart }}', '{{ $scheduleEnd }}')">
+                                        Fill Time Fields ({{ $displayStart }} - {{ $displayEnd }})
+                                    </button>
+                                @endif
+                                
                                 <button type="button" class="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600" onclick="resetAll()">
                                     Reset All
                                 </button>
                             </div>
-                            <p class="text-xs text-blue-700 mt-2">
+                            {{-- <p class="text-xs text-blue-700 mt-2">
                                 <strong>Fill Time & Break:</strong> Fills empty fields with employee's scheduled work hours and break times.<br>
                                 <strong>Reset All:</strong> Clears all fields and resets types to default based on employee's day schedule.
-                            </p>
+                            </p> --}}
                         </div>
 
                         <!-- Time Log Entries -->
@@ -242,14 +259,14 @@
                         </div>
 
                         <!-- Legend -->
-                        <div class="mt-4 text-sm text-gray-600">
+                        {{-- <div class="mt-4 text-sm text-gray-600">
                             <p><strong>Legend:</strong></p>
                             <div class="flex flex-wrap gap-4 mt-1">
                                 <span>● <span class="bg-gray-100 px-2 py-1 rounded">Weekend days</span></span>
                                 <span>● <span class="bg-yellow-50 px-2 py-1 rounded">Holiday</span></span>
                                 <span>● <strong>Overtime Hours:</strong> Hours worked beyond regular shift</span>
                             </div>
-                        </div>
+                        </div> --}}
 
                         <!-- Action Buttons -->
                         <div class="mt-6 flex justify-between">
@@ -304,6 +321,25 @@
                     if (timeOutInput && !timeOutInput.value) timeOutInput.value = timeOut;
                     if (breakInInput && !breakInInput.value) breakInInput.value = breakIn;
                     if (breakOutInput && !breakOutInput.value) breakOutInput.value = breakOut;
+                }
+            });
+        }
+
+        function fillTimeOnly(timeIn, timeOut) {
+            // Fill only time in/out fields for flexible break employees
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach((row, index) => {
+                const isWeekend = row.classList.contains('bg-gray-100');
+                const isHoliday = row.classList.contains('bg-yellow-50');
+                
+                if (!isWeekend && !isHoliday) {
+                    const timeInInput = row.querySelector(`input[name="time_logs[${index}][time_in]"]`);
+                    const timeOutInput = row.querySelector(`input[name="time_logs[${index}][time_out]"]`);
+                    
+                    // Only fill empty fields to avoid overwriting existing data
+                    if (timeInInput && !timeInInput.value) timeInInput.value = timeIn;
+                    if (timeOutInput && !timeOutInput.value) timeOutInput.value = timeOut;
+                    // Do not fill break fields for flexible break employees
                 }
             });
         }
@@ -396,6 +432,19 @@
                 $jsScheduleEnd = \Carbon\Carbon::parse($jsScheduleEnd)->format('H:i');
                 $jsBreakStart = \Carbon\Carbon::parse($jsBreakStart)->format('H:i');
                 $jsBreakEnd = \Carbon\Carbon::parse($jsBreakEnd)->format('H:i');
+                
+                // Determine break type for intelligent behavior
+                $jsIsFlexibleBreak = false;
+                $jsIsFixedBreak = false;
+                
+                if ($selectedEmployee->timeSchedule) {
+                    // Check if employee has flexible break (break_duration_minutes without fixed times)
+                    if ($selectedEmployee->timeSchedule->break_duration_minutes && $selectedEmployee->timeSchedule->break_duration_minutes > 0 && !($selectedEmployee->timeSchedule->break_start && $selectedEmployee->timeSchedule->break_end)) {
+                        $jsIsFlexibleBreak = true;
+                    } elseif ($selectedEmployee->timeSchedule->break_start && $selectedEmployee->timeSchedule->break_end) {
+                        $jsIsFixedBreak = true;
+                    }
+                }
             @endphp
             
             // Set employee's scheduled working hours for a specific row
@@ -407,8 +456,19 @@
             // Use employee's actual schedule times
             if (timeInInput) timeInInput.value = '{{ $jsScheduleStart }}';
             if (timeOutInput) timeOutInput.value = '{{ $jsScheduleEnd }}';
-            if (breakInInput) breakInInput.value = '{{ $jsBreakStart }}';
-            if (breakOutInput) breakOutInput.value = '{{ $jsBreakEnd }}';
+            
+            // Intelligent break field handling based on employee break type
+            @if($isFlexibleBreak ?? false)
+                // Flexible break employee - do not fill break fields
+                // Break fields remain empty for flexible break employees
+            @elseif($isFixedBreak ?? false)
+                // Fixed break employee - fill break fields
+                if (breakInInput) breakInInput.value = '{{ $jsBreakStart }}';
+                if (breakOutInput) breakOutInput.value = '{{ $jsBreakEnd }}';
+            @else
+                // No break configuration - do not fill break fields (default to flexible behavior)
+                // Break fields remain empty
+            @endif
             
             // Do NOT change the log type - preserve the current selection
             // This allows users to set regular times on Rest Days, Holidays, etc. without changing the type
