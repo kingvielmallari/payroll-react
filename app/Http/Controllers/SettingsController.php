@@ -19,7 +19,7 @@ class SettingsController extends Controller
         $this->authorize('manage settings');
 
         $autoPayrollEnabled = config('app.auto_payroll_enabled', false);
-        
+
         return view('settings.payroll', compact('autoPayrollEnabled'));
     }
 
@@ -38,7 +38,7 @@ class SettingsController extends Controller
         $this->updateEnvFile('AUTO_PAYROLL_ENABLED', $validated['auto_payroll_enabled'] ? 'true' : 'false');
 
         return redirect()->route('settings.payroll')
-                        ->with('success', 'Payroll settings updated successfully.');
+            ->with('success', 'Payroll settings updated successfully.');
     }
 
     /**
@@ -47,19 +47,19 @@ class SettingsController extends Controller
     private function updateEnvFile($key, $value)
     {
         $envPath = base_path('.env');
-        
+
         if (File::exists($envPath)) {
             $envContent = File::get($envPath);
-            
+
             $pattern = "/^{$key}=.*/m";
             $replacement = "{$key}={$value}";
-            
+
             if (preg_match($pattern, $envContent)) {
                 $envContent = preg_replace($pattern, $replacement, $envContent);
             } else {
                 $envContent .= "\n{$replacement}";
             }
-            
+
             File::put($envPath, $envContent);
         }
     }
@@ -89,8 +89,8 @@ class SettingsController extends Controller
 
         $prefix = cache('employee_setting_employee_number_prefix', 'EMP');
         $lastEmployee = \App\Models\Employee::where('employee_number', 'LIKE', $prefix . '%')
-                                          ->orderBy('employee_number', 'desc')
-                                          ->first();
+            ->orderBy('employee_number', 'desc')
+            ->first();
 
         if ($lastEmployee) {
             // Extract the numeric part and increment
@@ -178,26 +178,23 @@ class SettingsController extends Controller
     public function employeeSettings()
     {
         $this->authorize('manage settings');
-        
+
         $departments = \App\Models\Department::all();
         $positions = \App\Models\Position::with('department')->get();
         $timeSchedules = \App\Models\TimeSchedule::all();
         $daySchedules = \App\Models\DaySchedule::all();
-        
+
         $settings = [
             'employee_number_prefix' => cache('employee_setting_employee_number_prefix', 'EMP'),
             'employee_number_start' => cache('employee_setting_employee_number_start', 1),
             'auto_generate_employee_number' => cache('employee_setting_auto_generate_employee_number', true),
-            'require_department' => cache('employee_setting_require_department', true),
-            'require_position' => cache('employee_setting_require_position', true),
-            'require_time_schedule' => cache('employee_setting_require_time_schedule', true),
         ];
-        
+
         return view('settings.employee-settings.index', compact(
-            'departments', 
-            'positions', 
-            'timeSchedules', 
-            'daySchedules', 
+            'departments',
+            'positions',
+            'timeSchedules',
+            'daySchedules',
             'settings'
         ));
     }
@@ -208,22 +205,19 @@ class SettingsController extends Controller
     public function updateEmployeeSettings(Request $request)
     {
         $this->authorize('manage settings');
-        
+
         $validated = $request->validate([
             'employee_number_prefix' => 'required|string|max:10',
             'employee_number_start' => 'required|integer|min:1',
             'auto_generate_employee_number' => 'boolean',
-            'require_department' => 'boolean',
-            'require_position' => 'boolean',
-            'require_time_schedule' => 'boolean',
         ]);
-        
+
         // Save settings to cache
         foreach ($validated as $key => $value) {
             cache(['employee_setting_' . $key => $value], now()->addYears(1));
         }
-        
+
         return redirect()->route('settings.employee')
-                        ->with('success', 'Employee configuration updated successfully.');
+            ->with('success', 'Employee configuration updated successfully.');
     }
 }

@@ -509,12 +509,7 @@ function showContextMenu(event, element) {
                 </svg>
                 Edit Schedule
             </button>
-            <button data-action="break" data-schedule-id="${scheduleId}" data-schedule-type="time" class="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center">
-                <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                Edit Break Period
-            </button>
+          
             <button data-action="delete" data-schedule-id="${scheduleId}" data-schedule-type="time" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center">
                 <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -523,6 +518,13 @@ function showContextMenu(event, element) {
             </button>
         `;
     }
+
+    //   <button data-action="break" data-schedule-id="${scheduleId}" data-schedule-type="time" class="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center">
+    //             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    //                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    //             </svg>
+    //             Edit Break Period
+    //         </button>
     
     // Add event listeners to the context menu buttons
     contextMenuItems.querySelectorAll('button').forEach(button => {

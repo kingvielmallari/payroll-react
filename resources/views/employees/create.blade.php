@@ -162,19 +162,15 @@
                             <div>
                                 <label for="employee_number" class="block text-sm font-medium text-gray-700">Employee Number <span class="text-red-500">*</span></label>
                                 <div class="mt-1 flex">
-                                    <input type="text" name="employee_number" id="employee_number" value="{{ old('employee_number') }}" required
-                                           placeholder="EMP-2025-0001"
-                                           class="block w-full rounded-l-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    <input type="text" name="employee_number" id="employee_number" value="{{ old('employee_number', ($employeeSettings['auto_generate_employee_number'] ?? false) ? $nextEmployeeNumber : '') }}" required
+                                           placeholder="{{ ($employeeSettings['auto_generate_employee_number'] ?? false) ? $nextEmployeeNumber : 'Enter employee number' }}"
+                                           class="block w-full {{ ($employeeSettings['auto_generate_employee_number'] ?? false) ? 'rounded-l-md' : 'rounded-md' }} border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                                            {{ ($employeeSettings['auto_generate_employee_number'] ?? false) ? 'readonly' : '' }}>
                                     @if($employeeSettings['auto_generate_employee_number'] ?? false)
                                         <button type="button" id="generate-employee-number" 
                                                 class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-blue-50 text-blue-600 text-sm hover:bg-blue-100">
                                             Generate
                                         </button>
-                                    @else
-                                        <span class="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 text-gray-500 text-sm">
-                                            Manual
-                                        </span>
                                     @endif
                                 </div>
                                 @if($employeeSettings['auto_generate_employee_number'] ?? false)

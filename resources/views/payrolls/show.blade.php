@@ -2930,8 +2930,8 @@
                                                             $timeSchedule = $employee->timeSchedule ?? null;
                                                             
                                                             if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
-                                                                $defaultBreakStart = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_start->format('H:i'));
-                                                                $defaultBreakEnd = \Carbon\Carbon::parse($timeLog->log_date . ' ' . $timeSchedule->break_end->format('H:i'));
+                                                                $defaultBreakStart = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i:s'));
+                                                                $defaultBreakEnd = \Carbon\Carbon::parse($timeLog->log_date->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i:s'));
                                                                 $workStart = \Carbon\Carbon::parse($timeLog->time_in);
                                                                 $workEnd = \Carbon\Carbon::parse($timeLog->time_out);
                                                                 
@@ -2979,18 +2979,18 @@
                                                     @endphp
                                                     
                                                     {{-- Display detailed time periods --}}
-                                                    @foreach($timePeriodBreakdown as $period)
+                                                    {{-- @foreach($timePeriodBreakdown as $period)
                                                         @if($period['type'] === 'regular_overtime' || $period['type'] === 'night_diff_overtime')
                                                         <div class="{{ $period['color_class'] }} text-xs">
-                                                            {{ $period['start_time'] }} - {{ $period['end_time'] }} ({{ number_format($period['hours'] * 60, 0) }}m) {{ floor($period['hours']) }}h {{ round(($period['hours'] - floor($period['hours'])) * 60) }}m
-                                                            {{-- @if($period['type'] === 'regular_overtime')
+                                                            {{ $period['start_time'] }} - {{ $period['end_time'] }} ({{ number_format($period['hours'] * 60, 0) }}m) {{ floor($period['hours']) }}hs {{ round(($period['hours'] - floor($period['hours'])) * 60) }}ms
+                                                            @if($period['type'] === 'regular_overtime')
                                                                 = regular ot
                                                             @elseif($period['type'] === 'night_diff_overtime')
                                                                 = ot + nd
-                                                            @endif --}}
+                                                            @endif
                                                         </div>
                                                         @endif
-                                                    @endforeach
+                                                    @endforeach --}}
                                                     
                                                     {{-- Fallback to old display if no breakdown available --}}
                                                     @if(empty($timePeriodBreakdown) || count($timePeriodBreakdown) <= 1)

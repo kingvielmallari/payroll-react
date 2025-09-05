@@ -140,7 +140,28 @@ class EmployeeController extends Controller
         // Get active deduction settings for salary calculation preview
         $deductionSettings = \App\Models\DeductionSetting::active()->get();
 
-        return view('employees.create', compact('departments', 'positions', 'timeSchedules', 'daySchedules', 'roles', 'deductionSettings', 'paySchedules', 'employeeSettings'));
+        // Generate next employee number for auto-generate mode
+        $nextEmployeeNumber = '';
+        if ($employeeSettings['auto_generate_employee_number']) {
+            $prefix = $employeeSettings['employee_number_prefix'];
+            $currentYear = date('Y');
+            $lastEmployee = \App\Models\Employee::where('employee_number', 'LIKE', $prefix . '-' . $currentYear . '-%')
+                ->orderBy('employee_number', 'desc')
+                ->first();
+
+            if ($lastEmployee) {
+                // Extract the numeric part and increment
+                $parts = explode('-', $lastEmployee->employee_number);
+                $lastNumber = intval(end($parts));
+                $nextNumber = $lastNumber + 1;
+            } else {
+                $nextNumber = Cache::get('employee_setting_employee_number_start', 1);
+            }
+
+            $nextEmployeeNumber = $prefix . '-' . $currentYear . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+        }
+
+        return view('employees.create', compact('departments', 'positions', 'timeSchedules', 'daySchedules', 'roles', 'deductionSettings', 'paySchedules', 'employeeSettings', 'nextEmployeeNumber'));
     }
 
     /**

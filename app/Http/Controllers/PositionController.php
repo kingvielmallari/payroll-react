@@ -28,7 +28,7 @@ class PositionController extends Controller
     public function create()
     {
         $departments = Department::active()->orderBy('name')->get();
-        
+
         return response()->json([
             'message' => 'Create form data',
             'data' => [
@@ -44,11 +44,19 @@ class PositionController extends Controller
     {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string|max:500',
+            'department_id' => 'nullable|exists:departments,id',
             'is_active' => 'boolean',
         ]);
 
         $position = Position::create($validated);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Position created successfully.',
+                'data' => $position
+            ]);
+        }
 
         return redirect()->route('positions.index')->with('success', 'Position created successfully.');
     }
@@ -68,7 +76,7 @@ class PositionController extends Controller
     public function edit(Position $position)
     {
         $departments = Department::active()->orderBy('name')->get();
-        
+
         return response()->json([
             'message' => 'Edit form data',
             'data' => [
@@ -85,11 +93,19 @@ class PositionController extends Controller
     {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string|max:500',
+            'department_id' => 'nullable|exists:departments,id',
             'is_active' => 'boolean',
         ]);
 
         $position->update($validated);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Position updated successfully.',
+                'data' => $position
+            ]);
+        }
 
         return redirect()->route('positions.index')->with('success', 'Position updated successfully.');
     }
@@ -101,10 +117,23 @@ class PositionController extends Controller
     {
         // Check if position has employees
         if ($position->employees()->count() > 0) {
+            if (request()->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Cannot delete position with existing employees.'
+                ], 400);
+            }
             return redirect()->route('positions.index')->with('error', 'Cannot delete position with existing employees.');
         }
 
         $position->delete();
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Position deleted successfully.'
+            ]);
+        }
 
         return redirect()->route('positions.index')->with('success', 'Position deleted successfully.');
     }

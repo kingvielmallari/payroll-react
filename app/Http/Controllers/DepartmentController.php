@@ -40,11 +40,18 @@ class DepartmentController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:departments',
             'code' => 'nullable|string|max:10|unique:departments',
-            'description' => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ]);
 
         $department = Department::create($validated);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Department created successfully.',
+                'data' => $department
+            ]);
+        }
 
         return redirect()->route('departments.index')->with('success', 'Department created successfully.');
     }
@@ -87,11 +94,18 @@ class DepartmentController extends Controller
                 'max:10',
                 Rule::unique('departments')->ignore($department->id),
             ],
-            'description' => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ]);
 
         $department->update($validated);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Department updated successfully.',
+                'data' => $department
+            ]);
+        }
 
         return redirect()->route('departments.index')->with('success', 'Department updated successfully.');
     }
@@ -103,10 +117,23 @@ class DepartmentController extends Controller
     {
         // Check if department has employees
         if ($department->employees()->count() > 0) {
+            if (request()->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Cannot delete department with existing employees.'
+                ], 400);
+            }
             return redirect()->route('departments.index')->with('error', 'Cannot delete department with existing employees.');
         }
 
         $department->delete();
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Department deleted successfully.'
+            ]);
+        }
 
         return redirect()->route('departments.index')->with('success', 'Department deleted successfully.');
     }

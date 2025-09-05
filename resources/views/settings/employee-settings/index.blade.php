@@ -56,7 +56,8 @@
                             <div class="flex items-center">
                                 <input type="checkbox" name="auto_generate_employee_number" id="auto_generate_employee_number" 
                                        value="1" {{ old('auto_generate_employee_number', $settings['auto_generate_employee_number']) ? 'checked' : '' }}
-                                       class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                       class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                       onchange="toggleAutoGenerate()">
                                 <label for="auto_generate_employee_number" class="ml-2 text-sm text-gray-700">
                                     Auto-generate employee numbers (if unchecked, users can enter manually)
                                 </label>
@@ -70,24 +71,29 @@
                     <div class="p-6">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-medium text-gray-900">Department Management</h3>
-                            <a href="{{ route('departments.create') }}" 
-                               class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm">
+                            <button type="button" onclick="openCreateDepartment()" 
+                                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm">
                                 Add New Department
-                            </a>
+                            </button>
                         </div>
                         
                         <div class="bg-gray-50 rounded-lg p-4">
                             <p class="text-sm text-gray-600 mb-3">Manage available departments for employee selection:</p>
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 @forelse($departments as $department)
-                                    <div class="flex items-center justify-between bg-white rounded px-3 py-2 border">
-                                        <span class="text-sm">{{ $department->name }}</span>
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-xs px-2 py-1 rounded {{ $department->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                    <div class="department-card bg-white rounded-lg p-4 border shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                                         data-id="{{ $department->id }}" data-name="{{ $department->name }}"
+                                         oncontextmenu="showContextMenu(event, 'department', {{ $department->id }}, '{{ $department->name }}'); return false;">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex-1">
+                                                <h4 class="text-sm font-semibold text-gray-900">{{ $department->name }}</h4>
+                                                @if($department->code)
+                                                    <p class="text-xs text-gray-500 mt-1">Code: {{ $department->code }}</p>
+                                                @endif
+                                            </div>
+                                            <span class="text-xs px-2 py-1 rounded-full {{ $department->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
                                                 {{ $department->is_active ? 'Active' : 'Inactive' }}
                                             </span>
-                                            <a href="{{ route('departments.edit', $department) }}" 
-                                               class="text-blue-600 hover:text-blue-800 text-xs">Edit</a>
                                         </div>
                                     </div>
                                 @empty
@@ -103,29 +109,29 @@
                     <div class="p-6">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-medium text-gray-900">Position Management</h3>
-                            <a href="{{ route('positions.create') }}" 
-                               class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm">
+                            <button type="button" onclick="openCreatePosition()" 
+                                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm">
                                 Add New Position
-                            </a>
+                            </button>
                         </div>
                         
                         <div class="bg-gray-50 rounded-lg p-4">
                             <p class="text-sm text-gray-600 mb-3">Manage available positions for employee selection:</p>
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 @forelse($positions as $position)
-                                    <div class="flex items-center justify-between bg-white rounded px-3 py-2 border">
-                                        <div>
-                                            <span class="text-sm font-medium">{{ $position->title }}</span>
-                                            @if($position->department)
-                                                <br><span class="text-xs text-gray-500">{{ $position->department->name }}</span>
-                                            @endif
-                                        </div>
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-xs px-2 py-1 rounded {{ $position->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                    <div class="position-card bg-white rounded-lg p-4 border shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                                         data-id="{{ $position->id }}" data-title="{{ $position->title }}"
+                                         oncontextmenu="showContextMenu(event, 'position', {{ $position->id }}, '{{ $position->title }}'); return false;">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex-1">
+                                                <h4 class="text-sm font-semibold text-gray-900">{{ $position->title }}</h4>
+                                                @if($position->department)
+                                                    <p class="text-xs text-gray-500 mt-1">{{ $position->department->name }}</p>
+                                                @endif
+                                            </div>
+                                            <span class="text-xs px-2 py-1 rounded-full {{ $position->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
                                                 {{ $position->is_active ? 'Active' : 'Inactive' }}
                                             </span>
-                                            <a href="{{ route('positions.edit', $position) }}" 
-                                               class="text-blue-600 hover:text-blue-800 text-xs">Edit</a>
                                         </div>
                                     </div>
                                 @empty
@@ -208,42 +214,6 @@
                     </div>
                 </div> --}}
 
-                <!-- Field Requirements -->
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                    <div class="p-6">
-                        <h3 class="text-lg font-medium text-gray-900 mb-4">Field Requirements</h3>
-                        
-                        <div class="space-y-3">
-                            <div class="flex items-center">
-                                <input type="checkbox" name="require_department" id="require_department" 
-                                       value="1" {{ old('require_department', $settings['require_department']) ? 'checked' : '' }}
-                                       class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <label for="require_department" class="ml-2 text-sm text-gray-700">
-                                    Require Department selection
-                                </label>
-                            </div>
-                            
-                            <div class="flex items-center">
-                                <input type="checkbox" name="require_position" id="require_position" 
-                                       value="1" {{ old('require_position', $settings['require_position']) ? 'checked' : '' }}
-                                       class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <label for="require_position" class="ml-2 text-sm text-gray-700">
-                                    Require Position selection
-                                </label>
-                            </div>
-                            
-                            <div class="flex items-center">
-                                <input type="checkbox" name="require_time_schedule" id="require_time_schedule" 
-                                       value="1" {{ old('require_time_schedule', $settings['require_time_schedule']) ? 'checked' : '' }}
-                                       class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <label for="require_time_schedule" class="ml-2 text-sm text-gray-700">
-                                    Require Time Schedule selection
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Action Buttons -->
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6">
@@ -256,6 +226,91 @@
                     </div>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Department Modal (Create/Edit) -->
+    <div id="departmentModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium text-gray-900 mb-4" id="departmentModalTitle">Add Department</h3>
+                <form id="departmentForm">
+                    <input type="hidden" id="departmentId" name="id">
+                    <div class="space-y-4">
+                        <div>
+                            <label for="departmentName" class="block text-sm font-medium text-gray-700">Department Name *</label>
+                            <input type="text" id="departmentName" name="name" required 
+                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="departmentCode" class="block text-sm font-medium text-gray-700">Department Code</label>
+                            <input type="text" id="departmentCode" name="code" maxlength="10"
+                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="departmentIsActive" name="is_active" value="1" checked
+                                   class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <label for="departmentIsActive" class="ml-2 text-sm text-gray-700">Active</label>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" onclick="closeDepartmentModal()" 
+                                class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                            Cancel
+                        </button>
+                        <button type="submit" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                            Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Position Modal (Create/Edit) -->
+    <div id="positionModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium text-gray-900 mb-4" id="positionModalTitle">Add Position</h3>
+                <form id="positionForm">
+                    <input type="hidden" id="positionId" name="id">
+                    <div class="space-y-4">
+                        <div>
+                            <label for="positionTitle" class="block text-sm font-medium text-gray-700">Position Title *</label>
+                            <input type="text" id="positionTitle" name="title" required 
+                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="positionDepartment" class="block text-sm font-medium text-gray-700">Department</label>
+                            <select id="positionDepartment" name="department_id"
+                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">Select Department</option>
+                                @foreach($departments as $department)
+                                    @if($department->is_active)
+                                        <option value="{{ $department->id }}">{{ $department->name }}</option>
+                                    @endif
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="positionIsActive" name="is_active" value="1" checked
+                                   class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <label for="positionIsActive" class="ml-2 text-sm text-gray-700">Active</label>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" onclick="closePositionModal()" 
+                                class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                            Cancel
+                        </button>
+                        <button type="submit" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                            Save
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -353,7 +408,336 @@
         </div>
     </div>
 
+    <!-- Context Menu -->
+    <div id="contextMenu" class="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50 hidden">
+        <div class="px-4 py-2 text-xs text-gray-500 border-b" id="contextMenuTitle"></div>
+        <button id="editAction" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-blue-600 hover:text-blue-800">
+            <i class="fas fa-edit mr-2"></i>Edit
+        </button>
+        <button id="deleteAction" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-red-600 hover:text-red-800">
+            <i class="fas fa-trash mr-2"></i>Delete
+        </button>
+    </div>
+
     <script>
+        let contextMenuData = {};
+
+        function showContextMenu(event, type, id, name) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            const contextMenu = document.getElementById('contextMenu');
+            const contextMenuTitle = document.getElementById('contextMenuTitle');
+            
+            // Store context data
+            contextMenuData = { type, id, name };
+            
+            // Set title
+            contextMenuTitle.textContent = `${type.charAt(0).toUpperCase() + type.slice(1)}: ${name}`;
+            
+            // Show menu first to get proper dimensions
+            contextMenu.classList.remove('hidden');
+            
+            // Position the context menu using clientX/clientY for accurate mouse positioning
+            const rect = contextMenu.getBoundingClientRect();
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            
+            let x = event.clientX;
+            let y = event.clientY;
+            
+            // Adjust position to keep menu within viewport
+            if (x + rect.width > windowWidth) {
+                x = windowWidth - rect.width - 10; // 10px margin
+            }
+            if (y + rect.height > windowHeight) {
+                y = windowHeight - rect.height - 10; // 10px margin
+            }
+            
+            // Ensure minimum distance from edges
+            x = Math.max(10, x);
+            y = Math.max(10, y);
+            
+            contextMenu.style.left = x + 'px';
+            contextMenu.style.top = y + 'px';
+        }
+
+        // Hide context menu when clicking elsewhere
+        document.addEventListener('click', function() {
+            document.getElementById('contextMenu').classList.add('hidden');
+        });
+
+        // Handle edit action
+        document.getElementById('editAction').addEventListener('click', function() {
+            if (contextMenuData.type === 'department') {
+                editDepartment(contextMenuData.id);
+            } else if (contextMenuData.type === 'position') {
+                editPosition(contextMenuData.id);
+            }
+            document.getElementById('contextMenu').classList.add('hidden');
+        });
+
+        // Handle delete action
+        document.getElementById('deleteAction').addEventListener('click', function() {
+            if (contextMenuData.type === 'department') {
+                deleteDepartment(contextMenuData.id, contextMenuData.name);
+            } else if (contextMenuData.type === 'position') {
+                deletePosition(contextMenuData.id, contextMenuData.name);
+            }
+            document.getElementById('contextMenu').classList.add('hidden');
+        });
+
+        // Rest of the JavaScript functions remain the same...
+        // Auto-generate employee number toggle function
+        function toggleAutoGenerate() {
+            // This will be used when saving settings to control behavior in employee creation
+            // The actual behavior will be handled in the employee creation form
+        }
+
+        // Department Functions
+        function openCreateDepartment() {
+            document.getElementById('departmentModalTitle').textContent = 'Add Department';
+            document.getElementById('departmentForm').reset();
+            document.getElementById('departmentId').value = '';
+            document.getElementById('departmentIsActive').checked = true;
+            document.getElementById('departmentModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function editDepartment(id) {
+            document.getElementById('departmentModalTitle').textContent = 'Edit Department';
+            document.getElementById('departmentId').value = id;
+            
+            // Fetch department data
+            fetch(`/departments/${id}/edit`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.data) {
+                    document.getElementById('departmentName').value = data.data.name || '';
+                    document.getElementById('departmentCode').value = data.data.code || '';
+                    document.getElementById('departmentIsActive').checked = data.data.is_active ? true : false;
+                }
+                document.getElementById('departmentModal').classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            })
+            .catch(error => {
+                console.error('Error fetching department data:', error);
+                alert('Error loading department data');
+            });
+        }
+
+        function closeDepartmentModal() {
+            document.getElementById('departmentModal').classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+
+        function deleteDepartment(id, name) {
+            if (confirm(`Are you sure you want to delete the department "${name}"?`)) {
+                fetch(`/departments/${id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        '_method': 'DELETE'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success || data.message) {
+                        location.reload();
+                    } else {
+                        alert(data.error || 'Error deleting department');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting department:', error);
+                    alert('Error deleting department');
+                });
+            }
+        }
+
+        // Position Functions
+        function openCreatePosition() {
+            document.getElementById('positionModalTitle').textContent = 'Add Position';
+            document.getElementById('positionForm').reset();
+            document.getElementById('positionId').value = '';
+            document.getElementById('positionIsActive').checked = true;
+            document.getElementById('positionModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function editPosition(id) {
+            document.getElementById('positionModalTitle').textContent = 'Edit Position';
+            document.getElementById('positionId').value = id;
+            
+            // Fetch position data
+            fetch(`/positions/${id}/edit`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.data && data.data.position) {
+                    const position = data.data.position;
+                    document.getElementById('positionTitle').value = position.title || '';
+                    document.getElementById('positionDepartment').value = position.department_id || '';
+                    document.getElementById('positionIsActive').checked = position.is_active ? true : false;
+                }
+                document.getElementById('positionModal').classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            })
+            .catch(error => {
+                console.error('Error fetching position data:', error);
+                alert('Error loading position data');
+            });
+        }
+
+        function closePositionModal() {
+            document.getElementById('positionModal').classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+
+        function deletePosition(id, title) {
+            if (confirm(`Are you sure you want to delete the position "${title}"?`)) {
+                fetch(`/positions/${id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        '_method': 'DELETE'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success || data.message) {
+                        location.reload();
+                    } else {
+                        alert(data.error || 'Error deleting position');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting position:', error);
+                    alert('Error deleting position');
+                });
+            }
+        }
+
+        // Form Submissions
+        document.getElementById('departmentForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const departmentId = document.getElementById('departmentId').value;
+            const isEdit = departmentId !== '';
+            
+            const url = isEdit ? `/departments/${departmentId}` : '/departments';
+            const method = isEdit ? 'PUT' : 'POST';
+            
+            // Convert FormData to regular object for JSON
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                if (key === 'is_active') {
+                    data[key] = document.getElementById('departmentIsActive').checked ? 1 : 0;
+                } else {
+                    data[key] = value;
+                }
+            }
+            
+            if (isEdit) {
+                data._method = 'PUT';
+            }
+            
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success || data.message) {
+                    closeDepartmentModal();
+                    location.reload(); // Reload to show updated data
+                } else {
+                    alert('Error saving department');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving department:', error);
+                alert('Error saving department');
+            });
+        });
+
+        document.getElementById('positionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const positionId = document.getElementById('positionId').value;
+            const isEdit = positionId !== '';
+            
+            const url = isEdit ? `/positions/${positionId}` : '/positions';
+            const method = isEdit ? 'PUT' : 'POST';
+            
+            // Convert FormData to regular object for JSON
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                if (key === 'is_active') {
+                    data[key] = document.getElementById('positionIsActive').checked ? 1 : 0;
+                } else {
+                    data[key] = value;
+                }
+            }
+            
+            if (isEdit) {
+                data._method = 'PUT';
+            }
+            
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success || data.message) {
+                    closePositionModal();
+                    location.reload(); // Reload to show updated data
+                } else {
+                    alert('Error saving position');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving position:', error);
+                alert('Error saving position');
+            });
+        });
+
         // Time Schedule Functions
         function openCreateTimeSchedule() {
             document.getElementById('timeScheduleModalTitle').textContent = 'Add Time Schedule';

@@ -327,10 +327,14 @@ class PayrollController extends Controller
 
                         $allowances = $snapshot->allowances_total ?? 0;
                         $bonuses = $snapshot->bonuses_total ?? 0;
-                        $deductions = $snapshot->total_deductions ?? 0;
 
-                        // Calculate gross pay and net pay from corrected component values
+                        // Calculate gross pay from corrected component values
                         $grossPay = $basicPay + $correctHolidayPay + $correctRestPay + $correctOvertimePay + $allowances + $bonuses;
+
+                        // Recalculate deductions based on the recalculated gross pay
+                        $deductions = $this->recalculateDeductionsFromBreakdown($snapshot, $grossPay);
+
+                        // Calculate net pay from corrected values
                         $netPay = $grossPay - $deductions;
 
                         // Add to totals
@@ -510,10 +514,14 @@ class PayrollController extends Controller
                     $overtimePay = $this->calculateCorrectOvertimePayFromSnapshot($snapshot);
                     $allowances = $snapshot->allowances_total ?? 0;
                     $bonuses = $snapshot->bonuses_total ?? 0;
-                    $deductions = $snapshot->total_deductions ?? 0;
 
-                    // Calculate gross pay and net pay from corrected component values
+                    // Calculate gross pay from corrected component values
                     $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses;
+
+                    // Recalculate deductions based on the recalculated gross pay
+                    $deductions = $this->recalculateDeductionsFromBreakdown($snapshot, $grossPay);
+
+                    // Calculate net pay from corrected values
                     $netPay = $grossPay - $deductions;
 
                     $totalBasic += $basicPay;
@@ -8353,6 +8361,53 @@ class PayrollController extends Controller
         // 1. Update cached totals for government reports
         // 2. Trigger notifications to accounting
         // 3. Update dashboard metrics
+    }
+
+    /**
+     * Recalculate deductions from breakdown based on new gross pay
+     */
+    private function recalculateDeductionsFromBreakdown($snapshot, $newGrossPay)
+    {
+        $deductionsBreakdown = $snapshot->deductions_breakdown;
+
+        if (is_string($deductionsBreakdown)) {
+            $deductionsBreakdown = json_decode($deductionsBreakdown, true);
+        }
+
+        if (!is_array($deductionsBreakdown) || empty($deductionsBreakdown)) {
+            // Fallback to original total deductions if breakdown is not available
+            return $snapshot->total_deductions ?? 0;
+        }
+
+        $totalDeductions = 0;
+
+        foreach ($deductionsBreakdown as $deduction) {
+            if (!is_array($deduction)) {
+                continue;
+            }
+
+            $payBasis = $deduction['pay_basis'] ?? 'fixed';
+            $payBasisAmount = $deduction['pay_basis_amount'] ?? 0;
+            $originalAmount = $deduction['amount'] ?? 0;
+
+            // Recalculate only if deduction is based on total gross pay
+            if ($payBasis === 'totalgross' && $payBasisAmount > 0) {
+                // Calculate the percentage rate from original calculation
+                $rate = $originalAmount / $payBasisAmount;
+                $newAmount = $newGrossPay * $rate;
+                $totalDeductions += $newAmount;
+            } else {
+                // Use original amount for fixed deductions or other pay basis types
+                $totalDeductions += $originalAmount;
+            }
+        }
+
+        // Add non-government deductions that are stored separately and NOT included in breakdown
+        $totalDeductions += $snapshot->late_deductions ?? 0;
+        $totalDeductions += $snapshot->undertime_deductions ?? 0;
+        // Note: cash_advance_deductions is already included in the deductions_breakdown, so don't add it separately
+
+        return $totalDeductions;
     }
 
     /**
