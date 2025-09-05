@@ -668,11 +668,12 @@
                                                     
                                                     // Regular Workday (without ND)
                                                     if ($regularHours > 0) {
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
-                                                        // Round amount to 2 decimals for consistency between display and total
-                                                        $amount = round($rawAmount, 2);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $regularHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                         
@@ -692,11 +693,12 @@
                                                         // Combined rate: regular rate + night differential bonus
                                                         $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
                                                         
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawNdAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
-                                                        // Round amount to 2 decimals for consistency between display and total
-                                                        $ndAmount = round($rawNdAmount, 2);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $nightDiffRegularHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ndAmount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
                                                         
@@ -811,11 +813,12 @@
                                                         
                                                         // Holiday (without ND)
                                                         if ($regularHours > 0) {
-                                                            // Use TimeLog's per-minute precision calculation method
-                                                            $timeLogInstance = new \App\Models\TimeLog();
-                                                            $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
-                                                            // Round amount to 2 decimals for consistency between display and total
-                                                            $amount = round($rawAmount, 2);
+                                                            // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                            $actualMinutes = $regularHours * 60;
+                                                            $roundedMinutes = round($actualMinutes);
+                                                            $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
+                                                            $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                            $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                             
                                                             $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                             
@@ -841,11 +844,12 @@
                                                             $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
                                                             $ndDisplayName = $displayName . '+ND';
                                                             
-                                                            // Use TimeLog's per-minute precision calculation method
-                                                            $timeLogInstance = new \App\Models\TimeLog();
-                                                            $rawNdAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
-                                                            // Round amount to 2 decimals for consistency between display and total
-                                                            $ndAmount = round($rawNdAmount, 2);
+                                                            // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                            $actualMinutes = $nightDiffRegularHours * 60;
+                                                            $roundedMinutes = round($actualMinutes);
+                                                            $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                                                            $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                            $ndAmount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                             
                                                             $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
                                                             
@@ -965,11 +969,12 @@
                                                     
                                                     // Rest Day (without ND)
                                                     if ($regularHours > 0) {
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
-                                                        // Round amount to 2 decimals for consistency between display and total
-                                                        $amount = round($rawAmount, 2);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $regularHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
                                                         
@@ -989,11 +994,12 @@
                                                         // Combined rate: rest day rate + night differential bonus
                                                         $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
                                                         
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawNdAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
-                                                        // Round amount to 2 decimals for consistency between display and total
-                                                        $ndAmount = round($rawNdAmount, 2);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $nightDiffRegularHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ndAmount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
                                                         
@@ -1102,12 +1108,12 @@
                                                     
                                                     // Regular Workday OT (without ND)
                                                     if ($regularOTHours > 0) {
-                                                        // Apply per-minute calculation for overtime (same as Basic/Holiday/Rest)
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
-                                                        // Round amount to 2 decimals for consistency between display and total
-                                                        $amount = round($rawAmount, 2);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $regularOTHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Workday OT',
@@ -1124,9 +1130,12 @@
                                                         // Combined rate: overtime rate + night differential bonus
                                                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
                                                         
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $nightDiffOTHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Workday OT+ND',
@@ -1152,9 +1161,12 @@
                                                     
                                                     // Special Holiday OT (without ND)
                                                     if ($regularOTHours > 0) {
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $regularOTHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Special Holiday OT',
@@ -1171,9 +1183,12 @@
                                                         // Combined rate: overtime rate + night differential bonus
                                                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
                                                         
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $nightDiffOTHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Special Holiday OT+ND',
@@ -1199,9 +1214,12 @@
                                                     
                                                     // Regular Holiday OT (without ND)
                                                     if ($regularOTHours > 0) {
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $regularOTHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Holiday OT',
@@ -1218,9 +1236,12 @@
                                                         // Combined rate: overtime rate + night differential bonus
                                                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
                                                         
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $nightDiffOTHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Holiday OT+ND',
@@ -1246,9 +1267,12 @@
                                                     
                                                     // Rest Day OT (without ND)
                                                     if ($regularOTHours > 0) {
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $regularOTHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Rest Day OT',
@@ -1265,9 +1289,12 @@
                                                         // Combined rate: overtime rate + night differential bonus
                                                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
                                                         
-                                                        // Use TimeLog's per-minute precision calculation method
-                                                        $timeLogInstance = new \App\Models\TimeLog();
-                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
+                                                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                                                        $actualMinutes = $nightDiffOTHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Rest Day OT+ND',

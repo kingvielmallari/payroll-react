@@ -1704,7 +1704,7 @@ class PayrollController extends Controller
     private function getPayBasisAmount($setting, $basicPay, $overtimePay, $bonuses, $allowances, $grossPay)
     {
         if ($setting->apply_to_basic_pay) return $basicPay;
-        if ($setting->apply_to_gross_pay) return $grossPay;
+        if ($setting->apply_to_gross_pay) return $grossPay; // $grossPay here is the total gross pay from calculateDeductions
         if ($setting->apply_to_taxable_income) return $grossPay; // Will be calculated later
         if ($setting->apply_to_net_pay) return $grossPay; // Will be calculated later
         if ($setting->apply_to_monthly_basic_salary) return $grossPay; // Will be calculated later
@@ -5368,8 +5368,8 @@ class PayrollController extends Controller
             );
 
             // Calculate deductions breakdown after taxable income is finalized
-            // Pass the calculated taxable income to ensure consistent deduction calculations
-            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome, $payroll);
+            // Pass the calculated taxable income and gross pay to ensure consistent deduction calculations
+            $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome, $payroll, $grossPay);
 
             // Calculate employer deductions breakdown
             $employerDeductionsBreakdown = $this->getEmployerDeductionsBreakdown($employee, $detail, $taxableIncome);
@@ -5633,7 +5633,7 @@ class PayrollController extends Controller
     /**
      * Get deductions breakdown for employee
      */
-    private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null, $payroll = null)
+    private function getEmployeeDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null, $payroll = null, $grossPay = null)
     {
         $breakdown = [];
 
@@ -5677,7 +5677,8 @@ class PayrollController extends Controller
 
                     // Determine pay basis based on the setting's configuration
                     if ($setting->apply_to_gross_pay) {
-                        $payBasisAmount = $detail->gross_pay ?? 0;
+                        // Use the passed grossPay if provided, otherwise fall back to detail's gross_pay
+                        $payBasisAmount = $grossPay ?? ($detail->gross_pay ?? 0);
                         $payBasisName = 'totalgross';
                     } elseif ($setting->apply_to_taxable_income) {
                         $payBasisAmount = $taxableIncomeForDeductions;
@@ -5728,7 +5729,7 @@ class PayrollController extends Controller
                         $detail->overtime_pay ?? 0,
                         $detail->bonuses ?? 0,
                         $detail->allowances ?? 0,
-                        $detail->gross_pay ?? 0,
+                        $grossPay ?? ($detail->gross_pay ?? 0), // Use passed grossPay if available
                         null, // taxableIncome
                         null, // netPay
                         $employee->basic_salary, // monthlyBasicSalary
@@ -5759,7 +5760,7 @@ class PayrollController extends Controller
                         $detail->overtime_pay ?? 0,
                         $detail->bonuses ?? 0,
                         $detail->allowances ?? 0,
-                        $detail->gross_pay ?? 0,
+                        $grossPay ?? ($detail->gross_pay ?? 0), // Use passed grossPay if available
                         $taxableIncomeForDeductions, // Use the same taxable income - withholding tax is not calculated after government deductions
                         null, // netPay
                         $employee->basic_salary, // monthlyBasicSalary
@@ -7194,16 +7195,20 @@ class PayrollController extends Controller
                 $rateConfig = $regularData['rate_config'] ?? null;
                 $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.01;
 
-                // Calculate per-minute amount using TimeLog's precision method
-                $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
+                // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                $actualMinutes = $regularHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
+                $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                 $breakdown['Regular Workday'] = [
                     'hours' => $regularHours,
-                    'minutes' => round($regularHours * 60), // Add minutes for display
+                    'minutes' => $roundedMinutes, // Add minutes for display
                     'rate' => $hourlyRate,
-                    'rate_per_minute' => round(($hourlyRate * $regularMultiplier) / 60, 4), // Round only for display
+                    'rate_per_minute' => $ratePerMinute, // Display actual truncated rate
                     'multiplier' => $regularMultiplier,
-                    'amount' => round($amount, 2) // Round final amount to 2 decimals
+                    'amount' => $amount
                 ];
             }
 
@@ -7220,16 +7225,20 @@ class PayrollController extends Controller
                 // Combined rate: regular workday rate + night differential bonus (SAME AS DRAFT AND VIEW CALCULATION)
                 $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
 
-                // Calculate per-minute amount using TimeLog's precision method
-                $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
+                // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                $actualMinutes = $nightDiffRegularHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                 $breakdown['Regular Workday+ND'] = [
                     'hours' => $nightDiffRegularHours,
-                    'minutes' => round($nightDiffRegularHours * 60), // Add minutes for display
+                    'minutes' => $roundedMinutes, // Add minutes for display
                     'rate' => $hourlyRate,
-                    'rate_per_minute' => round(($hourlyRate * $combinedMultiplier) / 60, 4), // Round only for display
+                    'rate_per_minute' => $ratePerMinute, // Display actual truncated rate
                     'multiplier' => $combinedMultiplier,
-                    'amount' => round($amount, 2) // Round final amount to 2 decimals
+                    'amount' => $amount
                 ];
             }
         }
@@ -7275,16 +7284,20 @@ class PayrollController extends Controller
 
                     // Regular holiday hours (without ND)
                     if ($regularHours > 0) {
-                        // Calculate per-minute amount using TimeLog's precision method
-                        $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $multiplier, $regularHours);
+                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                        $actualMinutes = $regularHours * 60;
+                        $roundedMinutes = round($actualMinutes);
+                        $adjustedHourlyRate = $hourlyRate * $multiplier;
+                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                         $breakdown[$name] = [
                             'hours' => $regularHours,
-                            'minutes' => round($regularHours * 60), // Add minutes for display
+                            'minutes' => $roundedMinutes, // Add minutes for display
                             'rate' => $hourlyRate,
-                            'rate_per_minute' => round(($hourlyRate * $multiplier) / 60, 4), // Round only for display
+                            'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                             'multiplier' => $multiplier,
-                            'amount' => round($amount, 2) // Round final amount to 2 decimals
+                            'amount' => $amount
                         ];
                     }
 
@@ -7297,16 +7310,20 @@ class PayrollController extends Controller
                         // Combined rate: holiday rate + night differential bonus
                         $combinedMultiplier = $multiplier + ($nightDiffMultiplier - 1);
 
-                        // Calculate per-minute amount using TimeLog's precision method
-                        $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
+                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                        $actualMinutes = $nightDiffRegularHours * 60;
+                        $roundedMinutes = round($actualMinutes);
+                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                         $breakdown[$name . '+ND'] = [
                             'hours' => $nightDiffRegularHours,
-                            'minutes' => round($nightDiffRegularHours * 60), // Add minutes for display
+                            'minutes' => $roundedMinutes, // Add minutes for display
                             'rate' => $hourlyRate,
-                            'rate_per_minute' => round(($hourlyRate * $combinedMultiplier) / 60, 4), // Round only for display
+                            'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                             'multiplier' => $combinedMultiplier,
-                            'amount' => round($amount, 2) // Round final amount to 2 decimals
+                            'amount' => $amount
                         ];
                     }
                 } else {
@@ -7321,11 +7338,12 @@ class PayrollController extends Controller
 
                     // Regular holiday hours (without ND)
                     if ($regularHours > 0) {
-                        // Calculate per-minute amount with rounding (same as draft payroll)
+                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                         $actualMinutes = $regularHours * 60;
                         $roundedMinutes = round($actualMinutes);
-                        $ratePerMinute = ($hourlyRate * $multiplier) / 60;
-                        $amount = $roundedMinutes * $ratePerMinute;
+                        $adjustedHourlyRate = $hourlyRate * $multiplier;
+                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                         $breakdown[$name] = [
                             'hours' => $regularHours,
@@ -7340,11 +7358,12 @@ class PayrollController extends Controller
                         // Combined rate: holiday rate + night differential bonus (10%)
                         $combinedMultiplier = $multiplier + 0.10;
 
-                        // Calculate per-minute amount with rounding (same as draft payroll)
+                        // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                         $actualMinutes = $nightDiffRegularHours * 60;
                         $roundedMinutes = round($actualMinutes);
-                        $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                        $amount = $roundedMinutes * $ratePerMinute;
+                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                        $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                         $breakdown[$name . '+ND'] = [
                             'hours' => $nightDiffRegularHours,
@@ -7389,16 +7408,20 @@ class PayrollController extends Controller
 
                 // Regular rest day hours (without ND)
                 if ($regularHours > 0) {
-                    // Calculate per-minute amount using TimeLog's precision method
-                    $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $multiplier, $regularHours);
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                    $actualMinutes = $regularHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $adjustedHourlyRate = $hourlyRate * $multiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day'] = [
                         'hours' => $regularHours,
-                        'minutes' => round($regularHours * 60), // Add minutes for display
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => $hourlyRate,
-                        'rate_per_minute' => round(($hourlyRate * $multiplier) / 60, 4), // Round only for display
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $multiplier,
-                        'amount' => round($amount, 2) // Round final amount to 2 decimals
+                        'amount' => $amount
                     ];
                 }
 
@@ -7411,16 +7434,20 @@ class PayrollController extends Controller
                     // Combined rate: rest day rate + night differential bonus
                     $combinedMultiplier = $multiplier + ($nightDiffMultiplier - 1);
 
-                    // Calculate per-minute amount using TimeLog's precision method
-                    $amount = (new \App\Models\TimeLog())->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
+                    $actualMinutes = $nightDiffRegularHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day+ND'] = [
                         'hours' => $nightDiffRegularHours,
-                        'minutes' => round($nightDiffRegularHours * 60), // Add minutes for display
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => $hourlyRate,
-                        'rate_per_minute' => round(($hourlyRate * $combinedMultiplier) / 60, 4), // Round only for display
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $combinedMultiplier,
-                        'amount' => round($amount, 2) // Round final amount to 2 decimals
+                        'amount' => $amount
                     ];
                 }
             } else {
@@ -7428,11 +7455,12 @@ class PayrollController extends Controller
 
                 // Regular rest day hours (without ND)
                 if ($regularHours > 0) {
-                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $regularHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * 1.3) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * 1.3;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day'] = [
                         'hours' => $regularHours,
@@ -7447,11 +7475,12 @@ class PayrollController extends Controller
                     // Combined rate: rest day rate + night differential bonus (10%)
                     $combinedMultiplier = 1.3 + 0.10; // 1.4
 
-                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $nightDiffRegularHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day+ND'] = [
                         'hours' => $nightDiffRegularHours,
@@ -7498,19 +7527,20 @@ class PayrollController extends Controller
 
                 // Regular Workday OT (without ND)
                 if ($regularOvertimeHours > 0) {
-                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60; // Keep full precision, no intermediate rounding
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Workday OT'] = [
                         'hours' => $regularOvertimeHours,
                         'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
-                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
+                        'rate_per_minute' => $ratePerMinute, // Display actual truncated rate
                         'multiplier' => $overtimeMultiplier,
-                        'amount' => round($amount, 2) // Round final amount to 2 decimals
+                        'amount' => $amount
                     ];
                 }
 
@@ -7518,19 +7548,20 @@ class PayrollController extends Controller
                 if ($nightDiffOvertimeHours > 0) {
                     // Combined rate: overtime rate + night differential bonus
                     $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
-                    // Calculate per-minute amount with rounding (same as draft payroll)
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60; // Keep full precision, no intermediate rounding
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Workday OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
                         'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
-                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
+                        'rate_per_minute' => $ratePerMinute, // Display actual truncated rate
                         'multiplier' => $combinedMultiplier,
-                        'amount' => round($amount, 2) // Round final amount to 2 decimals
+                        'amount' => $amount
                     ];
                 }
             } else {
@@ -7539,16 +7570,17 @@ class PayrollController extends Controller
                 if ($regularOvertimeHours > 0) {
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * 1.25) / 60; // Keep full precision, no intermediate rounding
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * 1.25;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Workday OT'] = [
                         'hours' => $regularOvertimeHours,
                         'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
-                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
+                        'rate_per_minute' => $ratePerMinute, // Display actual truncated rate
                         'multiplier' => 1.25,
-                        'amount' => round($amount, 2) // Round final amount to 2 decimals
+                        'amount' => $amount
                     ];
                 }
 
@@ -7558,16 +7590,17 @@ class PayrollController extends Controller
                     $combinedMultiplier = 1.25 + 0.10;
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60; // Keep full precision, no intermediate rounding
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Workday OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
                         'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
-                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
+                        'rate_per_minute' => $ratePerMinute, // Display actual truncated rate
                         'multiplier' => $combinedMultiplier,
-                        'amount' => round($amount, 2) // Round final amount to 2 decimals
+                        'amount' => $amount
                     ];
                 }
             }
@@ -7597,14 +7630,18 @@ class PayrollController extends Controller
 
                 // Special Holiday OT (without ND)
                 if ($regularOvertimeHours > 0) {
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Special Holiday OT'] = [
                         'hours' => $regularOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $overtimeMultiplier,
                         'amount' => $amount
                     ];
@@ -7614,14 +7651,19 @@ class PayrollController extends Controller
                 if ($nightDiffOvertimeHours > 0) {
                     // Combined rate: overtime rate + night differential bonus
                     $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Special Holiday OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $combinedMultiplier,
                         'amount' => $amount
                     ];
@@ -7630,14 +7672,18 @@ class PayrollController extends Controller
                 // Ultimate fallback to hardcoded multipliers if no config found
                 // Special Holiday OT (without ND)
                 if ($regularOvertimeHours > 0) {
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * 1.69) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * 1.69;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Special Holiday OT'] = [
                         'hours' => $regularOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => 1.69,
                         'amount' => $amount
                     ];
@@ -7647,14 +7693,19 @@ class PayrollController extends Controller
                 if ($nightDiffOvertimeHours > 0) {
                     // Combined rate: 1.69 (OT) + 0.10 (ND) = 1.79
                     $combinedMultiplier = 1.69 + 0.10;
+
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Special Holiday OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $combinedMultiplier,
                         'amount' => $amount
                     ];
@@ -7686,14 +7737,18 @@ class PayrollController extends Controller
 
                 // Regular Holiday OT (without ND)
                 if ($regularOvertimeHours > 0) {
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Holiday OT'] = [
                         'hours' => $regularOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $overtimeMultiplier,
                         'amount' => $amount
                     ];
@@ -7703,14 +7758,19 @@ class PayrollController extends Controller
                 if ($nightDiffOvertimeHours > 0) {
                     // Combined rate: overtime rate + night differential bonus
                     $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Holiday OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $combinedMultiplier,
                         'amount' => $amount
                     ];
@@ -7719,14 +7779,18 @@ class PayrollController extends Controller
                 // Ultimate fallback to hardcoded multipliers if no config found
                 // Regular Holiday OT (without ND)
                 if ($regularOvertimeHours > 0) {
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * 2.6) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * 2.6;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Holiday OT'] = [
                         'hours' => $regularOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => 2.6,
                         'amount' => $amount
                     ];
@@ -7736,14 +7800,19 @@ class PayrollController extends Controller
                 if ($nightDiffOvertimeHours > 0) {
                     // Combined rate: 2.6 (OT) + 0.10 (ND) = 2.7
                     $combinedMultiplier = 2.6 + 0.10;
+
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Holiday OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $combinedMultiplier,
                         'amount' => $amount
                     ];
@@ -7775,14 +7844,18 @@ class PayrollController extends Controller
 
                 // Rest Day OT (without ND)
                 if ($regularOvertimeHours > 0) {
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $overtimeMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day OT'] = [
                         'hours' => $regularOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $overtimeMultiplier,
                         'amount' => $amount
                     ];
@@ -7792,14 +7865,19 @@ class PayrollController extends Controller
                 if ($nightDiffOvertimeHours > 0) {
                     // Combined rate: overtime rate + night differential bonus
                     $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $combinedMultiplier,
                         'amount' => $amount
                     ];
@@ -7808,14 +7886,18 @@ class PayrollController extends Controller
                 // Ultimate fallback to hardcoded multipliers if no config found
                 // Rest Day OT (without ND)
                 if ($regularOvertimeHours > 0) {
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * 1.69) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * 1.69;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day OT'] = [
                         'hours' => $regularOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => 1.69,
                         'amount' => $amount
                     ];
@@ -7825,14 +7907,19 @@ class PayrollController extends Controller
                 if ($nightDiffOvertimeHours > 0) {
                     // Combined rate: 1.69 (OT) + 0.10 (ND) = 1.79
                     $combinedMultiplier = 1.69 + 0.10;
+
+                    // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
-                    $ratePerMinute = ($hourlyRate * $combinedMultiplier) / 60;
-                    $amount = $roundedMinutes * $ratePerMinute;
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                    $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day OT+ND'] = [
                         'hours' => $nightDiffOvertimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => $ratePerMinute, // Exact truncated value for display
                         'multiplier' => $combinedMultiplier,
                         'amount' => $amount
                     ];
@@ -7870,9 +7957,11 @@ class PayrollController extends Controller
 
                     $breakdown[$name] = [
                         'hours' => $overtimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
                         'multiplier' => $multiplier,
-                        'amount' => $amount
+                        'amount' => round($amount, 2) // Round final amount to 2 decimals
                     ];
                 } else {
                     // Ultimate fallback to hardcoded multipliers if no config found
@@ -7889,9 +7978,11 @@ class PayrollController extends Controller
 
                     $breakdown[$name] = [
                         'hours' => $overtimeHours,
+                        'minutes' => $roundedMinutes, // Add minutes for display
                         'rate' => number_format($hourlyRate, 2),
+                        'rate_per_minute' => round($ratePerMinute, 4), // Round only for display
                         'multiplier' => $multiplier,
-                        'amount' => $amount
+                        'amount' => round($amount, 2) // Round final amount to 2 decimals
                     ];
                 }
             }
