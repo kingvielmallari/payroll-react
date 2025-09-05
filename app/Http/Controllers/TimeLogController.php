@@ -1198,8 +1198,34 @@ class TimeLogController extends Controller
                 $hasAnyTimeData = !empty($logData['time_in']) || !empty($logData['time_out']) ||
                     !empty($logData['break_in']) || !empty($logData['break_out']);
 
-                // Skip if no existing record and no time data provided (prevents creating empty records)
-                if (!$existingLog && !$hasAnyTimeData) {
+                // Check if this is a day type change (different from default for the day)
+                $date = Carbon::parse($logData['log_date']);
+                $employee = Employee::with('daySchedule')->findOrFail($validated['employee_id']);
+                $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($date) : $date->isWeekend();
+                $isHoliday = $logData['is_holiday'] ?? false;
+
+                // Determine what the default log type should be
+                $defaultLogType = 'regular_workday'; // Default
+                if (!$isRestDay && !$isHoliday) {
+                    $defaultLogType = 'regular_workday';
+                } elseif ($isRestDay && !$isHoliday) {
+                    $defaultLogType = 'rest_day';
+                } elseif (!$isRestDay && $isHoliday) {
+                    $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
+                        ->where('is_active', true)
+                        ->first();
+                    $defaultLogType = ($holiday && $holiday->type === 'special') ? 'special_holiday' : 'regular_holiday';
+                } elseif ($isRestDay && $isHoliday) {
+                    $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
+                        ->where('is_active', true)
+                        ->first();
+                    $defaultLogType = ($holiday && $holiday->type === 'special') ? 'rest_day_special_holiday' : 'rest_day_regular_holiday';
+                }
+
+                $isDayTypeChange = ($logData['log_type'] !== $defaultLogType);
+
+                // Skip only if no existing record, no time data, AND no day type change
+                if (!$existingLog && !$hasAnyTimeData && !$isDayTypeChange) {
                     $skippedCount++;
                     continue;
                 }
@@ -1210,48 +1236,14 @@ class TimeLogController extends Controller
                 $breakIn = !empty($logData['break_in']) ? $logData['break_in'] : null;
                 $breakOut = !empty($logData['break_out']) ? $logData['break_out'] : null;
 
-                // Determine log_type: use default based on day if all time fields are blank
+                // Determine log_type: use provided value or reset to default based on day if all time fields are blank
                 $logType = $logData['log_type'];
 
-                // If all time fields are blank, reset to default based on day type
+                // If all time fields are blank, we can still allow day type changes
                 if (!$timeIn && !$timeOut && !$breakIn && !$breakOut) {
-                    $date = Carbon::parse($logData['log_date']);
-
-                    // Get employee for dynamic rest day determination
-                    $employee = Employee::with('daySchedule')->findOrFail($validated['employee_id']);
-
-                    // Use employee's day schedule to determine if it's a rest day
-                    $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($date) : $date->isWeekend();
-                    $isHoliday = $logData['is_holiday'] ?? false;
-
-                    // Reset to smart default based on actual day type
-                    if (!$isRestDay && !$isHoliday) {
-                        $logType = 'regular_workday'; // Regular Day
-                    } elseif ($isRestDay && !$isHoliday) {
-                        $logType = 'rest_day'; // Rest Day
-                    } elseif (!$isRestDay && $isHoliday) {
-                        // Query actual holiday type from database
-                        $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
-                            ->where('is_active', true)
-                            ->first();
-
-                        if ($holiday && $holiday->type === 'special') {
-                            $logType = 'special_holiday'; // SP Holiday
-                        } else {
-                            $logType = 'regular_holiday'; // RE Holiday (default)
-                        }
-                    } elseif ($isRestDay && $isHoliday) {
-                        // Rest Day + Holiday combination - query holiday type
-                        $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
-                            ->where('is_active', true)
-                            ->first();
-
-                        if ($holiday && $holiday->type === 'special') {
-                            $logType = 'rest_day_special_holiday'; // Rest + SP Holiday
-                        } else {
-                            $logType = 'rest_day_regular_holiday'; // Rest + RE Holiday (default)
-                        }
-                    }
+                    // Keep the user-selected log_type (already validated above)
+                    // This allows users to change day types even without time data
+                    $logType = $logData['log_type'];
                 }
 
                 // Calculate hours only if we have time_in and time_out
