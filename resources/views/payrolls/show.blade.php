@@ -761,7 +761,7 @@
                                                 @endforeach
                                                 <div class="text-xs border-t pt-1">
                                                     <?php 
-                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        // Round total minutes properly without adding extra 0.5
                                                         $totalMinutes = round($basicRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
@@ -771,7 +771,7 @@
                                             @else
                                                 <div class="text-xs text-gray-500">
                                                     <?php 
-                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        // Round total minutes properly without adding extra 0.5
                                                         $totalMinutes = round($basicRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
@@ -925,7 +925,7 @@
                                                 
                                                 <div class="text-xs border-t pt-1">
                                                     <?php 
-                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        // Round total minutes properly without adding extra 0.5
                                                         $totalMinutes = round($totalHolidayRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
@@ -1051,7 +1051,7 @@
                                                 
                                                 <div class="text-xs border-t pt-1">
                                                     <?php 
-                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        // Round total minutes properly without adding extra 0.5
                                                         $totalMinutes = round($totalRestRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
@@ -1062,7 +1062,7 @@
                                             @else
                                                 @if($totalRestRegularHours > 0)
                                                     <?php 
-                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        // Round total minutes properly without adding extra 0.5
                                                         $totalMinutes = round($totalRestRegularHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
@@ -1126,8 +1126,7 @@
                                                         
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
-                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Workday OT+ND',
@@ -1155,8 +1154,7 @@
                                                     if ($regularOTHours > 0) {
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
-                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Special Holiday OT',
@@ -1175,8 +1173,7 @@
                                                         
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
-                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Special Holiday OT+ND',
@@ -1204,8 +1201,7 @@
                                                     if ($regularOTHours > 0) {
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
-                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Holiday OT',
@@ -1224,8 +1220,7 @@
                                                         
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
-                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Regular Holiday OT+ND',
@@ -1253,8 +1248,7 @@
                                                     if ($regularOTHours > 0) {
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
-                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Rest Day OT',
@@ -1273,8 +1267,7 @@
                                                         
                                                         // Use TimeLog's per-minute precision calculation method
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $rawAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
-                                                        $amount = round($rawAmount, 2); // Fix: Round the amount before storing
+                                                        $amount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOTHours);
                                                         
                                                         $overtimeBreakdown[] = [
                                                             'name' => 'Rest Day OT+ND',
@@ -1328,7 +1321,7 @@
                                                 
                                                 <div class="text-xs border-t pt-1">
                                                     <?php 
-                                                        // Fix: Remove the +0.5 that was causing extra minute
+                                                        // Round total minutes properly without adding extra 0.5
                                                         $totalMinutes = round($totalOvertimeHours * 60);
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
@@ -3018,14 +3011,14 @@
                                                                 }
                                                             }
                                                         @endphp
-                                                        {{-- @if($regularOTStart && $regularOTEnd)
+                                                        @if($regularOTStart && $regularOTEnd)
                                                         <div class="text-orange-600 text-xs">
-                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($regularOvertimeHours * 60, 0) }}m) {{ floor($regularOvertimeHours) }}hs {{ round(($regularOvertimeHours - floor($regularOvertimeHours)) * 60) }}m
+                                                            {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($regularOvertimeHours * 60, 0) }}m) {{ floor($regularOvertimeHours) }}h {{ round(($regularOvertimeHours - floor($regularOvertimeHours)) * 60) }}m
                                                         </div>
-                                                        <div class="text-orange-600 text-xs">
+                                                        {{-- <div class="text-orange-600 text-xs">
                                                             Regular Workday OT
-                                                        </div>
-                                                        @endif --}}
+                                                        </div> --}}
+                                                        @endif
                                                         @endif
                                                         
                                                         {{-- Display Night Differential OT (during ND period) --}}
