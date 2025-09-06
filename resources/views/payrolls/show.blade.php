@@ -672,7 +672,7 @@
                                                         $actualMinutes = $regularHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
@@ -697,7 +697,7 @@
                                                         $actualMinutes = $nightDiffRegularHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $ndAmount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
@@ -817,7 +817,7 @@
                                                             $actualMinutes = $regularHours * 60;
                                                             $roundedMinutes = round($actualMinutes);
                                                             $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
-                                                            $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                            $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                             $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                             
                                                             $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
@@ -848,7 +848,7 @@
                                                             $actualMinutes = $nightDiffRegularHours * 60;
                                                             $roundedMinutes = round($actualMinutes);
                                                             $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                            $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                            $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                             $ndAmount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                             
                                                             $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
@@ -973,7 +973,7 @@
                                                         $actualMinutes = $regularHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
@@ -998,7 +998,7 @@
                                                         $actualMinutes = $nightDiffRegularHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $ndAmount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
@@ -1112,7 +1112,7 @@
                                                         $actualMinutes = $regularOTHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
@@ -1134,7 +1134,7 @@
                                                         $actualMinutes = $nightDiffOTHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
@@ -1165,7 +1165,7 @@
                                                         $actualMinutes = $regularOTHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
@@ -1187,7 +1187,7 @@
                                                         $actualMinutes = $nightDiffOTHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
@@ -1218,7 +1218,7 @@
                                                         $actualMinutes = $regularOTHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
@@ -1240,7 +1240,7 @@
                                                         $actualMinutes = $nightDiffOTHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
@@ -1271,7 +1271,7 @@
                                                         $actualMinutes = $regularOTHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
@@ -1293,7 +1293,7 @@
                                                         $actualMinutes = $nightDiffOTHours * 60;
                                                         $roundedMinutes = round($actualMinutes);
                                                         $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                        $ratePerMinute = floor(($adjustedHourlyRate / 60) * 10000) / 10000; // Truncate to 4 decimals
+                                                        $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
                                                         $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                                                         
                                                         $overtimeBreakdown[] = [
@@ -2320,7 +2320,21 @@
                         </h3>
                         <div class="flex space-x-2">
                             @can('create time logs')
-                                @if($payroll->payrollDetails->isNotEmpty() && $payroll->status === 'draft')
+                                @php
+                                    $firstEmployee = $payroll->payrollDetails->first();
+                                    $hasSchedule = $firstEmployee && $firstEmployee->employee && $firstEmployee->employee->timeSchedule;
+                                @endphp
+                                
+                                @if(!$hasSchedule)
+                                    {{-- No schedule assigned - lock the button --}}
+                                    <span class="bg-gray-400 text-white font-bold py-2 px-4 rounded text-sm flex items-center cursor-not-allowed opacity-50" 
+                                          title="Employee has no time schedule assigned">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                        </svg>
+                                        No Schedule Assigned
+                                    </span>
+                                @elseif($payroll->payrollDetails->isNotEmpty() && $payroll->status === 'draft')
                                     <a href="{{ route('time-logs.create-bulk-employee', array_merge([
                                         'employee_id' => $payroll->payrollDetails->first()->employee_id,
                                         'period_start' => $payroll->period_start->format('Y-m-d'),
@@ -2876,7 +2890,7 @@
                                                             }
                                                         @endphp
                                                         @if($nightRegularStart && $nightRegularEnd)
-                                                        <div class="text-purple-600 text-xs">
+                                                        <div class="text-blue-600 text-xs">
                                                             {{ $nightRegularStart }} - {{ $nightRegularEnd }} ({{ number_format($nightDiffRegularHours * 60, 0) }}m) {{ floor($nightDiffRegularHours) }}h {{ round(($nightDiffRegularHours - floor($nightDiffRegularHours)) * 60) }}m
                                                         </div>
                                                         @endif
@@ -2979,18 +2993,18 @@
                                                     @endphp
                                                     
                                                     {{-- Display detailed time periods --}}
-                                                    {{-- @foreach($timePeriodBreakdown as $period)
+                                                    @foreach($timePeriodBreakdown as $period)
                                                         @if($period['type'] === 'regular_overtime' || $period['type'] === 'night_diff_overtime')
                                                         <div class="{{ $period['color_class'] }} text-xs">
-                                                            {{ $period['start_time'] }} - {{ $period['end_time'] }} ({{ number_format($period['hours'] * 60, 0) }}m) {{ floor($period['hours']) }}hs {{ round(($period['hours'] - floor($period['hours'])) * 60) }}ms
+                                                            {{ $period['start_time'] }} - {{ $period['end_time'] }} ({{ number_format($period['hours'] * 60, 0) }}ms) {{ floor($period['hours']) }}h {{ round(($period['hours'] - floor($period['hours'])) * 60) }}ms
                                                             @if($period['type'] === 'regular_overtime')
-                                                                = regular ot
+                                                             
                                                             @elseif($period['type'] === 'night_diff_overtime')
-                                                                = ot + nd
+                                                          
                                                             @endif
                                                         </div>
                                                         @endif
-                                                    @endforeach --}}
+                                                    @endforeach
                                                     
                                                     {{-- Fallback to old display if no breakdown available --}}
                                                     @if(empty($timePeriodBreakdown) || count($timePeriodBreakdown) <= 1)
@@ -3042,9 +3056,7 @@
                                                         <div class="text-orange-600 text-xs">
                                                             {{ $regularOTStart }} - {{ $regularOTEnd }} ({{ number_format($regularOvertimeHours * 60, 0) }}m) {{ floor($regularOvertimeHours) }}h {{ round(($regularOvertimeHours - floor($regularOvertimeHours)) * 60) }}m
                                                         </div>
-                                                        {{-- <div class="text-orange-600 text-xs">
-                                                            Regular Workday OT
-                                                        </div> --}}
+                                                    
                                                         @endif
                                                         @endif
                                                         
@@ -3092,14 +3104,11 @@
                                                                 }
                                                             }
                                                         @endphp
-                                                        {{-- @if($nightOTStart && $nightOTEnd)
+                                                        @if($nightOTStart && $nightOTEnd)
                                                         <div class="text-purple-600 text-xs">
-                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} ({{ number_format($nightDiffOvertimeHours * 60, 0) }}m) {{ floor($nightDiffOvertimeHours) }}h {{ round(($nightDiffOvertimeHours - floor($nightDiffOvertimeHours)) * 60) }}ms
+                                                            {{ $nightOTStart }} - {{ $nightOTEnd }} ({{ number_format($nightDiffOvertimeHours * 60, 0) }}m) {{ floor($nightDiffOvertimeHours) }}h {{ round(($nightDiffOvertimeHours - floor($nightDiffOvertimeHours)) * 60) }}m
                                                         </div>
-                                                        <div class="text-purple-600 text-xs">
-                                                            Regular Workday OT + ND
-                                                        </div>
-                                                        @endif --}}
+                                                        @endif
                                                         @endif 
                                                         
                                                         {{-- If we have total overtime but no breakdown, show total --}}

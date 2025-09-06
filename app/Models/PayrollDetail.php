@@ -48,7 +48,7 @@ class PayrollDetail extends Model
     protected $casts = [
         'basic_salary' => 'decimal:2',
         'daily_rate' => 'decimal:2',
-        'hourly_rate' => 'decimal:2',
+        'hourly_rate' => 'decimal:8',
         'regular_hours' => 'decimal:2',
         'overtime_hours' => 'decimal:2',
         'holiday_hours' => 'decimal:2',

@@ -1223,9 +1223,11 @@ class PayrollController extends Controller
         $bonusesData = $this->calculateBonuses($employee, $basicSalary, $daysWorked, $hoursWorked);
         $bonusesTotal = $bonusesData['total'];
 
-        // Total gross pay - now using the grossPayData from snapshot-style calculation
-        // grossPay already includes basic_pay, holiday_pay, rest_day_pay, and overtime_pay
-        $totalGrossPay = $grossPay + $allowancesTotal + $bonusesTotal;
+        // Calculate overtime pay (simplified for now)
+        $overtimePay = 0; // TODO: Implement detailed overtime calculation based on time logs
+
+        // Total gross pay including allowances and bonuses
+        $totalGrossPay = round($grossPay + $allowancesTotal + $bonusesTotal + $overtimePay, 2);
 
         // Calculate late and undertime deductions based on dynamic calculations
         $lateDeductions = $this->calculateLateDeductions($employee, $lateHours);
@@ -1236,9 +1238,9 @@ class PayrollController extends Controller
         $cashAdvanceDeductions = $cashAdvanceData['total'];
 
         // Calculate deductions using dynamic settings
-        // For taxable income calculation, use basic + holiday + rest (excluding overtime for some government contributions)
-        // This matches the snapshot calculation logic
-        $taxableIncomeForDeductions = $grossPayData['basic_pay'] + $grossPayData['holiday_pay'] + $grossPayData['rest_day_pay'];
+        // For SSS/government deductions, use taxable income (basic + holiday + rest + taxable allowances/bonuses)
+        // The grossPay already includes basic + holiday + rest + overtime
+        $taxableIncomeForDeductions = $grossPay; // This includes basic + holiday + rest + overtime
 
         // Detect pay frequency based on period duration
         $periodDays = \Carbon\Carbon::parse($periodStart)->diffInDays(\Carbon\Carbon::parse($periodEnd)) + 1;
@@ -1252,7 +1254,7 @@ class PayrollController extends Controller
             $payFrequency = 'monthly';
         }
 
-        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $grossPayData['overtime_pay'], $allowancesTotal, $bonusesTotal, $payFrequency);
+        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal, $payFrequency);
 
         $netPay = $totalGrossPay - $deductions['total'] - $lateDeductions - $undertimeDeductions - $cashAdvanceDeductions;
 
@@ -1358,84 +1360,122 @@ class PayrollController extends Controller
             ];
         }
 
-        // Use the same calculation logic as snapshots
-        return $this->calculateGrossPayUsingSnapshotLogic($employee, $timeLogs, $periodStart, $periodEnd);
-    }
+        // Calculate hourly rate based on pay schedule
+        $hourlyRate = $this->calculateHourlyRate($employee, $basicSalary, $periodStart, $periodEnd);
 
-    /**
-     * Calculate gross pay using the exact same logic as snapshot creation
-     */
-    private function calculateGrossPayUsingSnapshotLogic($employee, $timeLogs, $periodStart, $periodEnd)
-    {
-        $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0, $periodStart, $periodEnd);
-        
-        // Create time breakdown similar to snapshot creation
-        $timeBreakdown = [];
-        $totalRegularHours = 0;
-        $totalOvertimeHours = 0;
-        $totalHolidayHours = 0;
-        $totalRestDayHours = 0;
+        $totalGrossPay = 0;
+        $basicPay = 0;
+        $holidayPay = 0;
+        $restDayPay = 0;
+        $overtimePay = 0;
+        $regularHours = 0;
+        $overtimeHours = 0;
+        $holidayHours = 0;
+        $restDayHours = 0;
 
+        // Detailed breakdowns
+        $payBreakdown = [];
+        $overtimeBreakdown = [];
+        $holidayBreakdown = [];
+        $restDayBreakdown = [];
+
+        // Process each time log with its rate multiplier (exclude incomplete records)
         foreach ($timeLogs as $timeLog) {
-            // Skip incomplete records
+            // Skip incomplete records - those marked as incomplete or missing time in/out
             if ($timeLog->remarks === 'Incomplete Time Record' || !$timeLog->time_in || !$timeLog->time_out) {
                 continue;
             }
 
-            if (($timeLog->total_hours ?? 0) <= 0) {
+            if ($timeLog->total_hours <= 0) {
                 continue;
             }
 
-            $rateConfig = $timeLog->getRateConfiguration();
-            $logType = $timeLog->log_type ?? 'regular_workday';
+            // Calculate pay for this time log using rate configuration
+            $payAmounts = $timeLog->calculatePayAmount($hourlyRate);
+            $totalGrossPay += $payAmounts['total_amount'];
 
-            if (!isset($timeBreakdown[$logType])) {
-                $timeBreakdown[$logType] = [
-                    'regular_hours' => 0,
-                    'night_diff_regular_hours' => 0,
-                    'regular_overtime_hours' => 0,
-                    'night_diff_overtime_hours' => 0,
-                    'overtime_hours' => 0,
-                    'rate_config' => $rateConfig,
-                ];
+            // Add to hour totals
+            $regularHours += $timeLog->regular_hours ?? 0;
+            $overtimeHours += $timeLog->overtime_hours ?? 0;
+
+            // Get rate configuration for breakdown display
+            $rateConfig = $timeLog->getRateConfiguration();
+            $displayName = $rateConfig ? $rateConfig->display_name : 'Regular Day';
+
+            // Categorize pay by log type
+            $logType = $timeLog->log_type;
+            $regularAmount = $payAmounts['regular_amount'] ?? 0;
+            $overtimeAmount = $payAmounts['overtime_amount'] ?? 0;
+
+            // Track regular pay by category
+            if ($regularAmount > 0) {
+                if (!isset($payBreakdown[$displayName])) {
+                    $payBreakdown[$displayName] = [
+                        'hours' => 0,
+                        'amount' => 0,
+                        'rate' => $hourlyRate * ($rateConfig ? $rateConfig->regular_rate_multiplier : 1.0),
+                    ];
+                }
+                $payBreakdown[$displayName]['hours'] += $timeLog->regular_hours ?? 0;
+                $payBreakdown[$displayName]['amount'] += $regularAmount;
             }
 
-            // Use dynamic calculation or stored values
-            $regularHours = $timeLog->dynamic_regular_hours ?? $timeLog->regular_hours ?? 0;
-            $nightDiffRegularHours = $timeLog->dynamic_night_diff_regular_hours ?? $timeLog->night_diff_regular_hours ?? 0;
-            $regularOvertimeHours = $timeLog->dynamic_regular_overtime_hours ?? $timeLog->regular_overtime_hours ?? 0;
-            $nightDiffOvertimeHours = $timeLog->dynamic_night_diff_overtime_hours ?? $timeLog->night_diff_overtime_hours ?? 0;
-            $overtimeHours = $timeLog->overtime_hours ?? 0;
+            // Track overtime pay by category
+            if ($overtimeAmount > 0) {
+                $overtimeDisplayName = $displayName . ' OT';
+                if (!isset($overtimeBreakdown[$overtimeDisplayName])) {
+                    $overtimeBreakdown[$overtimeDisplayName] = [
+                        'hours' => 0,
+                        'amount' => 0,
+                        'rate' => $hourlyRate * ($rateConfig ? $rateConfig->overtime_rate_multiplier : 1.25),
+                    ];
+                }
+                $overtimeBreakdown[$overtimeDisplayName]['hours'] += $timeLog->overtime_hours ?? 0;
+                $overtimeBreakdown[$overtimeDisplayName]['amount'] += $overtimeAmount;
+            }
 
-            $timeBreakdown[$logType]['regular_hours'] += $regularHours;
-            $timeBreakdown[$logType]['night_diff_regular_hours'] += $nightDiffRegularHours;
-            $timeBreakdown[$logType]['regular_overtime_hours'] += $regularOvertimeHours;
-            $timeBreakdown[$logType]['night_diff_overtime_hours'] += $nightDiffOvertimeHours;
-            $timeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
+            // All overtime pay goes to overtime_pay regardless of day type
+            $overtimePay += $overtimeAmount;
 
-            // Track totals
-            $totalRegularHours += $regularHours + $nightDiffRegularHours;
-            $totalOvertimeHours += $overtimeHours;
-            
+            // Categorize regular pay by day type
             if (str_contains($logType, 'holiday')) {
-                $totalHolidayHours += $regularHours + $nightDiffRegularHours;
-            } elseif ($logType === 'rest_day' || str_contains($logType, 'rest_day')) {
-                $totalRestDayHours += $regularHours + $nightDiffRegularHours;
+                $holidayPay += $regularAmount;
+                $holidayHours += $timeLog->regular_hours ?? 0;
+
+                // Track holiday breakdown
+                if ($regularAmount > 0) {
+                    if (!isset($holidayBreakdown[$displayName])) {
+                        $holidayBreakdown[$displayName] = [
+                            'hours' => 0,
+                            'amount' => 0,
+                            'rate' => $hourlyRate * ($rateConfig ? $rateConfig->regular_rate_multiplier : 1.0),
+                        ];
+                    }
+                    $holidayBreakdown[$displayName]['hours'] += $timeLog->regular_hours ?? 0;
+                    $holidayBreakdown[$displayName]['amount'] += $regularAmount;
+                }
+            } elseif (str_contains($logType, 'rest_day')) {
+                // Rest day work is separate category
+                $restDayPay += $regularAmount;
+                $restDayHours += $timeLog->regular_hours ?? 0;
+
+                // Track rest day breakdown
+                if ($regularAmount > 0) {
+                    if (!isset($restDayBreakdown[$displayName])) {
+                        $restDayBreakdown[$displayName] = [
+                            'hours' => 0,
+                            'amount' => 0,
+                            'rate' => $hourlyRate * ($rateConfig ? $rateConfig->regular_rate_multiplier : 1.0),
+                        ];
+                    }
+                    $restDayBreakdown[$displayName]['hours'] += $timeLog->regular_hours ?? 0;
+                    $restDayBreakdown[$displayName]['amount'] += $regularAmount;
+                }
+            } else {
+                // Regular workday and other types
+                $basicPay += $regularAmount;
             }
         }
-
-        // Calculate pay using exact same logic as snapshots
-        $basicPayBreakdown = $this->createBasicPayBreakdown($timeBreakdown, $employee, $periodStart, $periodEnd);
-        $holidayPayBreakdown = $this->createHolidayPayBreakdown($timeBreakdown, $employee, $periodStart, $periodEnd);
-        $restPayBreakdown = $this->createRestPayBreakdown($timeBreakdown, $employee, $periodStart, $periodEnd);
-        $overtimePayBreakdown = $this->createOvertimePayBreakdown($timeBreakdown, $employee, $periodStart, $periodEnd);
-
-        // Calculate totals
-        $basicPay = array_sum(array_column($basicPayBreakdown, 'amount'));
-        $holidayPay = array_sum(array_column($holidayPayBreakdown, 'amount'));
-        $restDayPay = array_sum(array_column($restPayBreakdown, 'amount'));
-        $overtimePay = array_sum(array_column($overtimePayBreakdown, 'amount'));
-        $totalGrossPay = $basicPay + $holidayPay + $restDayPay + $overtimePay;
 
         return [
             'total_gross' => $totalGrossPay,
@@ -1443,14 +1483,14 @@ class PayrollController extends Controller
             'holiday_pay' => $holidayPay,
             'rest_day_pay' => $restDayPay,
             'overtime_pay' => $overtimePay,
-            'regular_hours' => $totalRegularHours,
-            'overtime_hours' => $totalOvertimeHours,
-            'holiday_hours' => $totalHolidayHours,
-            'rest_day_hours' => $totalRestDayHours,
-            'pay_breakdown' => $basicPayBreakdown,
-            'overtime_breakdown' => $overtimePayBreakdown,
-            'holiday_breakdown' => $holidayPayBreakdown,
-            'rest_day_breakdown' => $restPayBreakdown,
+            'regular_hours' => $regularHours,
+            'overtime_hours' => $overtimeHours,
+            'holiday_hours' => $holidayHours,
+            'rest_day_hours' => $restDayHours,
+            'pay_breakdown' => $payBreakdown,
+            'overtime_breakdown' => $overtimeBreakdown,
+            'holiday_breakdown' => $holidayBreakdown,
+            'rest_day_breakdown' => $restDayBreakdown,
         ];
     }
 
@@ -2491,6 +2531,24 @@ class PayrollController extends Controller
         $totalRestDayPay = array_sum(array_column($payBreakdownByEmployee, 'rest_day_pay'));
         $totalOvertimePay = array_sum(array_column($payBreakdownByEmployee, 'overtime_pay'));
 
+        // IMPORTANT: For locked/processing/approved payrolls, use static gross pay from snapshots
+        // For draft payrolls, calculate from components
+        if ($isDynamic) {
+            // Draft payroll - calculate total gross from components (will be calculated in view)
+            $totalGross = null; // Let view calculate from components
+        } else {
+            // Locked/processing/approved payroll - use static gross pay values from snapshots
+            $totalGross = $payroll->payrollDetails->sum('gross_pay'); // These are set from snapshots above
+
+            Log::info("Using static total gross for locked payroll", [
+                'payroll_id' => $payroll->id,
+                'payroll_status' => $payroll->status,
+                'calculated_total_gross' => $totalGross,
+                'payroll_total_gross_field' => $payroll->total_gross,
+                'individual_gross_pays' => $payroll->payrollDetails->pluck('gross_pay', 'employee_id')->toArray()
+            ]);
+        }
+
         return view('payrolls.show', compact(
             'payroll',
             'dtrData',
@@ -2504,7 +2562,8 @@ class PayrollController extends Controller
             'totalBasicPay',
             'totalHolidayPay',
             'totalRestDayPay',
-            'totalOvertimePay'
+            'totalOvertimePay',
+            'totalGross'
         ));
     }
 
@@ -5226,8 +5285,24 @@ class PayrollController extends Controller
             $bonusesTotal = $payrollCalculation['bonuses'] ?? 0;
             $otherEarnings = $payrollCalculation['other_earnings'] ?? 0;
 
-            // Use exact component sum instead of payrollCalculation gross_pay to avoid rounding differences
-            $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $otherEarnings;
+            // Use exact component sum to match the individual breakdown calculations
+            // This ensures the total matches what the UI displays from individual components
+            $grossPay = round($basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $otherEarnings, 2);
+
+            // DEBUG: Log component values to identify precision discrepancies
+            Log::info("GROSS PAY CALCULATION DEBUG for employee {$employee->id}", [
+                'basicPay' => $basicPay,
+                'holidayPay' => $holidayPay,
+                'restPay' => $restPay,
+                'overtimePay' => $overtimePay,
+                'allowancesTotal' => $allowancesTotal,
+                'bonusesTotal' => $bonusesTotal,
+                'otherEarnings' => $otherEarnings,
+                'calculated_gross_pay_before_round' => $basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $otherEarnings,
+                'calculated_gross_pay_after_round' => $grossPay,
+                'payrollCalculation_gross_pay' => $payrollCalculation['gross_pay'] ?? 'N/A',
+                'difference' => ($payrollCalculation['gross_pay'] ?? 0) - $grossPay
+            ]);
             $netPay = $grossPay - $totalDeductions;
 
             // Create pay breakdown for snapshot
@@ -5741,7 +5816,7 @@ class PayrollController extends Controller
                             'type' => $setting->type ?? 'government',
                             'calculation_type' => $setting->calculation_type,
                             'pay_basis' => $payBasisName,
-                            'pay_basis_amount' => round($cappedAmount, 2) // Round pay basis amount
+                            'pay_basis_amount' => number_format($cappedAmount, 2, '.', '') // Use number_format for consistent 2 decimal precision
                         ];
                         $governmentTotal += $amount;
                     }
@@ -5772,7 +5847,7 @@ class PayrollController extends Controller
                             'type' => $setting->type ?? 'government',
                             'calculation_type' => $setting->calculation_type,
                             'pay_basis' => 'taxableincome', // Match other deductions' pay_basis format
-                            'pay_basis_amount' => round($taxableIncomeForDeductions, 2) // Use same as other deductions for consistency, rounded
+                            'pay_basis_amount' => number_format($taxableIncomeForDeductions, 2, '.', '') // Use number_format for consistent 2 decimal precision
                         ];
                     }
                 }
@@ -6991,20 +7066,63 @@ class PayrollController extends Controller
 
         $timeBreakdowns[$employee->id] = $employeeBreakdown;
 
-        // Calculate pay breakdown by employee using the same logic as snapshots
-        $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0, $currentPeriod['start'], $currentPeriod['end']);
-        
-        // Create pay breakdown using the same methods as snapshots
-        $basicPayBreakdown = $this->createBasicPayBreakdown($employeeBreakdown, $employee, $currentPeriod['start'], $currentPeriod['end']);
-        $holidayPayBreakdown = $this->createHolidayPayBreakdown($employeeBreakdown, $employee, $currentPeriod['start'], $currentPeriod['end']);
-        $restPayBreakdown = $this->createRestPayBreakdown($employeeBreakdown, $employee, $currentPeriod['start'], $currentPeriod['end']);
-        $overtimePayBreakdown = $this->createOvertimePayBreakdown($employeeBreakdown, $employee, $currentPeriod['start'], $currentPeriod['end']);
+        // Calculate pay breakdown by employee
+        $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
+        $basicPay = 0;
+        $holidayPay = 0;
+        $restDayPay = 0;
+        $overtimePay = 0;
 
-        // Calculate totals using breakdown data (same as snapshots)
-        $basicPay = array_sum(array_column($basicPayBreakdown, 'amount'));
-        $holidayPay = array_sum(array_column($holidayPayBreakdown, 'amount'));
-        $restDayPay = array_sum(array_column($restPayBreakdown, 'amount'));
-        $overtimePay = array_sum(array_column($overtimePayBreakdown, 'amount'));
+        foreach ($employeeBreakdown as $logType => $breakdown) {
+            $rateConfig = $breakdown['rate_config'];
+            if (!$rateConfig) continue;
+
+            $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+            $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
+
+            $regularPay = $breakdown['regular_hours'] * $hourlyRate * $regularMultiplier;
+
+            // Calculate overtime pay with night differential breakdown
+            $overtimePayAmount = 0;
+            $regularOvertimeHours = $breakdown['regular_overtime_hours'] ?? 0;
+            $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
+
+            if ($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) {
+                // Use breakdown calculation
+
+                // Regular overtime pay
+                if ($regularOvertimeHours > 0) {
+                    $overtimePayAmount += $regularOvertimeHours * $hourlyRate * $overtimeMultiplier;
+                }
+
+                // Night differential overtime pay (overtime rate + night differential bonus)
+                if ($nightDiffOvertimeHours > 0) {
+                    // Get night differential setting
+                    $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                    $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+
+                    // Combined rate: base overtime rate + night differential bonus
+                    $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
+                    $overtimePayAmount += $nightDiffOvertimeHours * $hourlyRate * $combinedMultiplier;
+                }
+            } else {
+                // Fallback to simple calculation if no breakdown available
+                $overtimePayAmount = $breakdown['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+            }
+
+            // All overtime goes to overtime column regardless of day type
+            $overtimePay += $overtimePayAmount;
+
+            if ($logType === 'regular_workday') {
+                $basicPay += $regularPay; // Only regular hours pay to basic pay
+            } elseif (in_array($logType, ['special_holiday', 'regular_holiday'])) {
+                $holidayPay += $regularPay; // Only regular hours pay to holiday pay
+            } elseif (in_array($logType, ['rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                $holidayPay += $regularPay; // Rest day holidays count as holiday pay
+            } elseif ($logType === 'rest_day') {
+                $restDayPay += $regularPay; // Only regular hours pay to rest day pay
+            }
+        }
 
         $payBreakdownByEmployee = [
             $employee->id => [
@@ -7111,7 +7229,7 @@ class PayrollController extends Controller
         }
 
         // Calculate deduction based on hourly rate
-        $hourlyRate = $employee->hourly_rate ?? 0;
+        $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
         return $lateHours * $hourlyRate;
     }
 
@@ -7125,7 +7243,7 @@ class PayrollController extends Controller
         }
 
         // Calculate deduction based on hourly rate
-        $hourlyRate = $employee->hourly_rate ?? 0;
+        $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
         return $undertimeHours * $hourlyRate;
     }
 
@@ -7630,7 +7748,7 @@ class PayrollController extends Controller
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * 1.69;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Special Holiday OT'] = [
@@ -7652,7 +7770,7 @@ class PayrollController extends Controller
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Special Holiday OT+ND'] = [
@@ -7695,7 +7813,7 @@ class PayrollController extends Controller
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Holiday OT'] = [
@@ -7717,7 +7835,7 @@ class PayrollController extends Controller
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Holiday OT+ND'] = [
@@ -7737,7 +7855,7 @@ class PayrollController extends Controller
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * 2.6;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Holiday OT'] = [
@@ -7759,7 +7877,7 @@ class PayrollController extends Controller
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Regular Holiday OT+ND'] = [
@@ -7802,7 +7920,7 @@ class PayrollController extends Controller
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day OT'] = [
@@ -7824,7 +7942,7 @@ class PayrollController extends Controller
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day OT+ND'] = [
@@ -7844,7 +7962,7 @@ class PayrollController extends Controller
                     $actualMinutes = $regularOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * 1.69;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day OT'] = [
@@ -7866,7 +7984,7 @@ class PayrollController extends Controller
                     $actualMinutes = $nightDiffOvertimeHours * 60;
                     $roundedMinutes = round($actualMinutes);
                     $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                    $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
+                    $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
                     $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
 
                     $breakdown['Rest Day OT+ND'] = [
