@@ -161,6 +161,7 @@
                                         <div>
                                             <span class="text-sm font-medium">{{ $schedule->name }}</span>
                                             <br><span class="text-xs text-gray-500">{{ $schedule->time_range }}</span>
+                                            <br><span class="text-xs text-green-600 font-semibold">{{ $schedule->total_hours ?? 'N/A' }} hrs</span>
                                         </div>
                                         <div class="flex items-center space-x-2">
                                             <span class="text-xs px-2 py-1 rounded {{ $schedule->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">

@@ -978,8 +978,8 @@
                 }
             }
             
-            // Function to highlight selected pay schedule rate field
-            function highlightPayScheduleRate() {
+            // Function to highlight a specific rate field when clicked
+            function highlightRateField(targetField) {
                 // Reset all fields to default styling
                 [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
                     const input = field.querySelector('input[type="text"]');
@@ -995,20 +995,7 @@
                     }
                 });
                 
-                // Highlight the selected pay schedule rate field
-                let targetField = null;
-                switch (payScheduleSelect.value) {
-                    case 'weekly':
-                        targetField = weeklyRateField;
-                        break;
-                    case 'semi_monthly':
-                        targetField = semiMonthlyRateField;
-                        break;
-                    case 'monthly':
-                        targetField = monthlyRateField;
-                        break;
-                }
-                
+                // Highlight the clicked field
                 if (targetField) {
                     const input = targetField.querySelector('input[type="text"]');
                     const label = targetField.querySelector('label');
@@ -1023,6 +1010,19 @@
                     }
                 }
             }
+
+            // Add click event listeners to all salary input fields
+            [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
+                const input = field.querySelector('input[type="text"]');
+                if (input) {
+                    input.addEventListener('click', () => {
+                        highlightRateField(field);
+                    });
+                    input.addEventListener('focus', () => {
+                        highlightRateField(field);
+                    });
+                }
+            });
             
             // Function to update salary breakdown content with real deductions
             async function updateSalaryBreakdown() {
@@ -1191,12 +1191,11 @@
             }
             
             if (payScheduleSelect) {
+                // Remove automatic highlighting on pay schedule change
                 payScheduleSelect.addEventListener('change', function() {
-                    highlightPayScheduleRate();
                     updateSalaryBreakdown();
                 });
-                // Initialize on page load
-                highlightPayScheduleRate();
+                // Don't initialize highlighting on page load
             }
             
             // Initialize salary breakdown on page load

@@ -83,6 +83,7 @@ function showContextMenu(event, element) {
                             <div>
                                 <div class="font-medium text-gray-900">{{ $schedule->name }}</div>
                                 <div class="text-sm text-gray-600">{{ $schedule->time_range_display }}</div>
+                                <div class="text-xs text-green-600 font-semibold">Total Hours: {{ $schedule->total_hours ?? 'N/A' }}</div>
                                 @if($schedule->break_duration_minutes > 0)
                                     <div class="text-xs text-blue-600">Break: {{ $schedule->break_duration_minutes }} min</div>
                                 @elseif($schedule->break_start && $schedule->break_end)

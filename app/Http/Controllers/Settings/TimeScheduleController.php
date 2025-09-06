@@ -86,6 +86,10 @@ class TimeScheduleController extends Controller
 
         $timeSchedule = TimeSchedule::create($data);
 
+        // Calculate and store total hours
+        $timeSchedule->total_hours = $timeSchedule->calculateTotalHours();
+        $timeSchedule->save();
+
         return response()->json([
             'message' => 'Time schedule created successfully.',
             'data' => $timeSchedule
@@ -161,6 +165,10 @@ class TimeScheduleController extends Controller
         }
 
         $timeSchedule->update($data);
+
+        // Recalculate and update total hours
+        $timeSchedule->total_hours = $timeSchedule->calculateTotalHours();
+        $timeSchedule->save();
 
         return response()->json([
             'message' => 'Time schedule updated successfully.',
