@@ -264,7 +264,7 @@
                             </div>
                             <div class="grid grid-cols-3 gap-2">
                                 <span class="font-medium text-gray-700">Hourly Rate:</span>
-                                <span class="col-span-2">₱{{ number_format($detail->employee->hourly_rate ?? 0, 2) }}/hr</span>
+                                <span class="col-span-2">₱{{ number_format($detail->hourly_rate ?? 0, 2) }}/hr</span> {{-- Use calculated hourly rate --}}
                             </div>
                             <div class="grid grid-cols-3 gap-2">
                                 <span class="font-medium text-gray-700">Regular Hours:</span>

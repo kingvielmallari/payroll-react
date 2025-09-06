@@ -214,6 +214,8 @@ class EmployeeController extends Controller
             'role' => 'required|exists:roles,name',
             'time_schedule_id' => 'required|exists:time_schedules,id',
             'day_schedule_id' => 'required|exists:day_schedules,id',
+            'rate_type' => 'nullable|in:hourly,daily,weekly,semi_monthly,monthly',
+            'fixed_rate' => 'nullable|numeric|min:0',
         ]);
 
         try {

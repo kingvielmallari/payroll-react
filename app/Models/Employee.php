@@ -48,6 +48,8 @@ class Employee extends Model
         'bank_name',
         'bank_account_number',
         'bank_account_name',
+        'rate_type',
+        'fixed_rate',
     ];
 
     protected $casts = [
@@ -57,6 +59,9 @@ class Employee extends Model
         'basic_salary' => 'decimal:2',
         'hourly_rate' => 'decimal:2',
         'daily_rate' => 'decimal:2',
+        'weekly_rate' => 'decimal:2',
+        'semi_monthly_rate' => 'decimal:2',
+        'fixed_rate' => 'decimal:2',
     ];
 
     /**
@@ -195,8 +200,8 @@ class Employee extends Model
     public function workSchedules()
     {
         return $this->belongsToMany(WorkSchedule::class, 'employee_work_schedules')
-                    ->withPivot('effective_date', 'end_date', 'is_active')
-                    ->withTimestamps();
+            ->withPivot('effective_date', 'end_date', 'is_active')
+            ->withTimestamps();
     }
 
     /**
@@ -205,14 +210,14 @@ class Employee extends Model
     public function currentWorkSchedule()
     {
         return $this->workSchedules()
-                    ->wherePivot('is_active', true)
-                    ->wherePivot('effective_date', '<=', now())
-                    ->where(function ($query) {
-                        $query->wherePivotNull('end_date')
-                              ->orWherePivot('end_date', '>=', now());
-                    })
-                    ->latest('pivot_effective_date')
-                    ->first();
+            ->wherePivot('is_active', true)
+            ->wherePivot('effective_date', '<=', now())
+            ->where(function ($query) {
+                $query->wherePivotNull('end_date')
+                    ->orWherePivot('end_date', '>=', now());
+            })
+            ->latest('pivot_effective_date')
+            ->first();
     }
 
     /**
@@ -322,21 +327,21 @@ class Employee extends Model
         if (!$this->hire_date) {
             return '0 Days';
         }
-        
+
         $hireDate = $this->hire_date;
         $currentDate = now();
-        
+
         // Calculate total years (cast to integer)
         $years = (int) $hireDate->diffInYears($currentDate);
-        
+
         // Calculate remaining months after years (cast to integer)
         $afterYears = $hireDate->copy()->addYears($years);
         $months = (int) $afterYears->diffInMonths($currentDate);
-        
+
         // Calculate remaining days after years and months (cast to integer)  
         $afterMonths = $afterYears->copy()->addMonths($months);
         $days = (int) $afterMonths->diffInDays($currentDate);
-        
+
         if ($years >= 1) {
             // 1 year or more: "X years, Y months"
             if ($months == 0) {
@@ -370,7 +375,7 @@ class Employee extends Model
      */
     public function getWorkingDaysPerWeek()
     {
-        return match($this->day_schedule) {
+        return match ($this->day_schedule) {
             'monday_friday' => 5,
             'monday_saturday', 'tuesday_saturday' => 6,
             'monday_sunday' => 7,
@@ -385,7 +390,7 @@ class Employee extends Model
      */
     public function getDayScheduleDisplayAttribute()
     {
-        return match($this->day_schedule) {
+        return match ($this->day_schedule) {
             'monday_friday' => 'Monday - Friday (5 days)',
             'monday_saturday' => 'Monday - Saturday (6 days)',
             'monday_sunday' => 'Monday - Sunday (7 days)',
@@ -423,7 +428,7 @@ class Employee extends Model
     {
         $dayOfWeek = $date->dayOfWeek; // 0=Sunday, 1=Monday, ..., 6=Saturday
 
-        return match($this->day_schedule) {
+        return match ($this->day_schedule) {
             'monday_friday' => $dayOfWeek >= 1 && $dayOfWeek <= 5, // Mon-Fri
             'monday_saturday' => $dayOfWeek >= 1 && $dayOfWeek <= 6, // Mon-Sat
             'monday_sunday' => true, // All days

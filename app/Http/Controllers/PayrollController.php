@@ -1067,13 +1067,16 @@ class PayrollController extends Controller
 
                     Log::info("Created payroll {$payrollNumber} for employee {$employee->id}");
 
+                    // Calculate hourly rate using new method for payroll detail record
+                    $calculatedHourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
+
                     // Create payroll detail for this employee
                     $payrollDetail = PayrollDetail::create([
                         'payroll_id' => $payroll->id,
                         'employee_id' => $employee->id,
                         'basic_salary' => $employee->basic_salary ?? 0,
                         'daily_rate' => $employee->daily_rate ?? 0,
-                        'hourly_rate' => $employee->hourly_rate ?? 0,
+                        'hourly_rate' => $calculatedHourlyRate,
                         'days_worked' => $payrollCalculation['days_worked'] ?? 0,
                         'regular_hours' => $payrollCalculation['hours_worked'] ?? 0,
                         'overtime_hours' => $payrollCalculation['overtime_hours'] ?? 0,
@@ -1323,8 +1326,8 @@ class PayrollController extends Controller
                 return $hourlyRate * $hoursWorked;
 
             default:
-                // Default to hourly calculation
-                $hourlyRate = $employee->hourly_rate ?? ($basicSalary / 173.33);
+                // Default to hourly calculation using new method
+                $hourlyRate = $this->calculateHourlyRate($employee, $basicSalary);
                 return $hourlyRate * $hoursWorked;
         }
     }
@@ -1546,10 +1549,39 @@ class PayrollController extends Controller
     }
 
     /**
-     * Calculate hourly rate based on employee's pay schedule and basic salary
+     * Calculate hourly rate based on employee's fixed_rate and rate_type
      */
     private function calculateHourlyRate($employee, $basicSalary)
     {
+        // Use fixed_rate and rate_type if available
+        if ($employee->fixed_rate && $employee->fixed_rate > 0 && $employee->rate_type) {
+            // Get employee's assigned time schedule total hours for calculation
+            $timeSchedule = $employee->timeSchedule;
+            $dailyHours = $timeSchedule ? $timeSchedule->total_hours : 8; // Default to 8 hours if no schedule
+
+            switch ($employee->rate_type) {
+                case 'hourly':
+                    return $employee->fixed_rate;
+
+                case 'daily':
+                    return $employee->fixed_rate / $dailyHours;
+
+                case 'weekly':
+                    return $employee->fixed_rate / ($dailyHours * 5); // 5 working days
+
+                case 'semi_monthly':
+                    return $employee->fixed_rate / ($dailyHours * 11); // 11 working days per semi-month
+
+                case 'monthly':
+                    return $employee->fixed_rate / ($dailyHours * 22); // 22 working days per month
+
+                default:
+                    // If rate_type is not recognized, fall back to monthly calculation
+                    return $employee->fixed_rate / ($dailyHours * 22);
+            }
+        }
+
+        // Fallback to old calculation if fixed_rate/rate_type not available
         // If employee has an explicit hourly rate, use it
         if ($employee->hourly_rate && $employee->hourly_rate > 0) {
             return $employee->hourly_rate;
@@ -2314,7 +2346,7 @@ class PayrollController extends Controller
 
             // For draft payrolls or when no snapshot available, calculate dynamically
             $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-            $hourlyRate = $detail->employee->hourly_rate ?? 0;
+            $hourlyRate = $this->calculateHourlyRate($detail->employee, $detail->employee->basic_salary ?? 0);
 
             $basicPay = 0; // Regular workday pay only
             $holidayPay = 0; // All holiday-related pay
@@ -2975,26 +3007,12 @@ class PayrollController extends Controller
             }
         }
 
-        // Use employee's hourly rate directly, or calculate from basic salary if not set
-        $hourlyRate = $employee->hourly_rate;
-        if (!$hourlyRate && $employee->basic_salary) {
-            // Calculate hourly rate based on pay schedule
-            switch ($employee->pay_schedule) {
-                case 'weekly':
-                    $weeklyRate = $employee->weekly_rate ?? ($employee->basic_salary / 4.33);
-                    $hourlyRate = $weeklyRate / 40; // 40 hours per week
-                    break;
-                case 'semi_monthly':
-                    $semiMonthlyRate = $employee->semi_monthly_rate ?? ($employee->basic_salary / 2);
-                    $hourlyRate = $semiMonthlyRate / 86.67; // ~86.67 hours per semi-month
-                    break;
-                default: // monthly
-                    $hourlyRate = $employee->basic_salary / 173.33; // ~173.33 hours per month
-                    break;
-            }
-        } elseif (!$hourlyRate) {
-            // If no hourly rate and no basic salary, use a default or throw error
-            throw new \Exception("Employee {$employee->employee_number} has no hourly rate or basic salary defined.");
+        // Use new calculation method for hourly rate
+        $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
+
+        if (!$hourlyRate) {
+            // If no hourly rate can be calculated, throw error
+            throw new \Exception("Employee {$employee->employee_number} has no valid rate configuration defined.");
         }
 
         $dailyRate = $hourlyRate * 8; // 8 hours per day
@@ -3214,8 +3232,8 @@ class PayrollController extends Controller
                 break;
 
             case 'multiplier':
-                // Calculate as multiplier of hourly rate
-                $hourlyRate = $employee->hourly_rate ?? ($employee->basic_salary / 173.33); // Default monthly to hourly
+                // Calculate as multiplier of hourly rate using new method
+                $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
                 $amount = $hourlyRate * ($setting->multiplier ?? 0) * $regularHours;
                 break;
 
@@ -5079,7 +5097,7 @@ class PayrollController extends Controller
 
             // Calculate using the same logic as the show method for draft payrolls
             $employeeBreakdown = $timeBreakdownsByEmployee[$employee->id] ?? [];
-            $hourlyRate = $employee->hourly_rate ?? 0;
+            $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
 
             // Log employee breakdown data for debugging
             Log::info("Employee breakdown data for employee {$employee->id}", [
@@ -5422,7 +5440,7 @@ class PayrollController extends Controller
                 'position' => $employee->position->title ?? 'N/A',
                 'basic_salary' => $employee->basic_salary ?? 0,
                 'daily_rate' => $employee->daily_rate ?? 0,
-                'hourly_rate' => $employee->hourly_rate ?? 0,
+                'hourly_rate' => $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0),
                 'days_worked' => $payrollCalculation['days_worked'] ?? 0,
                 'regular_hours' => $regularWorkdayHours, // Only regular workday hours, not all regular hours
                 'overtime_hours' => $regularWorkdayOvertimeHours, // Only regular workday overtime hours
@@ -6083,7 +6101,7 @@ class PayrollController extends Controller
         $draftPayrollDetail->employee_id = $employee->id;
         $draftPayrollDetail->basic_salary = $employee->basic_salary ?? 0;
         $draftPayrollDetail->daily_rate = $employee->daily_rate ?? 0;
-        $draftPayrollDetail->hourly_rate = $employee->hourly_rate ?? 0;
+        $draftPayrollDetail->hourly_rate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
         $draftPayrollDetail->days_worked = $payrollCalculation['days_worked'] ?? 0;
         $draftPayrollDetail->regular_hours = $payrollCalculation['regular_hours'] ?? 0;
         $draftPayrollDetail->overtime_hours = $payrollCalculation['overtime_hours'] ?? 0;
@@ -6182,7 +6200,7 @@ class PayrollController extends Controller
         $timeBreakdowns[$employee->id] = $employeeBreakdown;
 
         // Calculate pay breakdown by employee
-        $hourlyRate = $employee->hourly_rate ?? 0;
+        $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
         $basicPay = 0;
         $holidayPay = 0;
 
@@ -6520,7 +6538,7 @@ class PayrollController extends Controller
             } else {
                 // For draft payrolls, calculate dynamically from time logs
                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                $hourlyRate = $this->calculateHourlyRate($detail->employee, $detail->employee->basic_salary ?? 0);
 
                 $basicPay = 0; // Regular workday pay only
                 $holidayPay = 0; // All holiday-related pay
@@ -6876,7 +6894,7 @@ class PayrollController extends Controller
         $draftPayrollDetail->employee_id = $employee->id;
         $draftPayrollDetail->basic_salary = $employee->basic_salary ?? 0;
         $draftPayrollDetail->daily_rate = $employee->daily_rate ?? 0;
-        $draftPayrollDetail->hourly_rate = $employee->hourly_rate ?? 0;
+        $draftPayrollDetail->hourly_rate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
         $draftPayrollDetail->days_worked = $payrollCalculation['days_worked'] ?? 0;
         $draftPayrollDetail->regular_hours = $payrollCalculation['regular_hours'] ?? 0;
         $draftPayrollDetail->overtime_hours = $payrollCalculation['overtime_hours'] ?? 0;
@@ -7003,7 +7021,7 @@ class PayrollController extends Controller
         $timeBreakdowns[$employee->id] = $employeeBreakdown;
 
         // Calculate pay breakdown by employee
-        $hourlyRate = $employee->hourly_rate ?? 0;
+        $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0);
         $basicPay = 0;
         $holidayPay = 0;
         $restDayPay = 0;

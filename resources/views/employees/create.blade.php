@@ -401,6 +401,10 @@
                             </div>
                         </div>
                         
+                        <!-- Hidden fields for tracking highlighted rate -->
+                        <input type="hidden" name="rate_type" id="rate_type" value="">
+                        <input type="hidden" name="fixed_rate" id="fixed_rate" value="">
+                        
                         <!-- Salary Calculation Summary -->
                         {{-- <div class="mt-6 p-4 bg-gray-50 rounded-lg">
                             <h4 class="text-sm font-medium text-gray-900 mb-2">Salary Breakdown</h4>
@@ -803,6 +807,9 @@
                     basicSalaryRaw.value = monthlySalary;
                 }
                 isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(hourlyRateInput);
             }
 
             function calculateFromDaily() {
@@ -832,6 +839,9 @@
                     basicSalaryRaw.value = monthlySalary;
                 }
                 isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(dailyRateInput);
             }
 
             function calculateFromBasic() {
@@ -861,6 +871,43 @@
                     hourlyRateRaw.value = hourlyRate;
                 }
                 isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(basicSalaryInput);
+            }
+
+            // Function to update fixed_rate when highlighted field value changes
+            function updateFixedRateIfHighlighted(changedInput) {
+                const rateTypeInput = document.getElementById('rate_type');
+                const fixedRateInput = document.getElementById('fixed_rate');
+                
+                if (rateTypeInput && fixedRateInput && rateTypeInput.value) {
+                    // Check if the changed input is the currently highlighted one
+                    let isHighlighted = false;
+                    switch(rateTypeInput.value) {
+                        case 'hourly':
+                            isHighlighted = changedInput.id === 'hourly_rate';
+                            break;
+                        case 'daily':
+                            isHighlighted = changedInput.id === 'daily_rate';
+                            break;
+                        case 'weekly':
+                            isHighlighted = changedInput.id === 'weekly_rate';
+                            break;
+                        case 'semi_monthly':
+                            isHighlighted = changedInput.id === 'semi_monthly_rate';
+                            break;
+                        case 'monthly':
+                            isHighlighted = changedInput.id === 'basic_salary';
+                            break;
+                    }
+                    
+                    if (isHighlighted) {
+                        const newValue = parsePeso(changedInput.value) || 0;
+                        fixedRateInput.value = newValue;
+                        console.log('Updated fixed_rate to:', newValue); // Debug
+                    }
+                }
             }
 
             // Format input on blur
@@ -1007,6 +1054,40 @@
                     if (label) {
                         label.classList.remove('text-gray-700');
                         label.classList.add('text-green-700', 'font-semibold');
+                    }
+                    
+                    // Update hidden fields based on highlighted field
+                    const rateTypeInput = document.getElementById('rate_type');
+                    const fixedRateInput = document.getElementById('fixed_rate');
+                    
+                    if (rateTypeInput && fixedRateInput && input) {
+                        // Determine rate type based on input id
+                        let rateType = '';
+                        let rateValue = parsePeso(input.value) || 0;
+                        
+                        switch(input.id) {
+                            case 'hourly_rate':
+                                rateType = 'hourly';
+                                break;
+                            case 'daily_rate':
+                                rateType = 'daily';
+                                break;
+                            case 'weekly_rate':
+                                rateType = 'weekly';
+                                break;
+                            case 'semi_monthly_rate':
+                                rateType = 'semi_monthly';
+                                break;
+                            case 'basic_salary':
+                                rateType = 'monthly';
+                                break;
+                        }
+                        
+                        // Update hidden fields
+                        rateTypeInput.value = rateType;
+                        fixedRateInput.value = rateValue;
+                        
+                        console.log('Updated rate tracking:', { rateType, rateValue }); // Debug
                     }
                 }
             }

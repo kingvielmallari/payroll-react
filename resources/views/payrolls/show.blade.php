@@ -94,8 +94,8 @@
                                             $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
                                             if (isset($employeeBreakdown['rest_day'])) {
                                                 $restBreakdown = $employeeBreakdown['rest_day'];
-                                                $restPayForGross = ($restBreakdown['regular_hours'] ?? 0) * ($detail->employee->hourly_rate ?? 0) * 1.3;
-                                                $restPayForGross += ($restBreakdown['overtime_hours'] ?? 0) * ($detail->employee->hourly_rate ?? 0) * 1.69;
+                                                $restPayForGross = ($restBreakdown['regular_hours'] ?? 0) * ($detail->hourly_rate ?? 0) * 1.3; // Use calculated hourly rate
+                                                $restPayForGross += ($restBreakdown['overtime_hours'] ?? 0) * ($detail->hourly_rate ?? 0) * 1.69; // Use calculated hourly rate
                                             }
                                             $overtimePay = $detail->overtime_pay ?? 0;
                                             
@@ -650,7 +650,7 @@
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Use timeBreakdowns data like Overtime column
                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                $hourlyRate = $detail->hourly_rate ?? 0; // Use calculated hourly rate from detail
                                                 $basicPay = 0;
                                                 
                                                 // Get night differential settings for dynamic rate
@@ -793,7 +793,7 @@
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Use timeBreakdowns data like Overtime column
                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                $hourlyRate = $detail->hourly_rate ?? 0; // Use calculated hourly rate from detail
                                                 $holidayPay = 0;
                                                 
                                                 // Get night differential settings for dynamic rate
@@ -951,7 +951,7 @@
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Use timeBreakdowns data like Overtime column
                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                $hourlyRate = $detail->hourly_rate ?? 0; // Use calculated hourly rate from detail
                                                 $restDayPay = 0;
                                                 
                                                 // Get night differential settings for dynamic rate
@@ -1092,7 +1092,7 @@
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Calculate overtime breakdown dynamically with CORRECT amounts
                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                $hourlyRate = $detail->hourly_rate ?? 0; // Use calculated hourly rate from detail
                                                 $calculatedOvertimeTotal = 0;
                                                 
                                                 // Regular workday overtime - split into regular OT and OT+ND
@@ -1991,7 +1991,7 @@
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Calculate rest pay dynamically using DTR data
                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                $hourlyRate = $detail->hourly_rate ?? 0; // Use calculated hourly rate from detail
                                                 
                                                 if (isset($employeeBreakdown['rest_day'])) {
                                                     $restBreakdown = $employeeBreakdown['rest_day'];
@@ -2025,7 +2025,7 @@
                                             if ($payroll->status === 'draft') {
                                                 // DRAFT: Calculate overtime pay using per-minute logic (same as Overtime column)
                                                 $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                $hourlyRate = $detail->employee->hourly_rate ?? 0;
+                                                $hourlyRate = $detail->hourly_rate ?? 0; // Use calculated hourly rate from detail
                                                 
                                                 // Calculate overtime for regular workdays
                                                 if (isset($employeeBreakdown['regular_workday'])) {
@@ -2486,8 +2486,8 @@
                                                 <div class="text-xs text-gray-600">No schedule assigned</div>
                                             @endif
                                             <div class="text-xs text-blue-600">
-                                ₱{{ number_format($detail->employee->hourly_rate ?? 0, 2) }}/hr
-                                <br>(₱{{ number_format(($detail->employee->hourly_rate ?? 0) / 60, 4) }}/min)
+                                ₱{{ number_format($detail->hourly_rate ?? 0, 2) }}/hr {{-- Use calculated hourly rate --}}
+                                <br>(₱{{ number_format(($detail->hourly_rate ?? 0) / 60, 4) }}/min) {{-- Use calculated hourly rate --}}
                             </div>
                                         </div>
                                     </td>
