@@ -5151,11 +5151,15 @@ class PayrollController extends Controller
                 $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
                 $overtimeMultiplier = $rateConfig->overtime_rate_multiplier ?? 1.25;
 
-                // Calculate regular pay using TimeLog's per-minute precision method
+                // Calculate regular pay using SAME logic as breakdown methods for consistency
                 $regularHours = $breakdown['regular_hours'];
                 if ($regularHours > 0) {
-                    $timeLogInstance = new \App\Models\TimeLog();
-                    $regularPayAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $regularMultiplier, $regularHours);
+                    // Use consistent calculation: hourly rate * multiplier, then multiply by minutes
+                    $actualMinutes = $regularHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
+                    $ratePerMinute = $adjustedHourlyRate / 60;
+                    $regularPayAmount = round($ratePerMinute * $roundedMinutes, 2);
                 } else {
                     $regularPayAmount = 0;
                 }
@@ -5168,8 +5172,13 @@ class PayrollController extends Controller
                     $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
                     // Combined rate: regular rate + night differential bonus
                     $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
-                    $timeLogInstance = new \App\Models\TimeLog();
-                    $nightDiffRegularPayAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffRegularHours);
+
+                    // Use consistent calculation: hourly rate * multiplier, then multiply by minutes  
+                    $actualMinutes = $nightDiffRegularHours * 60;
+                    $roundedMinutes = round($actualMinutes);
+                    $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                    $ratePerMinute = $adjustedHourlyRate / 60;
+                    $nightDiffRegularPayAmount = round($ratePerMinute * $roundedMinutes, 2);
                 }
 
                 // Calculate overtime pay with night differential breakdown
@@ -5178,26 +5187,36 @@ class PayrollController extends Controller
                 $nightDiffOvertimeHours = $breakdown['night_diff_overtime_hours'] ?? 0;
 
                 if ($regularOvertimeHours > 0 || $nightDiffOvertimeHours > 0) {
-                    // Regular overtime pay
+                    // Regular overtime pay - use consistent calculation
                     if ($regularOvertimeHours > 0) {
-                        $timeLogInstance = new \App\Models\TimeLog();
-                        $overtimePayAmount += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $regularOvertimeHours);
+                        $actualMinutes = $regularOvertimeHours * 60;
+                        $roundedMinutes = round($actualMinutes);
+                        $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                        $ratePerMinute = $adjustedHourlyRate / 60;
+                        $overtimePayAmount += round($ratePerMinute * $roundedMinutes, 2);
                     }
 
-                    // Night differential overtime pay
+                    // Night differential overtime pay - use consistent calculation
                     if ($nightDiffOvertimeHours > 0) {
                         $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
                         $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
                         $combinedMultiplier = $overtimeMultiplier + ($nightDiffMultiplier - 1);
-                        $timeLogInstance = new \App\Models\TimeLog();
-                        $overtimePayAmount += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $combinedMultiplier, $nightDiffOvertimeHours);
+
+                        $actualMinutes = $nightDiffOvertimeHours * 60;
+                        $roundedMinutes = round($actualMinutes);
+                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                        $ratePerMinute = $adjustedHourlyRate / 60;
+                        $overtimePayAmount += round($ratePerMinute * $roundedMinutes, 2);
                     }
                 } else {
-                    // Fallback to simple calculation
+                    // Fallback to simple calculation - use consistent method
                     $totalOvertimeHours = $breakdown['overtime_hours'];
                     if ($totalOvertimeHours > 0) {
-                        $timeLogInstance = new \App\Models\TimeLog();
-                        $overtimePayAmount = $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $totalOvertimeHours);
+                        $actualMinutes = $totalOvertimeHours * 60;
+                        $roundedMinutes = round($actualMinutes);
+                        $adjustedHourlyRate = $hourlyRate * $overtimeMultiplier;
+                        $ratePerMinute = $adjustedHourlyRate / 60;
+                        $overtimePayAmount = round($ratePerMinute * $roundedMinutes, 2);
                     }
                 }
 
@@ -5290,20 +5309,7 @@ class PayrollController extends Controller
             // REMOVED ROUNDING: Store exact calculated values without rounding for snapshot precision
             $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $otherEarnings;
 
-            // DEBUG: Log component values to identify precision discrepancies
-            Log::info("GROSS PAY CALCULATION DEBUG for employee {$employee->id}", [
-                'basicPay' => $basicPay,
-                'holidayPay' => $holidayPay,
-                'restPay' => $restPay,
-                'overtimePay' => $overtimePay,
-                'allowancesTotal' => $allowancesTotal,
-                'bonusesTotal' => $bonusesTotal,
-                'otherEarnings' => $otherEarnings,
-                'calculated_gross_pay_before_round' => $basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $otherEarnings,
-                'calculated_gross_pay_after_round' => $grossPay,
-                'payrollCalculation_gross_pay' => $payrollCalculation['gross_pay'] ?? 'N/A',
-                'difference' => ($payrollCalculation['gross_pay'] ?? 0) - $grossPay
-            ]);
+
             $netPay = $grossPay - $totalDeductions;
 
             // Create pay breakdown for snapshot

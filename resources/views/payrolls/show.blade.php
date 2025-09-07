@@ -1606,7 +1606,15 @@
                                             // Round overtime pay to match display precision
                                             $overtimePay = round($overtimePay, 2);
                                             
-                                            $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
+                                            // Calculate gross pay using stored snapshot value or dynamic calculation
+                                            if ($payroll->status !== 'draft' && $employeeSnapshot && isset($employeeSnapshot->gross_pay)) {
+                                                // For processing/approved payrolls, ALWAYS use stored gross pay from snapshot
+                                                // This ensures gross pay is locked and doesn't change when settings are modified
+                                                $calculatedGrossPay = $employeeSnapshot->gross_pay;
+                                            } else {
+                                                // For draft payrolls or if no valid snapshot data, calculate gross pay dynamically
+                                                $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
+                                            }
                                         @endphp
                                         
                                         <!-- Show Gross Pay Breakdown -->
