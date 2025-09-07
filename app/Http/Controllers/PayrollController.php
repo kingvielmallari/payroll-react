@@ -5287,7 +5287,8 @@ class PayrollController extends Controller
 
             // Use exact component sum to match the individual breakdown calculations
             // This ensures the total matches what the UI displays from individual components
-            $grossPay = round($basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $otherEarnings, 2);
+            // REMOVED ROUNDING: Store exact calculated values without rounding for snapshot precision
+            $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $otherEarnings;
 
             // DEBUG: Log component values to identify precision discrepancies
             Log::info("GROSS PAY CALCULATION DEBUG for employee {$employee->id}", [

@@ -275,13 +275,13 @@ class TimeLog extends Model
     {
         // Convert hours to minutes and round minutes (not hours)
         $actualMinutes = $hours * 60;
-        $roundedMinutes = round($actualMinutes);
+        $roundedMinutes = $actualMinutes;
 
         // Calculate per-minute rate: emp_rate / 60
         $fullPerMinuteRate = $hourlyRate / 60;
 
         // TRUNCATE (not round) to exactly 4 decimals: 3.333333333 becomes 3.3333
-        $truncatedPerMinuteRate = floor($fullPerMinuteRate * 10000) / 10000;
+        $truncatedPerMinuteRate = $fullPerMinuteRate;
 
         // Apply multiplier to the truncated per-minute rate
         $finalPerMinuteRate = $truncatedPerMinuteRate * $multiplier;
