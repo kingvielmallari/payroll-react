@@ -80,6 +80,11 @@ class DeductionTaxSettingController extends Controller
             $validated['tax_table_type'] = null;
         }
 
+        // Handle distribution_method empty string - convert to null for "All Payrolls" option
+        if (isset($validated['distribution_method']) && $validated['distribution_method'] === '') {
+            $validated['distribution_method'] = null;
+        }
+
         DeductionTaxSetting::create($validated);
 
         return redirect()->route('settings.deductions.index')
@@ -146,6 +151,11 @@ class DeductionTaxSettingController extends Controller
         // Handle tax_table_type empty string - convert to null
         if (isset($validated['tax_table_type']) && $validated['tax_table_type'] === '') {
             $validated['tax_table_type'] = null;
+        }
+
+        // Handle distribution_method empty string - convert to null for "All Payrolls" option
+        if (isset($validated['distribution_method']) && $validated['distribution_method'] === '') {
+            $validated['distribution_method'] = null;
         }
 
         $deduction->update($validated);

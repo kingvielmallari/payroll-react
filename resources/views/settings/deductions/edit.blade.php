@@ -235,18 +235,13 @@
                 <p class="mt-1 text-xs text-gray-500">Choose which employees this deduction/tax setting applies to based on their benefit status.</p>
             </div>
 
-            <!-- Deduction Distribution Settings -->
-            <div class="mt-8 p-4 border border-gray-200 rounded-lg">
-                <h3 class="text-lg font-medium text-gray-900 mb-1">Deduction Distribution</h3>
-                <p class="text-sm text-gray-600 mb-4">Select how this deduction should be applied across payrolls for all pay frequencies.</p>
-                
-                <div class="mb-4">
+                <div class="mb-4 mt-4">
                     <label for="distribution_method" class="block text-sm font-medium text-gray-700 mb-2">
                         Distribution Method - Select when to deduct:
                     </label>
                     <select name="distribution_method" id="distribution_method" 
                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        <option value="" {{ old('distribution_method', $deduction->distribution_method) === '' ? 'selected' : '' }}>
+                        <option value="" {{ old('distribution_method', $deduction->distribution_method) === null || old('distribution_method', $deduction->distribution_method) === '' ? 'selected' : '' }}>
                             All Payrolls (deduct full amount on every payroll)
                         </option>
                         <option value="first_payroll" {{ old('distribution_method', $deduction->distribution_method) === 'first_payroll' ? 'selected' : '' }}>
@@ -260,6 +255,13 @@
                         </option>
                     </select>
                 </div>
+
+            <!-- Deduction Distribution Settings -->
+            {{-- <div div class="mt-8 p-4 border border-gray-200 rounded-lg">
+                <h3 class="text-lg font-medium text-gray-900 mb-1">Deduction Distribution</h3>
+                <p class="text-sm text-gray-600 mb-4">Select how this deduction should be applied across payrolls for all pay frequencies.</p>
+                
+            
 
                 <!-- Distribution Method Descriptions -->
                 <div class="text-xs text-gray-600">
@@ -279,7 +281,9 @@
                         <li><strong>Distribute Equally:</strong> Semi-monthly 1st cutoff: ₱400.00, 2nd cutoff: ₱400.00</li>
                     </ul>
                 </div>
-            </div>            <div class="mt-8 flex justify-end space-x-3">
+            </div>           --}}
+            
+            <div class="mt-8 flex justify-end space-x-3">
                 <a href="{{ route('settings.deductions.index') }}" 
                    class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
                     Cancel

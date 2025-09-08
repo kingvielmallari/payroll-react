@@ -205,6 +205,17 @@
                                                 $detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end), // monthlyBasicSalary - DYNAMIC
                                                 $payFrequency // payFrequency
                                             );
+                                            
+                                            // Apply deduction distribution logic to match backend calculations
+                                            if ($calculatedAmount > 0) {
+                                                $calculatedAmount = $setting->calculateDistributedAmount(
+                                                    $calculatedAmount,
+                                                    $payroll->period_start,
+                                                    $payroll->period_end,
+                                                    $detail->employee->pay_schedule ?? $payFrequency
+                                                );
+                                            }
+                                            
                                             $detailDeductionTotal += $calculatedAmount;
                                         }
                                     } else {
@@ -1923,21 +1934,30 @@
                                                                 $payFrequency = 'monthly';
                                                             }
                                                             
-                                                            // Use the calculated taxable income from the previous column
-                                                            $calculatedAmount = $setting->calculateDeduction(
-                                                                $basicPay, 
-                                                                $overtimePay, 
-                                                                $bonuses, 
-                                                                $allowances, 
-                                                                $grossPayForDeduction,
-                                                                $taxableIncome,  // Pass calculated taxable income
-                                                                null, // netPay (not used for now)
-                                                                $detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end), // monthlyBasicSalary - DYNAMIC
-                                                                $payFrequency // Pass auto-detected pay frequency
-                                                            );
-                                                            $calculatedDeductionTotal += $calculatedAmount;
-                                                            
-                                                            // Debug info for PhilHealth only
+                                            // Use the calculated taxable income from the previous column
+                                            $calculatedAmount = $setting->calculateDeduction(
+                                                $basicPay, 
+                                                $overtimePay, 
+                                                $bonuses, 
+                                                $allowances, 
+                                                $grossPayForDeduction,
+                                                $taxableIncome,  // Pass calculated taxable income
+                                                null, // netPay (not used for now)
+                                                $detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end), // monthlyBasicSalary - DYNAMIC
+                                                $payFrequency // Pass auto-detected pay frequency
+                                            );
+                                            
+                                            // Apply deduction distribution logic to match backend calculations
+                                            if ($calculatedAmount > 0) {
+                                                $calculatedAmount = $setting->calculateDistributedAmount(
+                                                    $calculatedAmount,
+                                                    $payroll->period_start,
+                                                    $payroll->period_end,
+                                                    $detail->employee->pay_schedule ?? $payFrequency
+                                                );
+                                            }
+                                            
+                                            $calculatedDeductionTotal += $calculatedAmount;                                                            // Debug info for PhilHealth only
                                                             $debugInfo = '';
                                                             if (strtolower($setting->name) === 'philhealth' || strtolower($setting->code) === 'philhealth') {
                                                                 // Get the pay basis being used by this setting
@@ -2177,7 +2197,7 @@
                                                         
                                                         // Apply per-minute calculation for overtime (same as Overtime column)
                                                         $timeLogInstance = new \App\Models\TimeLog();
-                                                        $overtimePayForNet += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $overtimeHours);
+                                                            $overtimePayForNet += $timeLogInstance->calculatePerMinuteAmount($hourlyRate, $overtimeMultiplier, $overtimeHours);
                                                     }
                                                 }
                                                 
@@ -2272,6 +2292,17 @@
                                                         $detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end), // monthlyBasicSalary - DYNAMIC
                                                         $payFrequency // Pass auto-detected pay frequency
                                                     );
+                                                    
+                                                    // Apply deduction distribution logic to match backend calculations
+                                                    if ($calculatedAmount > 0) {
+                                                        $calculatedAmount = $setting->calculateDistributedAmount(
+                                                            $calculatedAmount,
+                                                            $payroll->period_start,
+                                                            $payroll->period_end,
+                                                            $detail->employee->pay_schedule ?? $payFrequency
+                                                        );
+                                                    }
+                                                    
                                                     $detailDeductionTotal += $calculatedAmount;
                                                 }
                                                 // Add cash advance deductions for dynamic payrolls

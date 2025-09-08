@@ -219,7 +219,7 @@
                     </label>
                     <select name="distribution_method" id="distribution_method" 
                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        <option value="" {{ old('distribution_method') === '' ? 'selected' : '' }}>
+                        <option value="" {{ old('distribution_method') === null || old('distribution_method') === '' ? 'selected' : '' }}>
                             All Payrolls (deduct full amount on every payroll)
                         </option>
                         <option value="first_payroll" {{ old('distribution_method') === 'first_payroll' ? 'selected' : '' }}>
