@@ -51,6 +51,7 @@ class DeductionTaxSettingController extends Controller
             'apply_to_gross_pay' => 'boolean',
             'apply_to_taxable_income' => 'boolean',
             'apply_to_net_pay' => 'boolean',
+            'apply_to_monthly_basic_salary' => 'boolean',
             'employer_share_rate' => 'nullable|numeric|min:0|max:100',
             'employer_share_fixed' => 'nullable|numeric|min:0',
             'share_with_employer' => 'boolean',
@@ -117,6 +118,7 @@ class DeductionTaxSettingController extends Controller
             'apply_to_gross_pay' => 'boolean',
             'apply_to_taxable_income' => 'boolean',
             'apply_to_net_pay' => 'boolean',
+            'apply_to_monthly_basic_salary' => 'boolean',
             'employer_share_rate' => 'nullable|numeric|min:0|max:100',
             'employer_share_fixed' => 'nullable|numeric|min:0',
             'share_with_employer' => 'boolean',
@@ -277,7 +279,7 @@ class DeductionTaxSettingController extends Controller
                             'base_tax' => number_format((float)$item->base_tax, 2),
                             'tax_rate' => number_format((float)$item->tax_rate, 2),
                             'excess_over' => number_format((float)$item->excess_over, 2),
-                            'formatted_range' => $isAndAbove 
+                            'formatted_range' => $isAndAbove
                                 ? '₱' . number_format((float)$item->range_start, 2) . ' and above'
                                 : '₱' . number_format((float)$item->range_start, 2) . ' - ₱' . number_format((float)$item->range_end, 2),
                         ];
