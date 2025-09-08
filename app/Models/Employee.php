@@ -422,10 +422,34 @@ class Employee extends Model
     }
 
     /**
+     * Get working days for a specific period
+     */
+    public function getWorkingDaysForPeriod(\Carbon\Carbon $startDate, \Carbon\Carbon $endDate)
+    {
+        $workingDays = 0;
+        $current = $startDate->copy();
+
+        while ($current <= $endDate) {
+            if ($this->isWorkingDay($current)) {
+                $workingDays++;
+            }
+            $current->addDay();
+        }
+
+        return $workingDays;
+    }
+
+    /**
      * Check if a given date is a working day for this employee
      */
     public function isWorkingDay(\Carbon\Carbon $date)
     {
+        // First check if employee has a daySchedule relationship
+        if ($this->daySchedule) {
+            return $this->daySchedule->isWorkingDay($date);
+        }
+
+        // Fallback to day_schedule column
         $dayOfWeek = $date->dayOfWeek; // 0=Sunday, 1=Monday, ..., 6=Saturday
 
         return match ($this->day_schedule) {
@@ -474,5 +498,104 @@ class Employee extends Model
         }
 
         return $totalHours;
+    }
+
+    /**
+     * Calculate Monthly Basic Salary (MBS) dynamically based on fixed_rate and rate_type
+     * 
+     * @param \Carbon\Carbon $periodStart - For daily/hourly calculations that need working days/hours
+     * @param \Carbon\Carbon $periodEnd - For daily/hourly calculations that need working days/hours
+     * @return float
+     */
+    public function calculateMonthlyBasicSalary(\Carbon\Carbon $periodStart = null, \Carbon\Carbon $periodEnd = null)
+    {
+        // If no fixed_rate or rate_type, return 0 as requested
+        if (!$this->fixed_rate || !$this->rate_type) {
+            return 0;
+        }
+
+        $fixedRate = $this->fixed_rate;
+
+        switch ($this->rate_type) {
+            case 'monthly':
+                // If fixed monthly rate = MBS/basic salary same fixed monthly rate amount
+                return $fixedRate;
+
+            case 'semi_monthly':
+            case 'semi-monthly':
+                // If fixed semi monthly rate = MBS/basic salary is fixed semi-monthly rate amount * 2
+                return $fixedRate * 2;
+
+            case 'weekly':
+                // If fixed weekly = MBS/basic salary is fixed weekly rate * 52 weeks = yearly amount / 12 months
+                return ($fixedRate * 52) / 12;
+
+            case 'daily':
+                // If fixed daily rate = MBS/basic salary is fixed daily rate amount * emp total work days in a FULL MONTH
+                // MBS should always be calculated for a full month, not just the payroll period
+
+                if ($periodStart && $periodEnd) {
+                    // Calculate working days for the full month (not just the payroll period)
+                    // Get the start and end of the month that contains the period
+                    $monthStart = $periodStart->copy()->startOfMonth();
+                    $monthEnd = $periodStart->copy()->endOfMonth();
+                    $workingDaysInMonth = $this->getWorkingDaysForPeriod($monthStart, $monthEnd);
+                    return $fixedRate * $workingDaysInMonth;
+                } else {
+                    // Fallback: Use average 22 working days per month
+                    return $fixedRate * 22;
+                }
+
+            case 'hourly':
+                // If fixed hourly rate = MBS/basic salary is fixed hourly rate amount * emp total hours * emp total work days in a FULL MONTH
+                // MBS should always be calculated for a full month, not just the payroll period
+
+                if ($periodStart && $periodEnd) {
+                    // Get expected hours per day from time schedule
+                    $hoursPerDay = 8; // Default
+                    if ($this->timeSchedule) {
+                        $startTime = \Carbon\Carbon::parse($this->timeSchedule->start_time);
+                        $endTime = \Carbon\Carbon::parse($this->timeSchedule->end_time);
+                        $breakDuration = 0;
+
+                        if ($this->timeSchedule->break_duration_minutes) {
+                            $breakDuration = $this->timeSchedule->break_duration_minutes / 60;
+                        } elseif ($this->timeSchedule->break_start && $this->timeSchedule->break_end) {
+                            $breakStart = \Carbon\Carbon::parse($this->timeSchedule->break_start);
+                            $breakEnd = \Carbon\Carbon::parse($this->timeSchedule->break_end);
+                            $breakDuration = $breakEnd->diffInHours($breakStart);
+                        }
+
+                        $hoursPerDay = $endTime->diffInHours($startTime) - $breakDuration;
+                    }
+
+                    // Calculate working days for the full month (not just the payroll period)
+                    // Get the start and end of the month that contains the period
+                    $monthStart = $periodStart->copy()->startOfMonth();
+                    $monthEnd = $periodStart->copy()->endOfMonth();
+                    $workingDaysInMonth = $this->getWorkingDaysForPeriod($monthStart, $monthEnd);
+
+                    return $fixedRate * $hoursPerDay * $workingDaysInMonth;
+                } else {
+                    // Fallback: Use average 8 hours * 22 working days per month
+                    return $fixedRate * 8 * 22;
+                }
+
+            default:
+                // Fallback to basic_salary if rate_type is not recognized
+                return $this->basic_salary ?? 0;
+        }
+    }
+
+    /**
+     * Get Monthly Basic Salary for display (alias method)
+     * 
+     * @param \Carbon\Carbon $periodStart
+     * @param \Carbon\Carbon $periodEnd
+     * @return float
+     */
+    public function getMonthlyBasicSalary(\Carbon\Carbon $periodStart = null, \Carbon\Carbon $periodEnd = null)
+    {
+        return $this->calculateMonthlyBasicSalary($periodStart, $periodEnd);
     }
 }

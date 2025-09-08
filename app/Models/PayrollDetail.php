@@ -132,7 +132,16 @@ class PayrollDetail extends Model
 
             foreach ($deductionSettings as $setting) {
                 if ($setting->tax_table_type !== 'withholding_tax') {
-                    $amount = $setting->calculateDeduction($basicSalary, $this->overtime_pay, $this->bonuses, $this->allowances, $grossPay);
+                    $amount = $setting->calculateDeduction(
+                        $basicSalary,
+                        $this->overtime_pay,
+                        $this->bonuses,
+                        $this->allowances,
+                        $grossPay,
+                        null, // taxableIncome
+                        null, // netPay  
+                        $this->employee->calculateMonthlyBasicSalary($this->payroll->period_start ?? null, $this->payroll->period_end ?? null) // monthlyBasicSalary - DYNAMIC
+                    );
 
                     // Map to appropriate field based on code
                     switch ($setting->code) {
@@ -178,7 +187,16 @@ class PayrollDetail extends Model
                     $salaryBase = $this->getSalaryBaseForCalculation($setting);
 
                     // Calculate employee deduction amount (already considers sharing)
-                    $employeeDeduction = $setting->calculateDeduction($salaryBase, $this->overtime_pay, $this->bonuses, $this->allowances, $grossPay);
+                    $employeeDeduction = $setting->calculateDeduction(
+                        $salaryBase,
+                        $this->overtime_pay,
+                        $this->bonuses,
+                        $this->allowances,
+                        $grossPay,
+                        null, // taxableIncome
+                        null, // netPay  
+                        $this->employee->calculateMonthlyBasicSalary($this->payroll->period_start ?? null, $this->payroll->period_end ?? null) // monthlyBasicSalary - DYNAMIC
+                    );
 
                     // Map to appropriate field based on code
                     switch ($setting->code) {
@@ -243,7 +261,9 @@ class PayrollDetail extends Model
                     $this->bonuses,
                     $this->allowances,
                     $this->gross_pay,
-                    $taxableIncome
+                    $taxableIncome,
+                    null, // netPay
+                    $this->employee->calculateMonthlyBasicSalary($this->payroll->period_start ?? null, $this->payroll->period_end ?? null) // monthlyBasicSalary - DYNAMIC
                 );
             }
         }

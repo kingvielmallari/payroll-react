@@ -5766,7 +5766,7 @@ class PayrollController extends Controller
                         $payBasisAmount = $detail->net_pay ?? 0;
                         $payBasisName = 'netpay';
                     } elseif ($setting->apply_to_monthly_basic_salary) {
-                        $payBasisAmount = $employee->basic_salary ?? 0;
+                        $payBasisAmount = $employee->calculateMonthlyBasicSalary($payroll->period_start ?? null, $payroll->period_end ?? null); // Dynamic MBS
                         $payBasisName = 'mbs';
                     } else {
                         // Calculate component-based pay basis
@@ -5811,7 +5811,7 @@ class PayrollController extends Controller
                         $grossPay ?? ($detail->gross_pay ?? 0), // Use passed grossPay if available
                         null, // taxableIncome
                         null, // netPay
-                        $employee->basic_salary, // monthlyBasicSalary
+                        $employee->calculateMonthlyBasicSalary($detail->payroll->period_start ?? null, $detail->payroll->period_end ?? null), // monthlyBasicSalary - DYNAMIC
                         $payFrequency // Add pay frequency parameter
                     );
 

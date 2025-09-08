@@ -171,8 +171,10 @@
                                                 foreach($allowanceBonusSettings as $abSetting) {
                                                     if ($abSetting->is_taxable) {
                                                         $calculatedAllowanceAmount = $abSetting->calculateAmount(
-                                                            $basicPay, $overtimePay, $bonuses, $allowances, $calculatedGrossPayForSummary,
-                                                            null, null, $detail->employee->basic_salary
+                                                            $basicPay, // Use calculated basic pay for the period
+                                                            $detail->employee->daily_rate ?? 0, // dailyRate
+                                                            null, // workingDays (will be calculated inside if needed)
+                                                            $detail->employee // employee object
                                                         );
                                                         $taxableIncomeForSummary += $calculatedAllowanceAmount;
                                                     }
@@ -200,7 +202,7 @@
                                                 $calculatedGrossPayForSummary, // grossPay
                                                 $taxableIncomeForSummary, // taxableIncome
                                                 null, // netPay
-                                                $detail->employee->basic_salary, // monthlyBasicSalary
+                                                $detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end), // monthlyBasicSalary - DYNAMIC
                                                 $payFrequency // payFrequency
                                             );
                                             $detailDeductionTotal += $calculatedAmount;
@@ -239,7 +241,7 @@
                         </div>
                     </div>
 
-                    <div class="mt-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="mt-6 grid grid-cols-1 md:grid-cols-5 gap-6">
                         <div>
                             <h4 class="text-sm font-medium text-gray-900">Status</h4>
                             <div class="mt-1 flex items-center space-x-2">
@@ -278,6 +280,90 @@
                                     @endif
                                 @endif
                             </div>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Payroll Frequency</h4>
+                            @php
+                                // Get the first employee's pay schedule to determine the frequency display
+                                $firstEmployee = $payroll->payrollDetails->first()?->employee;
+                                $paySchedule = $firstEmployee?->pay_schedule ?? 'weekly';
+                                
+                                // Pay frequency display logic
+                                $payFrequencyDisplay = '';
+                                $periodStart = \Carbon\Carbon::parse($payroll->period_start);
+                                $periodEnd = \Carbon\Carbon::parse($payroll->period_end);
+                                
+                                switch ($paySchedule) {
+                                    case 'semi_monthly':
+                                    case 'semi-monthly':
+                                        // Determine if it's 1st or 2nd cutoff based on the day
+                                        $cutoff = $periodStart->day <= 15 ? '1st' : '2nd';
+                                        $payFrequencyDisplay = "Semi-Monthly - {$cutoff} Cutoff";
+                                        break;
+                                        
+                                    case 'monthly':
+                                        $monthName = $periodStart->format('F');
+                                        $payFrequencyDisplay = "Monthly - {$monthName}";
+                                        break;
+                                        
+                                    case 'weekly':
+                                        // Calculate which week of the month this is based on Sunday-Saturday weeks
+                                        // Find the Saturday that ends this week period
+                                        $saturdayEnd = $periodEnd->copy();
+                                        while ($saturdayEnd->dayOfWeek !== 6) { // 6 = Saturday
+                                            $saturdayEnd->addDay();
+                                        }
+                                        
+                                        // Find all Saturdays in this month to determine week number
+                                        $monthStart = $saturdayEnd->copy()->startOfMonth();
+                                        $weekNumber = 0;
+                                        $currentSaturday = $monthStart->copy();
+                                        
+                                        // Find first Saturday of the month
+                                        while ($currentSaturday->dayOfWeek !== 6) {
+                                            $currentSaturday->addDay();
+                                        }
+                                        
+                                        // Count Saturdays until we reach our target Saturday
+                                        while ($currentSaturday->lte($saturdayEnd)) {
+                                            $weekNumber++;
+                                            if ($currentSaturday->format('Y-m-d') === $saturdayEnd->format('Y-m-d')) {
+                                                break;
+                                            }
+                                            $currentSaturday->addWeek();
+                                        }
+                                        
+                                        $weekOrdinal = match($weekNumber) {
+                                            1 => '1st',
+                                            2 => '2nd', 
+                                            3 => '3rd',
+                                            4 => '4th',
+                                            default => '5th'
+                                        };
+                                        $payFrequencyDisplay = "Weekly - {$weekOrdinal}";
+                                        break;
+                                        
+                                    case 'daily':
+                                        $dayOfMonth = $periodStart->day;
+                                        $dayOrdinal = match($dayOfMonth % 10) {
+                                            1 => $dayOfMonth . 'st',
+                                            2 => $dayOfMonth . 'nd', 
+                                            3 => $dayOfMonth . 'rd',
+                                            default => $dayOfMonth . 'th'
+                                        };
+                                        // Handle special cases for 11th, 12th, 13th
+                                        if (in_array($dayOfMonth, [11, 12, 13])) {
+                                            $dayOrdinal = $dayOfMonth . 'th';
+                                        }
+                                        $payFrequencyDisplay = "Daily - {$dayOrdinal}";
+                                        break;
+                                        
+                                    default:
+                                        $payFrequencyDisplay = ucfirst(str_replace('_', '-', $paySchedule));
+                                        break;
+                                }
+                            @endphp
+                            <p class="mt-1 text-sm text-gray-600">{{ $payFrequencyDisplay }}</p>
                         </div>
                         <div>
                             <h4 class="text-sm font-medium text-gray-900">Type</h4>
@@ -603,6 +689,24 @@
                                                 <div class="text-sm text-gray-500">
                                                     {{ $detail->employee->position->title ?? 'No Position' }}
                                                 </div>
+                                                @if($detail->employee->fixed_rate && $detail->employee->rate_type)
+                                                <div class="flex items-center gap-1 ">
+                                                    <span class="text-sm text-blue-700">
+                                                        ₱{{ number_format($detail->employee->fixed_rate, 2) }}/{{ ucfirst(str_replace('_', ' ', $detail->employee->rate_type)) }}
+                                                    </span>
+                                                    <span class="inline-flex items-center p-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700">
+                                                        Fixed Rate
+                                                    </span>
+                                                </div>
+                                                <div class="flex items-center gap-1">
+                                                    <span class="text-sm font-small text-yellow-700">
+                                                        ₱{{ number_format($detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end), 2) }}
+                                                    </span>
+                                                    <span class="inline-flex items-center p-1 text-xs font-small rounded-full bg-yellow-50 text-yellow-700">
+                                                        MBS
+                                                    </span>
+                                                </div>
+                                                @endif
                                             </div>
                                         </div>
                                     </td>
@@ -1828,7 +1932,7 @@
                                                                 $grossPayForDeduction,
                                                                 $taxableIncome,  // Pass calculated taxable income
                                                                 null, // netPay (not used for now)
-                                                                $detail->employee->basic_salary, // monthlyBasicSalary
+                                                                $detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end), // monthlyBasicSalary - DYNAMIC
                                                                 $payFrequency // Pass auto-detected pay frequency
                                                             );
                                                             $calculatedDeductionTotal += $calculatedAmount;
@@ -1848,7 +1952,7 @@
                                                                 if ($setting->apply_to_basic_pay) $salaryUsed = $basicPay;
                                                                 elseif ($setting->apply_to_gross_pay) $salaryUsed = $grossPayForDeduction;
                                                                 elseif ($setting->apply_to_taxable_income) $salaryUsed = $taxableIncome;
-                                                                elseif ($setting->apply_to_monthly_basic_salary) $salaryUsed = $detail->employee->basic_salary;
+                                                                elseif ($setting->apply_to_monthly_basic_salary) $salaryUsed = $detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end);
                                                                 elseif ($setting->apply_to_net_pay) $salaryUsed = 0; // calculated later
                                                                 
                                                                 // Find matching tax table using correct column names
@@ -2165,7 +2269,7 @@
                                                         $grossPayForDeduction,
                                                         $taxableIncome,  // Pass calculated taxable income
                                                         null, // netPay (not used for now)
-                                                        $detail->employee->basic_salary, // monthlyBasicSalary
+                                                        $detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end), // monthlyBasicSalary - DYNAMIC
                                                         $payFrequency // Pass auto-detected pay frequency
                                                     );
                                                     $detailDeductionTotal += $calculatedAmount;
@@ -2502,15 +2606,63 @@
                                                 $timeSchedule = $detail->employee->timeSchedule;
                                             @endphp
                                             @if($daySchedule && $timeSchedule)
-                                                <div class="text-xs text-gray-600">{{ $daySchedule->days_display }}</div>
-                                                <div class="text-xs text-gray-600">{{ $timeSchedule->time_range_display }}</div>
+                                                @php
+                                                    // Calculate working days for the payroll period
+                                                    $workingDays = $detail->employee->getWorkingDaysForPeriod($payroll->period_start, $payroll->period_end);
+                                                    $totalHours = $timeSchedule->total_hours ?? 8; // Get from time schedule or default to 8
+                                                @endphp
+                                                <div class="text-xs text-gray-600">{{ $daySchedule->days_display }} ({{ $workingDays }}days)</div>
+                                                <div class="text-xs text-gray-600">{{ $timeSchedule->time_range_display }} ({{ $totalHours }}h)</div>
                                             @else
                                                 <div class="text-xs text-gray-600">No schedule assigned</div>
                                             @endif
                                             <div class="text-xs text-blue-600">
-                                ₱{{ number_format($detail->hourly_rate ?? 0, 2) }}/hr {{-- Use calculated hourly rate --}}
-                                <br>(₱{{ number_format(($detail->hourly_rate ?? 0) / 60, 4) }}/min) {{-- Use calculated hourly rate --}}
-                            </div>
+                                                @php
+                                                    $employee = $detail->employee;
+                                                    $rateDisplay = '';
+                                                    
+                                                    if($employee->fixed_rate && $employee->rate_type) {
+                                                        switch($employee->rate_type) {
+                                                            case 'monthly':
+                                                                // Monthly rate - show per day (assuming 22 working days)
+                                                                $dailyRate = $employee->fixed_rate / 22;
+                                                                $rateDisplay = '₱' . number_format($dailyRate, 2) . '/day';
+                                                                break;
+                                                            case 'semi_monthly':
+                                                            case 'semi-monthly':
+                                                                // Semi-monthly rate - show per day (assuming 11 working days per semi-month)
+                                                                $dailyRate = $employee->fixed_rate / 11;
+                                                                $rateDisplay = '₱' . number_format($dailyRate, 2) . '/day';
+                                                                break;
+                                                            case 'weekly':
+                                                                // Weekly rate - show per day (assuming 5 working days)
+                                                                $dailyRate = $employee->fixed_rate / 5;
+                                                                $rateDisplay = '₱' . number_format($dailyRate, 2) . '/day';
+                                                                break;
+                                                            case 'daily':
+                                                                // Daily rate - show per hour (assuming 8 working hours)
+                                                                $hourlyRate = $employee->fixed_rate / 8;
+                                                                $rateDisplay = '₱' . number_format($hourlyRate, 2) . '/hr';
+                                                                break;
+                                                            case 'hourly':
+                                                                // Hourly rate - show per minute
+                                                                $minuteRate = $employee->fixed_rate / 60;
+                                                                $rateDisplay = '₱' . number_format($minuteRate, 4) . '/min';
+                                                                break;
+                                                            default:
+                                                                // Fallback to hourly rate from database if available
+                                                                if($detail->hourly_rate) {
+                                                                    $rateDisplay = '₱' . number_format($detail->hourly_rate, 2) . '/hr';
+                                                                }
+                                                                break;
+                                                        }
+                                                    } elseif($detail->hourly_rate) {
+                                                        // Fallback to hourly rate from database
+                                                        $rateDisplay = '₱' . number_format($detail->hourly_rate, 2) . '/hr';
+                                                    }
+                                                @endphp
+                                                {{ $rateDisplay }}
+                                            </div>
                                         </div>
                                     </td>
                                     @php 

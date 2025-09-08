@@ -51,7 +51,17 @@
                         </div>
                         <div class="bg-green-50 p-4 rounded-lg">
                             <h4 class="text-sm font-medium text-green-900">Basic Salary</h4>
-                            <p class="text-2xl font-bold text-green-700">₱{{ number_format($employee->basic_salary, 2) }}</p>
+                            @if($employee->fixed_rate && $employee->rate_type)
+                                @php
+                                    // Use current month for MBS calculation to get accurate working days
+                                    $currentMonthStart = now()->startOfMonth();
+                                    $currentMonthEnd = now()->endOfMonth();
+                                @endphp
+                                <p class="text-2xl font-bold text-green-700">₱{{ number_format($employee->calculateMonthlyBasicSalary($currentMonthStart, $currentMonthEnd), 2) }}</p>
+                                <p class="text-xs text-green-600">(Dynamic from {{ ucfirst(str_replace('_', '-', $employee->rate_type)) }})</p>
+                            @else
+                                <p class="text-2xl font-bold text-green-700">₱{{ number_format($employee->basic_salary, 2) }}</p>
+                            @endif
                         </div>
                         <div class="bg-purple-50 p-4 rounded-lg">
                             <h4 class="text-sm font-medium text-purple-900">This Month's Logs</h4>
@@ -158,7 +168,19 @@
                         <div class="space-y-3">
                             <div class="flex justify-between">
                                 <span class="text-sm font-medium text-gray-500">Basic Salary (Monthly):</span>
-                                <span class="text-sm font-bold text-green-600">₱{{ number_format($employee->basic_salary, 2) }}</span>
+                                @if($employee->fixed_rate && $employee->rate_type)
+                                    @php
+                                        // Use current month for MBS calculation to get accurate working days
+                                        $currentMonthStart = now()->startOfMonth();
+                                        $currentMonthEnd = now()->endOfMonth();
+                                    @endphp
+                                    <span class="text-sm font-bold text-green-600">₱{{ number_format($employee->calculateMonthlyBasicSalary($currentMonthStart, $currentMonthEnd), 2) }}</span>
+                                    <span class="text-xs text-gray-500 block text-right">
+                                        (Calculated from ₱{{ number_format($employee->fixed_rate, 2) }}/{{ ucfirst(str_replace('_', '-', $employee->rate_type)) }})
+                                    </span>
+                                @else
+                                    <span class="text-sm font-bold text-green-600">₱{{ number_format($employee->basic_salary, 2) }}</span>
+                                @endif
                             </div>
                             @if($employee->daily_rate)
                             <div class="flex justify-between">
