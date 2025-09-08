@@ -19,6 +19,9 @@ class DeductionTaxSetting extends Model
         'calculation_type',
         'tax_table_type',
         'pay_frequency',
+        'distribution_method',
+        'enable_proration',
+        'custom_distribution_percentages',
         'rate_percentage',
         'fixed_amount',
         'bracket_rates',
@@ -34,17 +37,27 @@ class DeductionTaxSetting extends Model
         'apply_to_taxable_income',
         'apply_to_net_pay',
         'apply_to_monthly_basic_salary',
+        'apply_to_monthly_basic_salary_with_allowances',
         'employer_share_rate',
         'employer_share_fixed',
+        'employee_share_percentage',
+        'employer_share_percentage',
+        'sharing_notes',
         'share_with_employer',
         'is_active',
         'is_system_default',
         'sort_order',
         'benefit_eligibility',
+        'deduction_frequency',
+        'semi_monthly_period',
+        'frequency_notes',
+        'deduct_on_monthly_payroll',
+        'distribution_method',
     ];
 
     protected $casts = [
         'bracket_rates' => 'array',
+        'custom_distribution_percentages' => 'array',
         'rate_percentage' => 'decimal:4',
         'fixed_amount' => 'decimal:2',
         'minimum_amount' => 'decimal:2',
@@ -52,6 +65,8 @@ class DeductionTaxSetting extends Model
         'salary_cap' => 'decimal:2',
         'employer_share_rate' => 'decimal:4',
         'employer_share_fixed' => 'decimal:2',
+        'employee_share_percentage' => 'decimal:4',
+        'employer_share_percentage' => 'decimal:4',
         'apply_to_regular' => 'boolean',
         'apply_to_overtime' => 'boolean',
         'apply_to_bonus' => 'boolean',
@@ -61,9 +76,12 @@ class DeductionTaxSetting extends Model
         'apply_to_taxable_income' => 'boolean',
         'apply_to_net_pay' => 'boolean',
         'apply_to_monthly_basic_salary' => 'boolean',
+        'apply_to_monthly_basic_salary_with_allowances' => 'boolean',
         'share_with_employer' => 'boolean',
         'is_active' => 'boolean',
         'is_system_default' => 'boolean',
+        'enable_proration' => 'boolean',
+        'deduct_on_monthly_payroll' => 'boolean',
     ];
 
     /**
@@ -88,6 +106,109 @@ class DeductionTaxSetting extends Model
     public function scopeGovernment($query)
     {
         return $query->where('type', 'government');
+    }
+
+    /**
+     * Check if this deduction should be applied for a specific payroll period
+     * based on the distribution settings
+     */
+    public function shouldApplyForPeriod($payrollStart, $payrollEnd, $employeePaySchedule = null)
+    {
+        // If no distribution method is set (empty/null), apply to all payrolls (default behavior)
+        if (empty($this->distribution_method)) {
+            return true;
+        }
+
+        // For all pay frequencies, apply the same distribution logic
+        $periodStart = \Carbon\Carbon::parse($payrollStart);
+        $periodEnd = \Carbon\Carbon::parse($payrollEnd);
+
+        switch ($this->distribution_method) {
+            case 'first_payroll':
+                return $this->isFirstPayrollOfMonth($periodStart, $periodEnd);
+
+            case 'last_payroll':
+                return $this->isLastPayrollOfMonth($periodStart, $periodEnd);
+
+            case 'distribute_equally':
+                return true; // Will be handled in calculateDistributedAmount
+
+            default:
+                return true; // Default: apply to all payrolls
+        }
+    }
+
+    /**
+     * Calculate the distributed deduction amount for a specific payroll period
+     */
+    public function calculateDistributedAmount($originalAmount, $payrollStart, $payrollEnd, $employeePaySchedule = null)
+    {
+        // If this deduction shouldn't be applied for this period, return 0
+        if (!$this->shouldApplyForPeriod($payrollStart, $payrollEnd, $employeePaySchedule)) {
+            return 0;
+        }
+
+        // If distribution method is not 'distribute_equally', return full amount
+        if ($this->distribution_method !== 'distribute_equally') {
+            return $originalAmount;
+        }
+
+        // For distribute equally, calculate the number of payrolls in the month and divide
+        $periodStart = \Carbon\Carbon::parse($payrollStart);
+        $payrollsInMonth = $this->getPayrollCountInMonth($periodStart, $employeePaySchedule);
+
+        return $payrollsInMonth > 0 ? round($originalAmount / $payrollsInMonth, 2) : $originalAmount;
+    }
+
+    /**
+     * Check if the given period is the first payroll of the month
+     */
+    private function isFirstPayrollOfMonth($periodStart, $periodEnd)
+    {
+        $monthStart = $periodStart->copy()->startOfMonth();
+
+        // For semi-monthly: first payroll typically covers 1st to 15th
+        if ($periodStart->day <= 15 && $periodEnd->day <= 15) {
+            return true;
+        }
+
+        // For weekly/daily: check if this is the first period that starts in this month
+        return $periodStart->day <= 7;
+    }
+
+    /**
+     * Check if the given period is the last payroll of the month
+     */
+    private function isLastPayrollOfMonth($periodStart, $periodEnd)
+    {
+        $monthEnd = $periodStart->copy()->endOfMonth();
+
+        // For semi-monthly: last payroll typically covers 16th to end of month
+        if ($periodStart->day > 15 && $periodEnd->day >= $monthEnd->day - 5) {
+            return true;
+        }
+
+        // For weekly/daily: check if this period ends near or at month end
+        return $periodEnd->day >= $monthEnd->day - 7;
+    }
+
+    /**
+     * Get the estimated number of payrolls in a month for a given pay schedule
+     */
+    private function getPayrollCountInMonth($date, $paySchedule)
+    {
+        switch ($paySchedule) {
+            case 'semi_monthly':
+            case 'semi-monthly':
+                return 2;
+            case 'weekly':
+                return 4; // Approximate
+            case 'daily':
+                return $date->daysInMonth; // Working days in month
+            case 'monthly':
+            default:
+                return 1;
+        }
     }
 
     /**

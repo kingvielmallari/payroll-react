@@ -1254,7 +1254,7 @@ class PayrollController extends Controller
             $payFrequency = 'monthly';
         }
 
-        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal, $payFrequency);
+        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal, $payFrequency, $periodStart, $periodEnd);
 
         $netPay = $totalGrossPay - $deductions['total'] - $lateDeductions - $undertimeDeductions - $cashAdvanceDeductions;
 
@@ -1625,7 +1625,7 @@ class PayrollController extends Controller
     /**
      * Calculate deductions for an employee using dynamic settings
      */
-    private function calculateDeductions($employee, $grossPay, $basicPay = null, $overtimePay = 0, $allowances = 0, $bonuses = 0, $payFrequency = 'semi_monthly')
+    private function calculateDeductions($employee, $grossPay, $basicPay = null, $overtimePay = 0, $allowances = 0, $bonuses = 0, $payFrequency = 'semi_monthly', $periodStart = null, $periodEnd = null)
     {
         $basicPay = $basicPay ?? $grossPay;
         $deductions = [];
@@ -1641,10 +1641,21 @@ class PayrollController extends Controller
 
         $governmentTotal = 0;
 
-        // Calculate government deductions (SSS, PhilHealth, Pag-IBIG)
+        // Calculate government deductions (SSS, PhilHealth, Pag-IBIG) with distribution logic
         foreach ($deductionSettings as $setting) {
             if ($setting->tax_table_type !== 'withholding_tax') {
                 $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, null, null, $employee->basic_salary, $payFrequency);
+
+                // Apply deduction distribution logic if period dates are provided
+                if ($periodStart && $periodEnd && $amount > 0) {
+                    $originalAmount = $amount;
+                    $amount = $setting->calculateDistributedAmount(
+                        $originalAmount,
+                        $periodStart,
+                        $periodEnd,
+                        $employee->pay_schedule ?? $payFrequency
+                    );
+                }
 
                 if ($amount > 0) {
                     $deductions[$setting->code] = $amount;
@@ -1677,6 +1688,17 @@ class PayrollController extends Controller
 
         foreach ($taxSettings as $setting) {
             $amount = $setting->calculateDeduction($basicPay, $overtimePay, $bonuses, $allowances, $grossPay, $taxableIncome, null, $employee->basic_salary, $payFrequency);
+
+            // Apply deduction distribution logic for withholding tax if period dates are provided
+            if ($periodStart && $periodEnd && $amount > 0) {
+                $originalAmount = $amount;
+                $amount = $setting->calculateDistributedAmount(
+                    $originalAmount,
+                    $periodStart,
+                    $periodEnd,
+                    $employee->pay_schedule ?? $payFrequency
+                );
+            }
 
             if ($amount > 0) {
                 $deductions[$setting->code] = $amount;
@@ -5815,6 +5837,17 @@ class PayrollController extends Controller
                         $payFrequency // Add pay frequency parameter
                     );
 
+                    // Apply deduction distribution logic
+                    if ($payroll && $amount > 0) {
+                        $originalAmount = $amount;
+                        $amount = $setting->calculateDistributedAmount(
+                            $originalAmount,
+                            $payroll->period_start,
+                            $payroll->period_end,
+                            $employee->pay_schedule ?? $payFrequency
+                        );
+                    }
+
                     if ($amount > 0) {
                         $breakdown[] = [
                             'name' => $setting->name,
@@ -5845,6 +5878,17 @@ class PayrollController extends Controller
                         $employee->basic_salary, // monthlyBasicSalary
                         $payFrequency // Add pay frequency parameter
                     );
+
+                    // Apply deduction distribution logic for withholding tax
+                    if ($payroll && $amount > 0) {
+                        $originalAmount = $amount;
+                        $amount = $setting->calculateDistributedAmount(
+                            $originalAmount,
+                            $payroll->period_start,
+                            $payroll->period_end,
+                            $employee->pay_schedule ?? $payFrequency
+                        );
+                    }
 
                     if ($amount > 0) {
                         $breakdown[] = [

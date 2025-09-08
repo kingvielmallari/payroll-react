@@ -208,6 +208,55 @@
                 <p class="mt-1 text-xs text-gray-500">Choose which employees this deduction/tax setting applies to based on their benefit status.</p>
             </div>
 
+            <!-- Deduction Distribution Settings -->
+            <div class="mt-6 p-4 border border-gray-200 rounded-md bg-gray-50">
+                <h3 class="text-lg font-medium text-gray-900 mb-1">Deduction Distribution</h3>
+                <p class="text-sm text-gray-600 mb-4">Select how this deduction should be applied across payrolls for all pay frequencies.</p>
+                
+                <div class="mb-4">
+                    <label for="distribution_method" class="block text-sm font-medium text-gray-700 mb-2">
+                        Distribution Method - Select when to deduct:
+                    </label>
+                    <select name="distribution_method" id="distribution_method" 
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="" {{ old('distribution_method') === '' ? 'selected' : '' }}>
+                            All Payrolls (deduct full amount on every payroll)
+                        </option>
+                        <option value="first_payroll" {{ old('distribution_method') === 'first_payroll' ? 'selected' : '' }}>
+                            1st Payroll (full amount on first payroll of month, ₱0.00 on others)
+                        </option>
+                        <option value="last_payroll" {{ old('distribution_method') === 'last_payroll' ? 'selected' : '' }}>
+                            2nd Payroll (full amount on last payroll of month, ₱0.00 on others)
+                        </option>
+                        <option value="distribute_equally" {{ old('distribution_method') === 'distribute_equally' ? 'selected' : '' }}>
+                            Distribute Equally (split amount evenly across all payrolls in month)
+                        </option>
+                    </select>
+                </div>
+
+                <!-- Distribution Method Descriptions -->
+                <div class="text-xs text-gray-600">
+                    <strong>All Payrolls:</strong> Uses existing calculation logic - deducts the full computed amount on every generated payroll<br>
+                    <strong>1st Payroll:</strong> For semi-monthly, weekly, or daily employees - deducts full amount only on first payroll of the month<br>
+                    <strong>2nd Payroll:</strong> For semi-monthly, weekly, or daily employees - deducts full amount only on last payroll of the month<br>
+                    <strong>Distribute Equally:</strong> For semi-monthly, weekly, or daily employees - splits the monthly deduction amount evenly across all payrolls in the month
+                </div>
+
+                <!-- Examples -->
+                <div class="mt-4 p-3 bg-blue-50 rounded-md">
+                    <p class="text-sm text-blue-800 font-medium">Examples for SSS ₱800.00 monthly deduction:</p>
+                    <ul class="text-xs text-blue-700 mt-1 space-y-1">
+                        <li><strong>All Payrolls:</strong> Every payroll: ₱800.00 (existing behavior)</li>
+                        <li><strong>1st Payroll:</strong> Semi-monthly 1st cutoff: ₱800.00, 2nd cutoff: ₱0.00</li>
+                        <li><strong>2nd Payroll:</strong> Semi-monthly 1st cutoff: ₱0.00, 2nd cutoff: ₱800.00</li>
+                        <li><strong>Distribute Equally:</strong> Semi-monthly 1st cutoff: ₱400.00, 2nd cutoff: ₱400.00</li>
+                    </ul>
+                </div>
+            </div>
+                    </ul>
+                </div>
+            </div>
+
             <div class="mt-8 flex justify-end space-x-3">
                 <a href="{{ route('settings.deductions.index') }}" 
                    class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
