@@ -2427,6 +2427,10 @@ class PayrollController extends Controller
                 if ($logType === 'regular_workday') {
                     $basicPay += $regularPayAmount; // Only regular pay to basic pay
                     $overtimePay += $overtimePayAmount; // Overtime pay separate
+                } elseif ($logType === 'suspension') {
+                    // Suspension pay goes to basic pay (it's part of regular pay but with different rate)
+                    $basicPay += $regularPayAmount; // Suspension regular pay to basic pay
+                    $overtimePay += $overtimePayAmount; // Overtime pay separate
                 } elseif ($logType === 'rest_day') {
                     $restPay += ($regularPayAmount + $overtimePayAmount); // Rest day pay includes both
                 } elseif (in_array($logType, ['special_holiday', 'regular_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
@@ -5246,6 +5250,10 @@ class PayrollController extends Controller
                 if ($logType === 'regular_workday') {
                     $basicPay += $regularPayAmount + $nightDiffRegularPayAmount; // Only regular pay goes to basic
                     $overtimePay += $overtimePayAmount; // All overtime goes to overtime column
+                } elseif ($logType === 'suspension') {
+                    // Suspension pay goes to basic pay (it's part of regular pay but with different rate)
+                    $basicPay += $regularPayAmount + $nightDiffRegularPayAmount; // Suspension regular hours pay to basic
+                    $overtimePay += $overtimePayAmount; // All overtime goes to overtime column
                 } elseif ($logType === 'rest_day') {
                     $restPay += $regularPayAmount + $nightDiffRegularPayAmount; // Only regular hours pay to rest day pay
                     $overtimePay += $overtimePayAmount; // All overtime goes to overtime column
@@ -7306,60 +7314,106 @@ class PayrollController extends Controller
         $breakdown = [];
         $hourlyRate = $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0, $periodStart, $periodEnd);
 
-        // Only include regular workday breakdown for basic pay
+        // Process regular workday hours first
         if (isset($timeBreakdown['regular_workday'])) {
             $regularData = $timeBreakdown['regular_workday'];
-            $regularHours = $regularData['regular_hours'];
-            $nightDiffRegularHours = $regularData['night_diff_regular_hours'] ?? 0;
+            $workdayHours = $regularData['regular_hours'];
+            $workdayNightDiffHours = $regularData['night_diff_regular_hours'] ?? 0;
 
-            // Regular Workday (without night differential)
-            if ($regularHours > 0) {
-                // Get rate configuration for regular workday
-                $rateConfig = $regularData['rate_config'] ?? null;
-                $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.01;
+            // Get rate configuration for regular workday
+            $rateConfig = $regularData['rate_config'] ?? null;
+            $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.01;
 
-                // Use consistent calculation: hourly rate * multiplier, then multiply by minutes
-                $actualMinutes = $regularHours * 60;
+            if ($workdayHours > 0) {
+                $actualMinutes = $workdayHours * 60;
                 $roundedMinutes = round($actualMinutes);
                 $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
-                $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
-                $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
+                $ratePerMinute = $adjustedHourlyRate / 60;
+                $amount = round($ratePerMinute * $roundedMinutes, 2);
 
                 $breakdown['Regular Workday'] = [
-                    'hours' => $regularHours,
-                    'minutes' => $roundedMinutes, // Add minutes for display
+                    'hours' => $workdayHours,
+                    'minutes' => $roundedMinutes,
                     'rate' => $hourlyRate,
-                    'rate_per_minute' => $ratePerMinute, // Display actual rate per minute
+                    'rate_per_minute' => $ratePerMinute,
                     'multiplier' => $regularMultiplier,
-                    'amount' => $amount
+                    'amount' => $amount,
+                    'description' => 'Regular Workday: ' . $roundedMinutes . 'm',
+                    'workday_hours' => $workdayHours,
+                    'suspension_hours' => 0
                 ];
             }
 
-            // Regular Workday + Night Differential
-            if ($nightDiffRegularHours > 0) {
-                // Get rate configuration for regular workday
-                $rateConfig = $regularData['rate_config'] ?? null;
-                $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.01;
-
-                // Get night differential settings for rate calculation
+            // Add night differential for workday if exists
+            if ($workdayNightDiffHours > 0) {
                 $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
                 $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
-
-                // Combined rate: regular workday rate + night differential bonus (SAME AS DRAFT AND VIEW CALCULATION)
                 $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
 
-                // Use consistent calculation: hourly rate * multiplier, then multiply by minutes
-                $actualMinutes = $nightDiffRegularHours * 60;
+                $actualMinutes = $workdayNightDiffHours * 60;
                 $roundedMinutes = round($actualMinutes);
                 $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                $ratePerMinute = $adjustedHourlyRate / 60; // Use actual rate per minute without truncation
-                $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
+                $ratePerMinute = $adjustedHourlyRate / 60;
+                $amount = round($ratePerMinute * $roundedMinutes, 2);
 
                 $breakdown['Regular Workday+ND'] = [
-                    'hours' => $nightDiffRegularHours,
-                    'minutes' => $roundedMinutes, // Add minutes for display
+                    'hours' => $workdayNightDiffHours,
+                    'minutes' => $roundedMinutes,
                     'rate' => $hourlyRate,
-                    'rate_per_minute' => $ratePerMinute, // Display actual rate per minute
+                    'rate_per_minute' => $ratePerMinute,
+                    'multiplier' => $combinedMultiplier,
+                    'amount' => $amount
+                ];
+            }
+        }
+
+        // Process suspension hours separately with their own rate
+        if (isset($timeBreakdown['suspension'])) {
+            $suspensionData = $timeBreakdown['suspension'];
+            $suspensionHours = $suspensionData['regular_hours'];
+            $suspensionNightDiffHours = $suspensionData['night_diff_regular_hours'] ?? 0;
+
+            // Get suspension rate configuration
+            $suspensionRateConfig = $suspensionData['rate_config'] ?? null;
+            $suspensionMultiplier = $suspensionRateConfig ? $suspensionRateConfig->regular_rate_multiplier : 1.10; // Default 110% for suspension
+
+            if ($suspensionHours > 0) {
+                $actualMinutes = $suspensionHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $adjustedHourlyRate = $hourlyRate * $suspensionMultiplier;
+                $ratePerMinute = $adjustedHourlyRate / 60;
+                $amount = round($ratePerMinute * $roundedMinutes, 2);
+
+                $breakdown['Paid Suspension'] = [
+                    'hours' => $suspensionHours,
+                    'minutes' => $roundedMinutes,
+                    'rate' => $hourlyRate,
+                    'rate_per_minute' => $ratePerMinute,
+                    'multiplier' => $suspensionMultiplier,
+                    'amount' => $amount,
+                    'description' => 'Paid Suspension: ' . $roundedMinutes . 'm',
+                    'workday_hours' => 0,
+                    'suspension_hours' => $suspensionHours
+                ];
+            }
+
+            // Add night differential for suspension if exists
+            if ($suspensionNightDiffHours > 0) {
+                $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
+                $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
+                $combinedMultiplier = $suspensionMultiplier + ($nightDiffMultiplier - 1);
+
+                $actualMinutes = $suspensionNightDiffHours * 60;
+                $roundedMinutes = round($actualMinutes);
+                $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                $ratePerMinute = $adjustedHourlyRate / 60;
+                $amount = round($ratePerMinute * $roundedMinutes, 2);
+
+                $breakdown['Paid Suspension+ND'] = [
+                    'hours' => $suspensionNightDiffHours,
+                    'minutes' => $roundedMinutes,
+                    'rate' => $hourlyRate,
+                    'rate_per_minute' => $ratePerMinute,
                     'multiplier' => $combinedMultiplier,
                     'amount' => $amount
                 ];

@@ -13,16 +13,11 @@ class NoWorkSuspendedSettingController extends Controller
 {
     public function index()
     {
-        $suspensions = NoWorkSuspendedSetting::with([
-                'affectedDepartments',
-                'affectedPositions', 
-                'affectedEmployees'
-            ])
-            ->orderBy('date_from', 'desc')
+        $suspensions = NoWorkSuspendedSetting::orderBy('date_from', 'desc')
             ->get()
             ->groupBy('status');
 
-        return view('settings.no-work.index', compact('suspensions'));
+        return view('settings.suspension.index', compact('suspensions'));
     }
 
     public function create()
@@ -33,51 +28,69 @@ class NoWorkSuspendedSettingController extends Controller
             ->with(['user:id,name', 'department:id,name', 'position:id,title'])
             ->get(['id', 'user_id', 'employee_number', 'department_id', 'position_id']);
 
-        return view('settings.no-work.create', compact('departments', 'positions', 'employees'));
+        return view('settings.suspension.create', compact('departments', 'positions', 'employees'));
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:50|unique:no_work_suspended_settings,code',
-            'description' => 'nullable|string',
             'date_from' => 'required|date',
-            'date_to' => 'required|date|after_or_equal:date_from',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
             'time_from' => 'nullable|date_format:H:i',
             'time_to' => 'nullable|date_format:H:i|after:time_from',
-            'type' => 'required|in:no_work,suspended,partial_suspension',
+            'type' => 'required|in:suspended,partial_suspension',
             'reason' => 'required|in:weather,system_maintenance,emergency,government_order,other',
-            'detailed_reason' => 'nullable|string',
-            'pay_rule' => 'required|in:no_pay,half_pay,full_pay,custom_rate',
-            'custom_pay_rate' => 'nullable|numeric|min:0|max:2',
-            'scope' => 'required|in:company_wide,department,position,specific_employees',
-            'affected_departments' => 'nullable|array',
-            'affected_positions' => 'nullable|array',
-            'affected_employees' => 'nullable|array',
-            'allow_makeup_work' => 'boolean',
-            'makeup_deadline' => 'nullable|date|after:date_to',
-            'makeup_instructions' => 'nullable|string',
-            'declared_by' => 'nullable|string|max:255',
-            'declaration_date' => 'nullable|date',
-            'official_memo' => 'nullable|string',
-            'status' => 'required|in:draft,active,completed,cancelled',
+            'is_paid' => 'boolean',
+            'pay_percentage' => 'nullable|integer|in:25,50,75,100',
+            'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
         ]);
+
+        // Set default values for removed fields
+        $validated['code'] = 'SUSP-' . now()->format('Ymd-His'); // Auto-generate code
+        $validated['detailed_reason'] = null;
+        $validated['status'] = 'active'; // Default to active
+
+        // If date_to is not provided, set it to date_from (single day suspension)
+        if (empty($validated['date_to'])) {
+            $validated['date_to'] = $validated['date_from'];
+        }
+
+        // For full day suspension, set time fields to null to avoid SQL errors
+        if ($validated['type'] === 'suspended') {
+            $validated['time_from'] = null;
+            $validated['time_to'] = null;
+        }
+
+        // Handle empty time strings for partial suspension
+        if (empty($validated['time_from'])) {
+            $validated['time_from'] = null;
+        }
+        if (empty($validated['time_to'])) {
+            $validated['time_to'] = null;
+        }
+
+        // Handle is_paid checkbox (defaults to false if not checked)
+        $validated['is_paid'] = $request->has('is_paid') ? true : false;
+
+        // Set default values for pay settings if not paid
+        if (!$validated['is_paid']) {
+            $validated['pay_percentage'] = null;
+            $validated['pay_applicable_to'] = null;
+        }
 
         NoWorkSuspendedSetting::create($validated);
 
-        return redirect()->route('settings.no-work.index')
-            ->with('success', 'No Work/Suspended setting created successfully.');
+        return redirect()->route('settings.suspension.index')
+            ->with('success', 'Suspension day created successfully.');
     }
 
-    public function show(NoWorkSuspendedSetting $noWork)
+    public function show(NoWorkSuspendedSetting $suspension)
     {
-        $noWork->load(['affectedDepartments', 'affectedPositions', 'affectedEmployees']);
-
-        return view('settings.no-work.show', compact('noWork'));
+        return view('settings.suspension.show', compact('suspension'));
     }
 
-    public function edit(NoWorkSuspendedSetting $noWork)
+    public function edit(NoWorkSuspendedSetting $suspension)
     {
         $departments = Department::where('is_active', true)->get(['id', 'name']);
         $positions = Position::where('is_active', true)->get(['id', 'title', 'department_id']);
@@ -85,99 +98,115 @@ class NoWorkSuspendedSettingController extends Controller
             ->with(['user:id,name', 'department:id,name', 'position:id,title'])
             ->get(['id', 'user_id', 'employee_number', 'department_id', 'position_id']);
 
-        return view('settings.no-work.edit', compact('noWork', 'departments', 'positions', 'employees'));
+        return view('settings.suspension.edit', compact('suspension', 'departments', 'positions', 'employees'));
     }
 
-    public function update(Request $request, NoWorkSuspendedSetting $noWork)
+    public function update(Request $request, NoWorkSuspendedSetting $suspension)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
             'date_from' => 'required|date',
             'date_to' => 'required|date|after_or_equal:date_from',
             'time_from' => 'nullable|date_format:H:i',
             'time_to' => 'nullable|date_format:H:i|after:time_from',
-            'type' => 'required|in:no_work,suspended,partial_suspension',
+            'type' => 'required|in:suspended,partial_suspension',
             'reason' => 'required|in:weather,system_maintenance,emergency,government_order,other',
-            'detailed_reason' => 'nullable|string',
-            'pay_rule' => 'required|in:no_pay,half_pay,full_pay,custom_rate',
-            'custom_pay_rate' => 'nullable|numeric|min:0|max:2',
-            'scope' => 'required|in:company_wide,department,position,specific_employees',
-            'affected_departments' => 'nullable|array',
-            'affected_positions' => 'nullable|array',
-            'affected_employees' => 'nullable|array',
-            'allow_makeup_work' => 'boolean',
-            'makeup_deadline' => 'nullable|date|after:date_to',
-            'makeup_instructions' => 'nullable|string',
-            'declared_by' => 'nullable|string|max:255',
-            'declaration_date' => 'nullable|date',
-            'official_memo' => 'nullable|string',
-            'status' => 'required|in:draft,active,completed,cancelled',
+            'is_paid' => 'boolean',
+            'pay_percentage' => 'nullable|integer|in:25,50,75,100',
+            'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
         ]);
 
-        $noWork->update($validated);
+        // For full day suspension, set time fields to null to avoid SQL errors
+        if ($validated['type'] === 'suspended') {
+            $validated['time_from'] = null;
+            $validated['time_to'] = null;
+        }
 
-        return redirect()->route('settings.no-work.index')
-            ->with('success', 'No Work/Suspended setting updated successfully.');
+        // Handle empty time strings for partial suspension
+        if (empty($validated['time_from'])) {
+            $validated['time_from'] = null;
+        }
+        if (empty($validated['time_to'])) {
+            $validated['time_to'] = null;
+        }
+
+        // Set default values for pay settings if not provided
+        if (!$validated['is_paid']) {
+            $validated['pay_percentage'] = null;
+            $validated['pay_applicable_to'] = null;
+        }
+
+        $suspension->update($validated);
+
+        return redirect()->route('settings.suspension.index')
+            ->with('success', 'Suspension setting updated successfully.');
     }
 
-    public function destroy(NoWorkSuspendedSetting $noWork)
+    public function destroy(NoWorkSuspendedSetting $suspension)
     {
-        $noWork->delete();
+        $suspension->delete();
 
-        return redirect()->route('settings.no-work.index')
-            ->with('success', 'No Work/Suspended setting deleted successfully.');
+        return redirect()->route('settings.suspension.index')
+            ->with('success', 'Suspension setting deleted successfully.');
     }
 
-    public function activate(NoWorkSuspendedSetting $noWork)
+    public function toggle(NoWorkSuspendedSetting $suspension)
     {
-        $noWork->update(['status' => 'active']);
+        $newStatus = $suspension->status === 'active' ? 'cancelled' : 'active';
+        $suspension->update(['status' => $newStatus]);
+
+        return back()->with('success', 'Suspension setting ' . ($newStatus === 'active' ? 'activated' : 'deactivated') . ' successfully.');
+    }
+
+    public function activate(NoWorkSuspendedSetting $suspension)
+    {
+        $suspension->update(['status' => 'active']);
 
         return back()->with('success', 'No Work/Suspended setting activated.');
     }
 
-    public function complete(NoWorkSuspendedSetting $noWork)
+    public function complete(NoWorkSuspendedSetting $suspension)
     {
-        $noWork->update(['status' => 'completed']);
+        $suspension->update(['status' => 'completed']);
 
         return back()->with('success', 'No Work/Suspended setting marked as completed.');
     }
 
-    public function cancel(NoWorkSuspendedSetting $noWork)
+    public function cancel(NoWorkSuspendedSetting $suspension)
     {
-        $noWork->update(['status' => 'cancelled']);
+        $suspension->update(['status' => 'cancelled']);
 
         return back()->with('success', 'No Work/Suspended setting cancelled.');
     }
 
-    public function getAffectedEmployees(NoWorkSuspendedSetting $noWork)
+    public function getAffectedEmployees(NoWorkSuspendedSetting $suspension)
     {
         $employees = collect();
 
-        switch ($noWork->scope) {
+        switch ($suspension->scope) {
             case 'company_wide':
                 $employees = Employee::where('employment_status', 'active')->get();
                 break;
-                
+
             case 'department':
-                if ($noWork->affected_departments) {
-                    $employees = Employee::whereIn('department_id', $noWork->affected_departments)
+                if ($suspension->affected_departments) {
+                    $employees = Employee::whereIn('department_id', $suspension->affected_departments)
                         ->where('employment_status', 'active')
                         ->get();
                 }
                 break;
-                
+
             case 'position':
-                if ($noWork->affected_positions) {
-                    $employees = Employee::whereIn('position_id', $noWork->affected_positions)
+                if ($suspension->affected_positions) {
+                    $employees = Employee::whereIn('position_id', $suspension->affected_positions)
                         ->where('employment_status', 'active')
                         ->get();
                 }
                 break;
-                
+
             case 'specific_employees':
-                if ($noWork->affected_employees) {
-                    $employees = Employee::whereIn('id', $noWork->affected_employees)
+                if ($suspension->affected_employees) {
+                    $employees = Employee::whereIn('id', $suspension->affected_employees)
                         ->where('employment_status', 'active')
                         ->get();
                 }

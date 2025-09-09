@@ -82,7 +82,7 @@
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     @foreach($dtrData as $index => $day)
-                                    <tr class="{{ $day['is_weekend'] ? 'bg-blue-50' : '' }} {{ $day['is_holiday'] ? 'bg-yellow-50' : '' }}">
+                                    <tr class="{{ $day['is_weekend'] ? 'bg-blue-50' : '' }} {{ $day['is_holiday'] ? 'bg-yellow-50' : '' }} {{ ($day['is_suspension'] ?? false) ? 'bg-red-50' : '' }}">
                                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
                                             {{ $day['date']->format('M d') }}
                                             <input type="hidden" name="time_logs[{{ $index }}][log_date]" value="{{ $day['date']->format('Y-m-d') }}">
@@ -95,43 +95,48 @@
                                             @if($day['is_holiday'])
                                                 <span class="text-yellow-600 text-xs">({{ $day['is_holiday'] }})</span>
                                             @endif
+                                            @if($day['is_suspension'] ?? false)
+                                                <span class="text-red-600 text-xs">({{ $day['suspension_info']['name'] ?? 'Suspended' }})</span>
+                                            @endif
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap">
                                             <input type="time" 
                                                    name="time_logs[{{ $index }}][time_in]" 
                                                    value="{{ $day['time_in'] }}"
-                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'bg-gray-100' : '' }}"
-                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'readonly' : '' }}>
+                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'bg-gray-100' : '' }}"
+                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'readonly' : '' }}>
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap">
                                             <input type="time" 
                                                    name="time_logs[{{ $index }}][time_out]" 
                                                    value="{{ $day['time_out'] }}"
-                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'bg-gray-100' : '' }}"
-                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'readonly' : '' }}>
+                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'bg-gray-100' : '' }}"
+                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'readonly' : '' }}>
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap">
                                             <input type="time" 
                                                    name="time_logs[{{ $index }}][break_in]" 
                                                    value="{{ $day['break_in'] }}"
-                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'bg-gray-100' : '' }}"
-                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'readonly' : '' }}>
+                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'bg-gray-100' : '' }}"
+                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'readonly' : '' }}>
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap">
                                             <input type="time" 
                                                    name="time_logs[{{ $index }}][break_out]" 
                                                    value="{{ $day['break_out'] }}"
-                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'bg-gray-100' : '' }}"
-                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'readonly' : '' }}>
+                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'bg-gray-100' : '' }}"
+                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'readonly' : '' }}>
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap">
                                             <select name="time_logs[{{ $index }}][log_type]" 
-                                                    class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'bg-gray-100' : '' }}"
-                                                    {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'readonly' : '' }}>
+                                                    class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'bg-gray-100' : '' }}"
+                                                    {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'readonly' : '' }}>
                                                 @foreach($logTypes as $value => $label)
                                                     @php
                                                         $selected = '';
-                                                        if (!$day['is_weekend'] && !$day['is_holiday'] && $label === 'Regular Workday') {
+                                                        if (($day['is_suspension'] ?? false) && str_contains($label, 'Suspension')) {
+                                                            $selected = 'selected';
+                                                        } elseif (!$day['is_weekend'] && !$day['is_holiday'] && !($day['is_suspension'] ?? false) && $label === 'Regular Workday') {
                                                             $selected = 'selected';
                                                         } elseif ($day['is_weekend'] && str_contains($label, 'Rest Day') && !str_contains($label, 'Holiday')) {
                                                             $selected = 'selected';
@@ -144,14 +149,15 @@
                                             </select>
                                             <input type="hidden" name="time_logs[{{ $index }}][is_holiday]" value="{{ $day['is_holiday'] ? '1' : '0' }}">
                                             <input type="hidden" name="time_logs[{{ $index }}][is_rest_day]" value="{{ ($day['is_weekend'] && !$day['is_holiday']) ? '1' : '0' }}">
+                                            <input type="hidden" name="time_logs[{{ $index }}][is_suspension]" value="{{ ($day['is_suspension'] ?? false) ? '1' : '0' }}">
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap">
                                             <input type="text" 
                                                    name="time_logs[{{ $index }}][remarks]" 
-                                                   value="{{ $day['remarks'] }}"
+                                                   value="{{ ($day['is_suspension'] ?? false) ? ($day['suspension_info']['name'] ?? 'Suspension Day') : $day['remarks'] }}"
                                                    placeholder="Remarks..."
-                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'bg-gray-100' : '' }}"
-                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) ? 'readonly' : '' }}>
+                                                   class="w-full text-sm border-gray-300 rounded focus:border-indigo-500 focus:ring-indigo-500 {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'bg-gray-100' : '' }}"
+                                                   {{ ($day['is_weekend'] && !$day['is_holiday']) || ($day['is_suspension'] ?? false) ? 'readonly' : '' }}>
                                         </td>
                                     </tr>
                                     @endforeach

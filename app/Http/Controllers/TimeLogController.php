@@ -791,6 +791,17 @@ class TimeLogController extends Controller
             ->get()
             ->keyBy('date');
 
+        // Get suspension days for the period
+        $suspensionDays = \App\Models\NoWorkSuspendedSetting::where('status', 'active')
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    // Check if the suspension period overlaps with our date range
+                    $q->where('date_from', '<=', $endDate->format('Y-m-d'))
+                        ->where('date_to', '>=', $startDate->format('Y-m-d'));
+                });
+            })
+            ->get();
+
         $dtrData = [];
 
         // Generate data for each day in the period
@@ -799,6 +810,9 @@ class TimeLogController extends Controller
             $dateStr = $currentDate->format('Y-m-d');
             $timeLog = $timeLogs->get($dateStr);
             $holiday = $holidays->get($dateStr);
+
+            // Check if this date falls within any suspension periods
+            $suspensionInfo = $this->checkSuspensionDay($currentDate, $suspensionDays, $employee);
 
             // Use employee's day schedule to determine rest day instead of hardcoded weekend
             $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($currentDate) : $currentDate->isWeekend();
@@ -809,6 +823,8 @@ class TimeLogController extends Controller
                 'day_name' => $currentDate->format('l'),
                 'is_weekend' => $isRestDay, // Keep field name for compatibility but use dynamic logic
                 'is_holiday' => $holiday ? $holiday->name : null,
+                'is_suspension' => $suspensionInfo['is_suspension'],
+                'suspension_info' => $suspensionInfo['info'],
                 'time_log' => $timeLog,
                 'time_in' => $timeLog ? $timeLog->time_in : null,
                 'time_out' => $timeLog ? $timeLog->time_out : null,
@@ -827,6 +843,104 @@ class TimeLogController extends Controller
         }
 
         return $dtrData;
+    }
+
+    /**
+     * Check if a specific date is a suspension day for the employee
+     */
+    private function checkSuspensionDay(\Carbon\Carbon $date, $suspensionDays, Employee $employee)
+    {
+        foreach ($suspensionDays as $suspension) {
+            $suspensionStart = \Carbon\Carbon::parse($suspension->date_from);
+            $suspensionEnd = \Carbon\Carbon::parse($suspension->date_to);
+
+            // Check if the date falls within the suspension period
+            if ($date->between($suspensionStart, $suspensionEnd)) {
+                // Check if this suspension affects this employee
+                if ($this->isSuspensionApplicableToEmployee($suspension, $employee)) {
+                    // Check if it's a time-specific suspension (partial suspension)
+                    $isPartialSuspension = $suspension->type === 'partial_suspension' &&
+                        $suspension->time_from &&
+                        $suspension->time_to;
+
+                    // Check if this suspension is paid and if this employee is eligible for paid suspension
+                    $isPaidSuspension = $suspension->is_paid && $this->isEmployeeEligibleForPaidSuspension($suspension, $employee);
+
+                    return [
+                        'is_suspension' => true,
+                        'info' => [
+                            'id' => $suspension->id,
+                            'name' => $suspension->name,
+                            'type' => $suspension->type,
+                            'reason' => $suspension->reason,
+                            'time_from' => $suspension->time_from,
+                            'time_to' => $suspension->time_to,
+                            'is_partial' => $isPartialSuspension,
+                            'is_paid' => $isPaidSuspension,
+                            'pay_percentage' => $suspension->pay_percentage,
+                            'pay_applicable_to' => $suspension->pay_applicable_to,
+                            'detailed_reason' => $suspension->detailed_reason,
+                        ]
+                    ];
+                }
+            }
+        }
+
+        return [
+            'is_suspension' => false,
+            'info' => null
+        ];
+    }
+
+    /**
+     * Check if a suspension applies to a specific employee
+     */
+    private function isSuspensionApplicableToEmployee($suspension, Employee $employee)
+    {
+        // With the simplified suspension structure, we check pay_applicable_to field
+        if (!$suspension->pay_applicable_to) {
+            return true; // Applies to all employees if not specified
+        }
+
+        switch ($suspension->pay_applicable_to) {
+            case 'all':
+                return true;
+            case 'with_benefits':
+                return $employee->benefits_status === 'with_benefits';
+            case 'without_benefits':
+                return $employee->benefits_status === 'without_benefits';
+            default:
+                return true;
+        }
+    }
+
+    /**
+     * Check if employee is eligible for paid suspension based on pay_applicable_to setting
+     */
+    private function isEmployeeEligibleForPaidSuspension($suspension, Employee $employee)
+    {
+        if (!$suspension->is_paid) {
+            return false;
+        }
+
+        // If pay_applicable_to is not set, assume it applies to all employees
+        if (!$suspension->pay_applicable_to) {
+            return true;
+        }
+
+        // Check based on pay_applicable_to setting
+        switch ($suspension->pay_applicable_to) {
+            case 'all':
+                return true;
+            case 'with_benefits':
+                // Check if employee has benefits status
+                return $employee->benefits_status === 'with_benefits';
+            case 'without_benefits':
+                // Check if employee doesn't have benefits
+                return $employee->benefits_status === 'without_benefits';
+            default:
+                return true;
+        }
     }
 
     /**
@@ -863,6 +977,17 @@ class TimeLogController extends Controller
             ->get()
             ->keyBy('date');
 
+        // Get suspension days for the period
+        $suspensionDays = \App\Models\NoWorkSuspendedSetting::where('status', 'active')
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    // Check if the suspension period overlaps with our date range
+                    $q->where('date_from', '<=', $endDate->format('Y-m-d'))
+                        ->where('date_to', '>=', $startDate->format('Y-m-d'));
+                });
+            })
+            ->get();
+
         $dtrData = [];
 
         // Generate data for each day in the period
@@ -871,6 +996,9 @@ class TimeLogController extends Controller
             $dateStr = $currentDate->format('Y-m-d');
             $timeLog = $timeLogs->get($dateStr);
             $holiday = $holidays->get($dateStr);
+
+            // Check if this date falls within any suspension periods
+            $suspensionInfo = $this->checkSuspensionDay($currentDate, $suspensionDays, $employee);
 
             // Use employee's day schedule to determine rest day instead of hardcoded weekend
             $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($currentDate) : $currentDate->isWeekend();
@@ -920,18 +1048,55 @@ class TimeLogController extends Controller
                 ]);
             }
 
+            // Determine default log type and default times for suspension days
+            $defaultLogType = null;
+            $defaultTimeIn = $timeIn;
+            $defaultTimeOut = $timeOut;
+            $defaultBreakIn = $breakIn;
+            $defaultBreakOut = $breakOut;
+
+            // If it's a suspension day, automatically set log type and handle paid suspension times
+            if ($suspensionInfo['is_suspension']) {
+                $defaultLogType = 'suspension';
+
+                // If it's a paid suspension and there's NO EXISTING time log, set default work hours
+                if ($suspensionInfo['info']['is_paid'] && !$timeLog) {
+                    // Get employee's default schedule for paid suspension (only for new entries)
+                    if ($employee->timeSchedule) {
+                        $defaultTimeIn = Carbon::parse($employee->timeSchedule->time_in);
+                        $defaultTimeOut = Carbon::parse($employee->timeSchedule->time_out);
+
+                        // Set break times if employee has fixed breaks
+                        if ($employee->timeSchedule->break_start && $employee->timeSchedule->break_end) {
+                            $defaultBreakIn = Carbon::parse($employee->timeSchedule->break_start);
+                            $defaultBreakOut = Carbon::parse($employee->timeSchedule->break_end);
+                        }
+                    }
+                }
+                // If there's an existing time log, use the actual values from database
+                elseif ($timeLog) {
+                    $defaultTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : $timeIn;
+                    $defaultTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : $timeOut;
+                    $defaultBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : $breakIn;
+                    $defaultBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : $breakOut;
+                }
+            }
+
             $dayData = [
                 'date' => $currentDate->copy(),
                 'day' => $currentDate->format('d'),
                 'day_name' => $currentDate->format('l'),
                 'is_weekend' => $isRestDay, // Keep field name for compatibility but use dynamic logic
                 'is_holiday' => $holiday ? $holiday->name : null,
+                'is_suspension' => $suspensionInfo['is_suspension'],
+                'suspension_info' => $suspensionInfo['info'],
                 'time_log' => $timeLog,
-                'time_in' => $timeIn,
-                'time_out' => $timeOut,
-                'break_in' => $breakIn,
-                'break_out' => $breakOut,
-                'log_type' => $timeLog ? $timeLog->log_type : null, // Add log_type field
+                // Use actual time log values if they exist, otherwise use defaults (for auto-fill)
+                'time_in' => $timeLog && $timeLog->time_in ? Carbon::parse($timeLog->time_in) : $defaultTimeIn,
+                'time_out' => $timeLog && $timeLog->time_out ? Carbon::parse($timeLog->time_out) : $defaultTimeOut,
+                'break_in' => $timeLog && $timeLog->break_in ? Carbon::parse($timeLog->break_in) : $defaultBreakIn,
+                'break_out' => $timeLog && $timeLog->break_out ? Carbon::parse($timeLog->break_out) : $defaultBreakOut,
+                'log_type' => $timeLog ? $timeLog->log_type : $defaultLogType, // Set default log type for suspensions
                 'remarks' => $timeLog ? $timeLog->remarks : null,
                 'regular_hours' => $timeLog ? ($timeLog->regular_hours ?? 0) : 0,
                 'overtime_hours' => $timeLog ? ($timeLog->overtime_hours ?? 0) : 0,
@@ -1172,6 +1337,11 @@ class TimeLogController extends Controller
             'time_logs.*.time_out' => 'nullable|date_format:H:i',
             'time_logs.*.break_in' => 'nullable|date_format:H:i',
             'time_logs.*.break_out' => 'nullable|date_format:H:i',
+            // Hidden fields for suspension days when inputs are disabled
+            'time_logs.*.time_in_hidden' => 'nullable|date_format:H:i',
+            'time_logs.*.time_out_hidden' => 'nullable|date_format:H:i',
+            'time_logs.*.break_in_hidden' => 'nullable|date_format:H:i',
+            'time_logs.*.break_out_hidden' => 'nullable|date_format:H:i',
             'time_logs.*.log_type' => 'required|in:' . implode(',', $availableLogTypes),
             'time_logs.*.is_holiday' => 'boolean',
             'time_logs.*.is_rest_day' => 'boolean',
@@ -1194,9 +1364,11 @@ class TimeLogController extends Controller
                     ->where('log_date', $logData['log_date'])
                     ->first();
 
-                // Check if we should process this entry
+                // Check if we should process this entry (include hidden fields)
                 $hasAnyTimeData = !empty($logData['time_in']) || !empty($logData['time_out']) ||
-                    !empty($logData['break_in']) || !empty($logData['break_out']);
+                    !empty($logData['break_in']) || !empty($logData['break_out']) ||
+                    !empty($logData['time_in_hidden']) || !empty($logData['time_out_hidden']) ||
+                    !empty($logData['break_in_hidden']) || !empty($logData['break_out_hidden']);
 
                 // Check if this is a day type change (different from default for the day)
                 $date = Carbon::parse($logData['log_date']);
@@ -1231,10 +1403,11 @@ class TimeLogController extends Controller
                 }
 
                 // Prepare time values (allow null for clearing existing data)
-                $timeIn = !empty($logData['time_in']) ? $logData['time_in'] : null;
-                $timeOut = !empty($logData['time_out']) ? $logData['time_out'] : null;
-                $breakIn = !empty($logData['break_in']) ? $logData['break_in'] : null;
-                $breakOut = !empty($logData['break_out']) ? $logData['break_out'] : null;
+                // Check for hidden field values first (for suspension days with disabled inputs)
+                $timeIn = !empty($logData['time_in']) ? $logData['time_in'] : (!empty($logData['time_in_hidden']) ? $logData['time_in_hidden'] : null);
+                $timeOut = !empty($logData['time_out']) ? $logData['time_out'] : (!empty($logData['time_out_hidden']) ? $logData['time_out_hidden'] : null);
+                $breakIn = !empty($logData['break_in']) ? $logData['break_in'] : (!empty($logData['break_in_hidden']) ? $logData['break_in_hidden'] : null);
+                $breakOut = !empty($logData['break_out']) ? $logData['break_out'] : (!empty($logData['break_out_hidden']) ? $logData['break_out_hidden'] : null);
 
                 // Determine log_type: use provided value or reset to default based on day if all time fields are blank
                 $logType = $logData['log_type'];
@@ -1419,6 +1592,17 @@ class TimeLogController extends Controller
                 ->keyBy('date');
         }
 
+        // Get suspension days for the period
+        $suspensionDays = \App\Models\NoWorkSuspendedSetting::where('status', 'active')
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    // Check if the suspension period overlaps with our date range
+                    $q->where('date_from', '<=', $endDate->format('Y-m-d'))
+                        ->where('date_to', '>=', $startDate->format('Y-m-d'));
+                });
+            })
+            ->get();
+
         $dtrData = [];
 
         // Generate data for each day in the period
@@ -1427,6 +1611,9 @@ class TimeLogController extends Controller
             $dateStr = $currentDate->format('Y-m-d');
             $timeLog = $timeLogs->get($dateStr);
             $holiday = $holidays->get($dateStr);
+
+            // Check if this date falls within any suspension periods
+            $suspensionInfo = $this->checkSuspensionDay($currentDate, $suspensionDays, $employee);
 
             // Use employee's day schedule to determine rest day instead of hardcoded weekend
             $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($currentDate) : $currentDate->isWeekend();
@@ -1437,6 +1624,8 @@ class TimeLogController extends Controller
                 'day_name' => $currentDate->format('l'),
                 'is_weekend' => $isRestDay, // Keep field name for compatibility but use dynamic logic
                 'is_holiday' => $holiday ? $holiday->name : null,
+                'is_suspension' => $suspensionInfo['is_suspension'],
+                'suspension_info' => $suspensionInfo['info'],
                 'time_log' => $timeLog,
                 'time_in' => $timeLog ? $timeLog->time_in : null,
                 'time_out' => $timeLog ? $timeLog->time_out : null,

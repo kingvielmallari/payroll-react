@@ -353,18 +353,16 @@
                                     </div>
                                 </a>
                                 
-                                <a href="{{ route('settings.no-work.index') }}" 
-                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-yellow-50 hover:text-yellow-800 transition-colors duration-150">
-                                    <svg class="mr-4 h-5 w-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.996-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                                <a href="{{ route('settings.suspension.index') }}" 
+                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-red-50 hover:text-red-800 transition-colors duration-150">
+                                    <svg class="mr-4 h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"/>
                                     </svg>
                                     <div class="flex-1">
-                                        <div class="font-medium text-yellow-700">No Work / Suspended</div>
-                                        <div class="text-xs text-yellow-600 mt-1">Weather, Emergency, Maintenance</div>
+                                        <div class="font-medium text-red-700">Suspension Settings</div>
+                                        <div class="text-xs text-red-600 mt-1">Full day & Partial suspension days</div>
                                     </div>
-                                </a>
-                                
-                                <a href="{{ route('settings.time-logs.index') }}" 
+                                </a>                                <a href="{{ route('settings.time-logs.index') }}" 
                                    class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-800 transition-colors duration-150">
                                     <svg class="mr-4 h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>

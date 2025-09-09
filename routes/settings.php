@@ -63,16 +63,16 @@ Route::middleware(['auth', 'verified'])->prefix('settings')->name('settings.')->
     Route::post('holidays/generate-recurring', [HolidaySettingController::class, 'generateRecurring'])
         ->name('holidays.generate-recurring');
 
-    // No Work/Suspended Settings
-    Route::resource('no-work', NoWorkSuspendedSettingController::class);
-    Route::patch('no-work/{noWork}/activate', [NoWorkSuspendedSettingController::class, 'activate'])
-        ->name('no-work.activate');
-    Route::patch('no-work/{noWork}/complete', [NoWorkSuspendedSettingController::class, 'complete'])
-        ->name('no-work.complete');
-    Route::patch('no-work/{noWork}/cancel', [NoWorkSuspendedSettingController::class, 'cancel'])
-        ->name('no-work.cancel');
-    Route::get('no-work/{noWork}/affected-employees', [NoWorkSuspendedSettingController::class, 'getAffectedEmployees'])
-        ->name('no-work.affected-employees');
+    // Suspension Settings
+    Route::resource('suspension', NoWorkSuspendedSettingController::class);
+    Route::patch('suspension/{suspension}/activate', [NoWorkSuspendedSettingController::class, 'activate'])
+        ->name('suspension.activate');
+    Route::patch('suspension/{suspension}/complete', [NoWorkSuspendedSettingController::class, 'complete'])
+        ->name('suspension.complete');
+    Route::patch('suspension/{suspension}/cancel', [NoWorkSuspendedSettingController::class, 'cancel'])
+        ->name('suspension.cancel');
+    Route::patch('suspension/{suspension}/toggle', [NoWorkSuspendedSettingController::class, 'toggle'])
+        ->name('suspension.toggle');
 
     // Time Logs Settings
     Route::get('time-logs', [\App\Http\Controllers\Settings\TimeLogSettingController::class, 'index'])

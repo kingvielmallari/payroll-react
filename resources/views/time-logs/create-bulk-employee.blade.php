@@ -126,7 +126,7 @@
                             </div>
                             {{-- <p class="text-xs text-blue-700 mt-2">
                                 <strong>Fill Time & Break:</strong> Fills empty fields with employee's scheduled work hours and break times.<br>
-                                <strong>Reset All:</strong> Clears all fields and resets types to default based on employee's day schedule.
+                                <strong>Reset All:</strong> Clears all time fields but preserves day types (including suspension days).
                             </p> --}}
                         </div>
 
@@ -147,14 +147,27 @@
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     @foreach($dtrData as $index => $day)
-                                        <tr class="{{ $day['is_weekend'] ? 'bg-gray-100' : '' }} {{ $day['is_holiday'] ? 'bg-yellow-50' : '' }}">
+                                        @php
+                                            $suspensionInfo = $day['suspension_info'] ?? null;
+                                            $isPaidSuspension = $suspensionInfo && ($suspensionInfo['is_paid'] ?? false);
+                                            $defaultTimeIn = $isPaidSuspension && $day['time_in'] ? $day['time_in']->format('H:i') : null;
+                                            $defaultTimeOut = $isPaidSuspension && $day['time_out'] ? $day['time_out']->format('H:i') : null;
+                                            $defaultBreakIn = $isPaidSuspension && $day['break_in'] ? $day['break_in']->format('H:i') : null;
+                                            $defaultBreakOut = $isPaidSuspension && $day['break_out'] ? $day['break_out']->format('H:i') : null;
+                                        @endphp
+                                        <tr class="{{ $day['is_weekend'] ? 'bg-gray-100' : '' }} {{ $day['is_holiday'] ? 'bg-yellow-50' : '' }}"
+                                            data-is-paid-suspension="{{ $isPaidSuspension ? 'true' : 'false' }}"
+                                            data-time-in-default="{{ $defaultTimeIn }}"
+                                            data-time-out-default="{{ $defaultTimeOut }}"
+                                            data-break-in-default="{{ $defaultBreakIn }}"
+                                            data-break-out-default="{{ $defaultBreakOut }}">
                                             <td class="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 border-r">
                                                 {{ $day['date']->format('M d') }}
                                                 <input type="hidden" name="time_logs[{{ $index }}][log_date]" value="{{ $day['date']->format('Y-m-d') }}">
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500 border-r">
                                                 {{ $day['day_name'] }}
-                                                @if($day['is_weekend'])
+                                                @if($day['date']->isWeekend())
                                                     <span class="text-xs text-blue-600">(Weekend)</span>
                                                 @endif
                                                 @if($day['is_holiday'])
@@ -162,36 +175,47 @@
                                                 @endif
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
+                                                @php
+                                                    $isSuspension = ($day['is_suspension'] ?? false);
+                                                    $inputClass = $isSuspension ? 'bg-gray-100 cursor-not-allowed' : '';
+                                                @endphp
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][time_in]" 
                                                        value="{{ $day['time_in'] ? (is_string($day['time_in']) ? (strlen($day['time_in']) >= 5 ? substr($day['time_in'], 0, 5) : $day['time_in']) : $day['time_in']->format('H:i')) : '' }}"
-                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
+                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
                                                        data-row="{{ $index }}"
-                                                       onchange="calculateHours({{ $index }})">
+                                                       onchange="calculateHours({{ $index }})"
+                                                       {{ $isSuspension ? 'disabled' : '' }}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][time_out]" 
                                                        value="{{ $day['time_out'] ? (is_string($day['time_out']) ? (strlen($day['time_out']) >= 5 ? substr($day['time_out'], 0, 5) : $day['time_out']) : $day['time_out']->format('H:i')) : '' }}"
-                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
+                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
                                                        data-row="{{ $index }}"
-                                                       onchange="calculateHours({{ $index }})">
+                                                       onchange="calculateHours({{ $index }})"
+                                                       {{ $isSuspension ? 'disabled' : '' }}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][break_in]" 
                                                        value="{{ $day['break_in'] ? (is_string($day['break_in']) ? (strlen($day['break_in']) >= 5 ? substr($day['break_in'], 0, 5) : $day['break_in']) : $day['break_in']->format('H:i')) : '' }}"
-                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500">
+                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
+                                                       {{ $isSuspension ? 'disabled' : '' }}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][break_out]" 
                                                        value="{{ $day['break_out'] ? (is_string($day['break_out']) ? (strlen($day['break_out']) >= 5 ? substr($day['break_out'], 0, 5) : $day['break_out']) : $day['break_out']->format('H:i')) : '' }}"
-                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500">
+                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
+                                                       {{ $isSuspension ? 'disabled' : '' }}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <select name="time_logs[{{ $index }}][log_type]" 
-                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500">
+                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $isSuspension ? 'bg-gray-100 cursor-not-allowed' : '' }} log-type-{{ $index }}"
+                                                        data-row="{{ $index }}"
+                                                        onchange="handleLogTypeChange({{ $index }})"
+                                                        {{ $isSuspension ? 'disabled' : '' }}>>
                                                     @foreach($logTypes as $value => $label)
                                                         @php
                                                             $selected = '';
@@ -205,7 +229,9 @@
                                                             }
                                                             // Priority 2: Smart default selection logic (only if no existing log_type)
                                                             elseif (!$day['log_type']) {
-                                                                if (!$day['is_weekend'] && !$isHoliday && $value === 'regular_workday') {
+                                                                if (($day['is_suspension'] ?? false) && str_contains($label, 'Suspension')) {
+                                                                    $selected = 'selected';
+                                                                } elseif (!$day['is_weekend'] && !$isHoliday && !($day['is_suspension'] ?? false) && $value === 'regular_workday') {
                                                                     // 1. Regular Workday (default for work days)
                                                                     $selected = 'selected';
                                                                 } elseif ($day['is_weekend'] && !$isHoliday && $value === 'rest_day') {
@@ -229,11 +255,37 @@
                                                         <option value="{{ $value }}" {{ $selected }}>{{ $label }}</option>
                                                     @endforeach
                                                 </select>
+                                                @if($isSuspension)
+                                                    {{-- For active suspension days, add hidden input for log_type since disabled selects won't submit --}}
+                                                    @php
+                                                        $selectedLogType = '';
+                                                        if ($day['log_type']) {
+                                                            $selectedLogType = $day['log_type'];
+                                                        } else {
+                                                            // Find the suspension log type
+                                                            foreach($logTypes as $value => $label) {
+                                                                if (str_contains($label, 'Suspension')) {
+                                                                    $selectedLogType = $value;
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                    @endphp
+                                                    <input type="hidden" name="time_logs[{{ $index }}][log_type]" value="{{ $selectedLogType }}">
+                                                    {{-- Add hidden inputs for suspension days since disabled time inputs won't submit their values --}}
+                                                    <input type="hidden" name="time_logs[{{ $index }}][time_in_hidden]" value="{{ $day['time_in'] ? (is_string($day['time_in']) ? (strlen($day['time_in']) >= 5 ? substr($day['time_in'], 0, 5) : $day['time_in']) : $day['time_in']->format('H:i')) : '' }}">
+                                                    <input type="hidden" name="time_logs[{{ $index }}][time_out_hidden]" value="{{ $day['time_out'] ? (is_string($day['time_out']) ? (strlen($day['time_out']) >= 5 ? substr($day['time_out'], 0, 5) : $day['time_out']) : $day['time_out']->format('H:i')) : '' }}">
+                                                    <input type="hidden" name="time_logs[{{ $index }}][break_in_hidden]" value="{{ $day['break_in'] ? (is_string($day['break_in']) ? (strlen($day['break_in']) >= 5 ? substr($day['break_in'], 0, 5) : $day['break_in']) : $day['break_in']->format('H:i')) : '' }}">
+                                                    <input type="hidden" name="time_logs[{{ $index }}][break_out_hidden]" value="{{ $day['break_out'] ? (is_string($day['break_out']) ? (strlen($day['break_out']) >= 5 ? substr($day['break_out'], 0, 5) : $day['break_out']) : $day['break_out']->format('H:i')) : '' }}">
+                                                @endif
                                                 @if($day['is_weekend'])
                                                     <input type="hidden" name="time_logs[{{ $index }}][is_rest_day]" value="1">
                                                 @endif
                                                 @if($day['is_holiday'])
                                                     <input type="hidden" name="time_logs[{{ $index }}][is_holiday]" value="1">
+                                                @endif
+                                                @if($day['is_suspension'] ?? false)
+                                                    <input type="hidden" name="time_logs[{{ $index }}][is_suspension]" value="1">
                                                 @endif
                                             </td>
                                             <td class="px-3 py-2">
@@ -307,20 +359,26 @@
         function fillRegularHours(timeIn, timeOut, breakIn, breakOut) {
             const rows = document.querySelectorAll('tbody tr');
             rows.forEach((row, index) => {
-                const isWeekend = row.classList.contains('bg-gray-100');
+                const isRestDay = row.classList.contains('bg-gray-100'); // This is employee's rest day
                 const isHoliday = row.classList.contains('bg-yellow-50');
                 
-                if (!isWeekend && !isHoliday) {
+                // Check if the row has suspension type selected
+                const logTypeSelect = row.querySelector(`select[name="time_logs[${index}][log_type]"]`);
+                const selectedOption = logTypeSelect ? logTypeSelect.options[logTypeSelect.selectedIndex] : null;
+                const selectedText = selectedOption ? selectedOption.text : '';
+                const isSuspension = selectedText.toLowerCase().includes('suspension');
+                
+                if (!isRestDay && !isHoliday && !isSuspension) {
                     const timeInInput = row.querySelector(`input[name="time_logs[${index}][time_in]"]`);
                     const timeOutInput = row.querySelector(`input[name="time_logs[${index}][time_out]"]`);
                     const breakInInput = row.querySelector(`input[name="time_logs[${index}][break_in]"]`);
                     const breakOutInput = row.querySelector(`input[name="time_logs[${index}][break_out]"]`);
                     
                     // Only fill empty fields to avoid overwriting existing data
-                    if (timeInInput && !timeInInput.value) timeInInput.value = timeIn;
-                    if (timeOutInput && !timeOutInput.value) timeOutInput.value = timeOut;
-                    if (breakInInput && !breakInInput.value) breakInInput.value = breakIn;
-                    if (breakOutInput && !breakOutInput.value) breakOutInput.value = breakOut;
+                    if (timeInInput && !timeInInput.value && !timeInInput.disabled) timeInInput.value = timeIn;
+                    if (timeOutInput && !timeOutInput.value && !timeOutInput.disabled) timeOutInput.value = timeOut;
+                    if (breakInInput && !breakInInput.value && !breakInInput.disabled) breakInInput.value = breakIn;
+                    if (breakOutInput && !breakOutInput.value && !breakOutInput.disabled) breakOutInput.value = breakOut;
                 }
             });
         }
@@ -329,16 +387,22 @@
             // Fill only time in/out fields for flexible break employees
             const rows = document.querySelectorAll('tbody tr');
             rows.forEach((row, index) => {
-                const isWeekend = row.classList.contains('bg-gray-100');
+                const isRestDay = row.classList.contains('bg-gray-100'); // This is employee's rest day
                 const isHoliday = row.classList.contains('bg-yellow-50');
                 
-                if (!isWeekend && !isHoliday) {
+                // Check if the row has suspension type selected
+                const logTypeSelect = row.querySelector(`select[name="time_logs[${index}][log_type]"]`);
+                const selectedOption = logTypeSelect ? logTypeSelect.options[logTypeSelect.selectedIndex] : null;
+                const selectedText = selectedOption ? selectedOption.text : '';
+                const isSuspension = selectedText.toLowerCase().includes('suspension');
+                
+                if (!isRestDay && !isHoliday && !isSuspension) {
                     const timeInInput = row.querySelector(`input[name="time_logs[${index}][time_in]"]`);
                     const timeOutInput = row.querySelector(`input[name="time_logs[${index}][time_out]"]`);
                     
                     // Only fill empty fields to avoid overwriting existing data
-                    if (timeInInput && !timeInInput.value) timeInInput.value = timeIn;
-                    if (timeOutInput && !timeOutInput.value) timeOutInput.value = timeOut;
+                    if (timeInInput && !timeInInput.value && !timeInInput.disabled) timeInInput.value = timeIn;
+                    if (timeOutInput && !timeOutInput.value && !timeOutInput.disabled) timeOutInput.value = timeOut;
                     // Do not fill break fields for flexible break employees
                 }
             });
@@ -348,10 +412,10 @@
             // Alternative function to fill all fields (overwrite existing)
             const rows = document.querySelectorAll('tbody tr');
             rows.forEach((row, index) => {
-                const isWeekend = row.classList.contains('bg-gray-100');
+                const isRestDay = row.classList.contains('bg-gray-100'); // This is employee's rest day
                 const isHoliday = row.classList.contains('bg-yellow-50');
                 
-                if (!isWeekend && !isHoliday) {
+                if (!isRestDay && !isHoliday) {
                     const timeInInput = row.querySelector(`input[name="time_logs[${index}][time_in]"]`);
                     const timeOutInput = row.querySelector(`input[name="time_logs[${index}][time_out]"]`);
                     const breakInInput = row.querySelector(`input[name="time_logs[${index}][break_in]"]`);
@@ -374,53 +438,37 @@
         }
 
         function resetAll() {
-            // Clear all fields AND reset types to default based on day
+            // Clear all time fields but preserve day types (especially suspension days)
             const timeInputs = document.querySelectorAll('input[name*="[time_in]"], input[name*="[time_out]"], input[name*="[break_in]"], input[name*="[break_out]"]');
             timeInputs.forEach(input => {
-                input.value = '';
+                // Only clear if not disabled (suspension days should keep their values)
+                if (!input.disabled) {
+                    input.value = '';
+                }
             });
 
-            // Reset all log types to default based on day
+            // Don't reset log types - preserve current selections including suspension days
+            // Just update the time input states based on current log types
             const rows = document.querySelectorAll('tbody tr');
             rows.forEach((row, index) => {
-                const logTypeSelect = row.querySelector('select[name*="[log_type]"]');
-                
-                if (logTypeSelect) {
-                    const isWeekend = row.classList.contains('bg-gray-100');
-                    const isHoliday = row.classList.contains('bg-yellow-50');
-                    
-                    // Determine appropriate default based on day type (using dynamic rest day logic)
-                    let defaultType = 'regular_workday'; // Default for work days
-                    
-                    if (isWeekend && !isHoliday) {
-                        defaultType = 'rest_day';
-                    } else if (isHoliday && !isWeekend) {
-                        // Check for holiday type in hidden inputs or span text
-                        const holidaySpan = row.querySelector('.text-red-600');
-                        if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('regular')) {
-                            defaultType = 'regular_holiday';
-                        } else if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('special')) {
-                            defaultType = 'special_holiday';
-                        }
-                    } else if (isWeekend && isHoliday) {
-                        // Weekend + Holiday combination
-                        const holidaySpan = row.querySelector('.text-red-600');
-                        if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('regular')) {
-                            defaultType = 'rest_day_regular_holiday';
-                        } else if (holidaySpan && holidaySpan.textContent.toLowerCase().includes('special')) {
-                            defaultType = 'rest_day_special_holiday';
-                        } else {
-                            defaultType = 'rest_day';
-                        }
-                    }
-                    
-                    // Set the appropriate default value
-                    logTypeSelect.value = defaultType;
-                }
+                // Trigger handleLogTypeChange for each row to ensure proper input states
+                handleLogTypeChange(index);
             });
         }
 
         function setRegularHours(rowIndex) {
+            // Check if this row is set to suspension type
+            const logTypeSelect = document.querySelector(`select[name="time_logs[${rowIndex}][log_type]"]`);
+            const selectedOption = logTypeSelect ? logTypeSelect.options[logTypeSelect.selectedIndex] : null;
+            const selectedText = selectedOption ? selectedOption.text : '';
+            const isSuspension = selectedText.toLowerCase().includes('suspension');
+            
+            // Don't fill times if it's a suspension day
+            if (isSuspension) {
+                console.log('Skipping time fill for suspension day on row:', rowIndex);
+                return;
+            }
+            
             @php
                 // Pass the employee schedule to JavaScript
                 $jsScheduleStart = $selectedEmployee->timeSchedule ? $selectedEmployee->timeSchedule->time_in : '08:00';
@@ -487,10 +535,10 @@
             const breakOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_out]"]`);
             
             // Clear only time fields, do NOT change the log type
-            if (timeInInput) timeInInput.value = '';
-            if (timeOutInput) timeOutInput.value = '';
-            if (breakInInput) breakInInput.value = '';
-            if (breakOutInput) breakOutInput.value = '';
+            if (timeInInput && !timeInInput.disabled) timeInInput.value = '';
+            if (timeOutInput && !timeOutInput.disabled) timeOutInput.value = '';
+            if (breakInInput && !breakInInput.disabled) breakInInput.value = '';
+            if (breakOutInput && !breakOutInput.disabled) breakOutInput.value = '';
             
             // Trigger calculation if function exists
             if (typeof calculateHours === 'function') {
@@ -503,12 +551,115 @@
             console.log('Calculating hours for row:', rowIndex);
         }
 
+        function handleLogTypeChange(rowIndex) {
+            const logTypeSelect = document.querySelector(`select[name="time_logs[${rowIndex}][log_type]"]`);
+            const timeInputs = document.querySelectorAll(`.time-input-${rowIndex}`);
+            
+            if (logTypeSelect && timeInputs.length > 0) {
+                const selectedOption = logTypeSelect.options[logTypeSelect.selectedIndex];
+                const selectedText = selectedOption ? selectedOption.text : '';
+                
+                // Check if the selected option contains "Suspension" in its text
+                const isSuspension = selectedText.toLowerCase().includes('suspension');
+                
+                // Get row element to check for suspension data attributes
+                const row = document.querySelector(`[data-row="${rowIndex}"]`).closest('tr');
+                const isPaidSuspension = row && row.dataset.isPaidSuspension === 'true';
+                
+                // Check if this is an inherent suspension day (from suspension settings)
+                const hasHiddenSuspensionInput = document.querySelector(`input[name="time_logs[${rowIndex}][is_suspension]"][type="hidden"]`);
+                
+                timeInputs.forEach(input => {
+                    if (hasHiddenSuspensionInput) {
+                        // For suspension setting days, keep disabled but preserve values (don't clear existing time log data)
+                        input.disabled = true;
+                        input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                        input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
+                        // DON'T clear values - preserve actual time logs from database
+                    } else if (isSuspension) {
+                        if (isPaidSuspension) {
+                            // For paid suspensions (manual selection), enable inputs but fill with default schedule
+                            input.disabled = false;
+                            input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                            input.classList.add('focus:ring-indigo-500', 'focus:border-indigo-500');
+                            
+                            // Fill with default values if empty (these come from server-side processing)
+                            if (!input.value) {
+                                const fieldName = input.name.match(/\[(\w+)\]$/)[1]; // Extract field name (time_in, time_out, etc.)
+                                const defaultValue = row.dataset[fieldName + 'Default'];
+                                if (defaultValue && defaultValue !== 'null') {
+                                    input.value = defaultValue;
+                                }
+                            }
+                        } else {
+                            // For unpaid suspensions, disable inputs but preserve existing values (don't clear actual time logs)
+                            input.disabled = true;
+                            // DON'T clear values - input.value = ''; 
+                            input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
+                        }
+                    } else {
+                        // Enable inputs for non-suspension types (only for non-suspension setting days)
+                        input.disabled = false;
+                        input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                        input.classList.add('focus:ring-indigo-500', 'focus:border-indigo-500');
+                    }
+                });
+                
+                // Sync hidden field values for suspension days
+                syncHiddenFields(rowIndex);
+            }
+        }
+
+        // Function to sync hidden field values with actual input values
+        function syncHiddenFields(rowIndex) {
+            const timeFields = ['time_in', 'time_out', 'break_in', 'break_out'];
+            
+            timeFields.forEach(field => {
+                const actualInput = document.querySelector(`input[name="time_logs[${rowIndex}][${field}]"]`);
+                const hiddenInput = document.querySelector(`input[name="time_logs[${rowIndex}][${field}_hidden]"]`);
+                
+                if (actualInput && hiddenInput) {
+                    // If the actual input is disabled, sync its value to the hidden field
+                    if (actualInput.disabled && actualInput.value) {
+                        hiddenInput.value = actualInput.value;
+                    }
+                    // If the actual input is enabled, clear the hidden field to avoid conflicts
+                    else if (!actualInput.disabled) {
+                        hiddenInput.value = '';
+                    }
+                }
+            });
+        }
+
         // Auto-save functionality (optional)
         document.addEventListener('DOMContentLoaded', function() {
             const form = document.getElementById('dtr-form');
             if (form) {
                 // Add any initialization logic here
                 console.log('DTR form initialized');
+                
+                // Initialize disabled state for all rows on page load
+                const rows = document.querySelectorAll('tbody tr');
+                rows.forEach((row, index) => {
+                    const logTypeSelect = row.querySelector(`select[name="time_logs[${index}][log_type]"]`);
+                    if (logTypeSelect) {
+                        // Check current selected value and apply appropriate state
+                        handleLogTypeChange(index);
+                    }
+                });
+                
+                // Add event listeners to time inputs for syncing hidden fields
+                const timeInputs = form.querySelectorAll('input[type="time"]');
+                timeInputs.forEach(input => {
+                    input.addEventListener('input', function() {
+                        const match = this.name.match(/time_logs\[(\d+)\]/);
+                        if (match) {
+                            const rowIndex = parseInt(match[1]);
+                            syncHiddenFields(rowIndex);
+                        }
+                    });
+                });
             }
         });
     </script>

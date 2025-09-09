@@ -828,6 +828,61 @@
                                                         $basicPay += $ndAmount;
                                                     }
                                                 }
+                                                
+                                                // Suspension hours - process separately with their own rate
+                                                if (isset($employeeBreakdown['suspension'])) {
+                                                    $suspensionHours = $employeeBreakdown['suspension']['regular_hours'] ?? 0;
+                                                    $suspensionNightDiffHours = $employeeBreakdown['suspension']['night_diff_regular_hours'] ?? 0;
+                                                    
+                                                    // Get rate config for suspension
+                                                    $suspensionRateConfig = $employeeBreakdown['suspension']['rate_config'] ?? null;
+                                                    $suspensionMultiplier = $suspensionRateConfig ? $suspensionRateConfig->regular_rate_multiplier : 1.10; // Default 110%
+                                                    
+                                                    // Paid Suspension (without ND)
+                                                    if ($suspensionHours > 0) {
+                                                        $actualMinutes = $suspensionHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $suspensionMultiplier;
+                                                        $ratePerMinute = $adjustedHourlyRate / 60;
+                                                        $amount = round($ratePerMinute * $roundedMinutes, 2);
+                                                        
+                                                        $percentageDisplay = number_format($suspensionMultiplier * 100, 0) . '%';
+                                                        
+                                                        $basicBreakdownData['Paid Suspension'] = [
+                                                            'hours' => $suspensionHours,
+                                                            'rate' => $hourlyRate,
+                                                            'multiplier' => $suspensionMultiplier,
+                                                            'percentage' => $percentageDisplay,
+                                                            'amount' => $amount,
+                                                        ];
+                                                        $basicRegularHours += $suspensionHours;
+                                                        $basicPay += $amount;
+                                                    }
+                                                    
+                                                    // Paid Suspension + ND
+                                                    if ($suspensionNightDiffHours > 0) {
+                                                        // Combined rate: suspension rate + night differential bonus
+                                                        $combinedMultiplier = $suspensionMultiplier + ($nightDiffMultiplier - 1);
+                                                        
+                                                        $actualMinutes = $suspensionNightDiffHours * 60;
+                                                        $roundedMinutes = round($actualMinutes);
+                                                        $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
+                                                        $ratePerMinute = $adjustedHourlyRate / 60;
+                                                        $ndAmount = round($ratePerMinute * $roundedMinutes, 2);
+                                                        
+                                                        $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
+                                                        
+                                                        $basicBreakdownData['Paid Suspension+ND'] = [
+                                                            'hours' => $suspensionNightDiffHours,
+                                                            'rate' => $hourlyRate,
+                                                            'multiplier' => $combinedMultiplier,
+                                                            'percentage' => $ndPercentageDisplay,
+                                                            'amount' => $ndAmount,
+                                                        ];
+                                                        $basicRegularHours += $suspensionNightDiffHours;
+                                                        $basicPay += $ndAmount;
+                                                    }
+                                                }
                                             } else {
                                                 // PROCESSING/APPROVED: Use breakdown data from snapshot
                                                 $basicBreakdownData = [];
@@ -858,22 +913,69 @@
                                                 <!-- Show Basic Pay breakdown -->
                                                 @foreach($basicBreakdownData as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <span>{{ $type }}: {{ isset($data['minutes']) ? number_format($data['minutes'], 0) . 'm' : number_format($data['hours'] * 60, 0) . 'm' }}</span>
-                                                        <div class="text-xs text-gray-600">
-                                                            @if(isset($data['percentage']))
-                                                                {{ $data['percentage'] }} = ₱{{ number_format($data['amount'] ?? 0, 2) }}
-                                                            @elseif(str_contains($type, '+ND') && isset($data['multiplier']))
-                                                                {{ number_format($data['multiplier'] * 100, 0) }}% = ₱{{ number_format($data['amount'] ?? 0, 2) }}
-                                                            @elseif(str_contains($type, '+ND'))
-                                                                110% = ₱{{ number_format($data['amount'] ?? 0, 2) }}
-                                                            @else
-                                                                ₱{{ number_format($data['rate'] ?? 0, 2) }}/hr 
-                                                                @if(isset($data['rate_per_minute']))
-                                                                    <br>(₱{{ number_format($data['rate_per_minute'], 4) }}/min)
-                                                                @endif
-                                                                = ₱{{ number_format($data['amount'] ?? 0, 2) }}
+                                                        @if($type == 'Paid Suspension')
+                                                            <!-- Special handling for Paid Suspension -->
+                                                            @php
+                                                                $suspensionMinutes = isset($data['minutes']) ? $data['minutes'] : ($data['hours'] * 60);
+                                                                $hourlyRate = $data['rate'] ?? 0;
+                                                                $multiplier = $data['multiplier'] ?? 1.10;
+                                                                $amount = $data['amount'] ?? 0;
+                                                            @endphp
+                                                            
+                                                            <div class="mb-1">
+                                                                <span>Paid Suspension: {{ number_format($suspensionMinutes, 0) }}m</span>
+                                                                <div class="text-xs text-gray-600">
+                                                                    {{ number_format($multiplier * 100, 0) }}% = ₱{{ number_format($amount, 2) }}
+                                                                </div>
+                                                            </div>
+                                                        @elseif(isset($data['description']) && str_contains($data['description'], 'Regular Suspension'))
+                                                            <!-- Legacy handling for combined Regular Workday + Suspension (should not be used with new logic) -->
+                                                            @php
+                                                                $lines = explode(PHP_EOL, $data['description']);
+                                                                $workdayHours = $data['workday_hours'] ?? 0;
+                                                                $suspensionHours = $data['suspension_hours'] ?? 0;
+                                                                $totalMinutes = isset($data['minutes']) ? $data['minutes'] : ($data['hours'] * 60);
+                                                                $hourlyRate = $data['rate'] ?? 0;
+                                                                $multiplier = $data['multiplier'] ?? 1;
+                                                                $adjustedRate = $hourlyRate * $multiplier;
+                                                            @endphp
+                                                            
+                                                            @if($workdayHours > 0)
+                                                                <div class="mb-1">
+                                                                    <span>Regular Workday: {{ number_format($workdayHours * 60, 0) }}m</span>
+                                                                    <div class="text-xs text-gray-600">
+                                                                        {{ number_format($multiplier * 100, 0) }}% = ₱{{ number_format($workdayHours * $adjustedRate, 2) }}
+                                                                    </div>
+                                                                </div>
                                                             @endif
-                                                        </div>
+                                                            
+                                                            @if($suspensionHours > 0)
+                                                                <div class="mb-1">
+                                                                    <span>Regular Suspension {{ number_format($suspensionHours * 60, 0) }}m</span>
+                                                                    <div class="text-xs text-gray-600">
+                                                                        {{ number_format($multiplier * 100, 0) }}% = ₱{{ number_format($suspensionHours * $adjustedRate, 2) }}
+                                                                    </div>
+                                                                </div>
+                                                            @endif
+                                                        @else
+                                                            <!-- Regular display for other types -->
+                                                            <span>{{ $type }}: {{ isset($data['minutes']) ? number_format($data['minutes'], 0) . 'm' : number_format($data['hours'] * 60, 0) . 'm' }}</span>
+                                                            <div class="text-xs text-gray-600">
+                                                                @if(isset($data['percentage']))
+                                                                    {{ $data['percentage'] }} = ₱{{ number_format($data['amount'] ?? 0, 2) }}
+                                                                @elseif(str_contains($type, '+ND') && isset($data['multiplier']))
+                                                                    {{ number_format($data['multiplier'] * 100, 0) }}% = ₱{{ number_format($data['amount'] ?? 0, 2) }}
+                                                                @elseif(str_contains($type, '+ND'))
+                                                                    110% = ₱{{ number_format($data['amount'] ?? 0, 2) }}
+                                                                @else
+                                                                    ₱{{ number_format($data['rate'] ?? 0, 2) }}/hr 
+                                                                    @if(isset($data['rate_per_minute']))
+                                                                        <br>(₱{{ number_format($data['rate_per_minute'], 4) }}/min)
+                                                                    @endif
+                                                                    = ₱{{ number_format($data['amount'] ?? 0, 2) }}
+                                                                @endif
+                                                            </div>
+                                                        @endif
                                                     </div>
                                                 @endforeach
                                                 <div class="text-xs border-t pt-1">
@@ -1870,11 +1972,18 @@
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
-                                            @if($detail->total_deductions > 0)
-                                                @php
-                                                    $calculatedDeductionTotal = 0;
-                                                    $hasBreakdown = false;
-                                                @endphp
+                                            @php
+                                                $calculatedDeductionTotal = 0;
+                                                $hasBreakdown = false;
+                                                
+                                                // Check if we have deductions to show (either stored or can be calculated dynamically)
+                                                $hasDeductionsToShow = $detail->total_deductions > 0 || 
+                                                                     (isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown) && !empty($detail->deduction_breakdown)) ||
+                                                                     ($employeeSnapshot && $employeeSnapshot->deductions_breakdown) ||
+                                                                     (isset($isDynamic) && $isDynamic && $deductionSettings->isNotEmpty());
+                                            @endphp
+                                            
+                                            @if($hasDeductionsToShow)
                                                 
                                                 <!-- Show Deduction Breakdown if available (from snapshot or dynamic calculation) -->
                                                 @if(isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown) && !empty($detail->deduction_breakdown))
@@ -2787,6 +2896,15 @@
                                         $totalEmployeeOvertimeHours += $overtimeHours;
                                         $isWeekend = \Carbon\Carbon::parse($date)->isWeekend();
                                         
+                                        // Check if this date is a rest day for this employee based on their schedule
+                                        $isEmployeeRestDay = false;
+                                        if ($detail->employee->daySchedule) {
+                                            $isEmployeeRestDay = !$detail->employee->daySchedule->isWorkingDay(\Carbon\Carbon::parse($date));
+                                        } else {
+                                            // Fallback to weekend if no schedule assigned
+                                            $isEmployeeRestDay = $isWeekend;
+                                        }
+                                        
                                         // Get day type for indicator
                                         $dayType = 'Regular Day';
                                         $dayTypeColor = 'bg-green-100 text-green-800';
@@ -2798,6 +2916,10 @@
                                             if ($logType) {
                                                 // Map log_type to display names
                                                 switch ($logType) {
+                                                    case 'suspension':
+                                                        $dayType = 'Suspension';
+                                                        $dayTypeColor = 'bg-gray-200 text-gray-800';
+                                                        break;
                                                     case 'special_holiday':
                                                         $dayType = 'Special Holiday';
                                                         $dayTypeColor = 'bg-orange-100 text-orange-800';
@@ -2839,12 +2961,12 @@
                                                     }
                                                 }
                                             }
-                                        } elseif ($isWeekend) {
+                                        } elseif ($isEmployeeRestDay) {
                                             $dayType = 'Rest Day';
                                             $dayTypeColor = 'bg-blue-100 text-blue-800';
                                         }
                                     @endphp
-                                    <td class="px-2 py-4 text-xs text-center {{ $isWeekend ? 'bg-gray-100' : '' }}">
+                                    <td class="px-2 py-4 text-xs text-center {{ $isEmployeeRestDay ? 'bg-gray-100' : '' }}">
                                         <!-- Day Type Indicator -->
                                         <div class="mb-2">
                                             <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full {{ $dayTypeColor }}">
