@@ -897,21 +897,9 @@ class TimeLogController extends Controller
      */
     private function isSuspensionApplicableToEmployee($suspension, Employee $employee)
     {
-        // With the simplified suspension structure, we check pay_applicable_to field
-        if (!$suspension->pay_applicable_to) {
-            return true; // Applies to all employees if not specified
-        }
-
-        switch ($suspension->pay_applicable_to) {
-            case 'all':
-                return true;
-            case 'with_benefits':
-                return $employee->benefits_status === 'with_benefits';
-            case 'without_benefits':
-                return $employee->benefits_status === 'without_benefits';
-            default:
-                return true;
-        }
+        // Suspension days apply to ALL employees when active
+        // The pay_applicable_to field only controls who gets auto-fill benefits (handled separately)
+        return true;
     }
 
     /**
@@ -1055,13 +1043,28 @@ class TimeLogController extends Controller
             $defaultBreakIn = $breakIn;
             $defaultBreakOut = $breakOut;
 
-            // If it's a suspension day, automatically set log type and handle paid suspension times
+            // Determine what the original day type would be (without suspension)
+            $originalDayType = 'regular_workday'; // Default
+            if (!$isRestDay && !$holiday) {
+                $originalDayType = 'regular_workday';
+            } elseif ($isRestDay && !$holiday) {
+                $originalDayType = 'rest_day';
+            } elseif (!$isRestDay && $holiday) {
+                $originalDayType = ($holiday->type === 'special') ? 'special_holiday' : 'regular_holiday';
+            } elseif ($isRestDay && $holiday) {
+                $originalDayType = ($holiday->type === 'special') ? 'rest_day_special_holiday' : 'rest_day_regular_holiday';
+            }
+
+            // If it's a suspension day, automatically set log type and conditionally handle time auto-fill
             if ($suspensionInfo['is_suspension']) {
                 $defaultLogType = 'suspension';
 
-                // If it's a paid suspension and there's NO EXISTING time log, set default work hours
-                if ($suspensionInfo['info']['is_paid'] && !$timeLog) {
-                    // Get employee's default schedule for paid suspension (only for new entries)
+                // Only auto-fill time logs if:
+                // 1. Original day type would be "regular_workday" 
+                // 2. This is a paid suspension
+                // 3. Employee is eligible for the paid suspension based on "Applicable To" setting
+                if ($originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) {
+                    // Auto-fill with employee's regular schedule for eligible employees only
                     if ($employee->timeSchedule) {
                         $defaultTimeIn = Carbon::parse($employee->timeSchedule->time_in);
                         $defaultTimeOut = Carbon::parse($employee->timeSchedule->time_out);
@@ -1070,16 +1073,21 @@ class TimeLogController extends Controller
                         if ($employee->timeSchedule->break_start && $employee->timeSchedule->break_end) {
                             $defaultBreakIn = Carbon::parse($employee->timeSchedule->break_start);
                             $defaultBreakOut = Carbon::parse($employee->timeSchedule->break_end);
+                        } else {
+                            // Clear break times if no fixed breaks
+                            $defaultBreakIn = null;
+                            $defaultBreakOut = null;
                         }
+                    } else {
+                        // Fallback if no schedule defined - use default 8-5 schedule
+                        $defaultTimeIn = Carbon::parse('08:00');
+                        $defaultTimeOut = Carbon::parse('17:00');
+                        $defaultBreakIn = null;
+                        $defaultBreakOut = null;
                     }
                 }
-                // If there's an existing time log, use the actual values from database
-                elseif ($timeLog) {
-                    $defaultTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : $timeIn;
-                    $defaultTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : $timeOut;
-                    $defaultBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : $breakIn;
-                    $defaultBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : $breakOut;
-                }
+                // For employees not eligible for paid suspension OR non-regular workdays, 
+                // don't auto-fill times - keep existing time values (or null if no existing time logs)
             }
 
             $dayData = [
@@ -1091,12 +1099,15 @@ class TimeLogController extends Controller
                 'is_suspension' => $suspensionInfo['is_suspension'],
                 'suspension_info' => $suspensionInfo['info'],
                 'time_log' => $timeLog,
-                // Use actual time log values if they exist, otherwise use defaults (for auto-fill)
-                'time_in' => $timeLog && $timeLog->time_in ? Carbon::parse($timeLog->time_in) : $defaultTimeIn,
-                'time_out' => $timeLog && $timeLog->time_out ? Carbon::parse($timeLog->time_out) : $defaultTimeOut,
-                'break_in' => $timeLog && $timeLog->break_in ? Carbon::parse($timeLog->break_in) : $defaultBreakIn,
-                'break_out' => $timeLog && $timeLog->break_out ? Carbon::parse($timeLog->break_out) : $defaultBreakOut,
-                'log_type' => $timeLog ? $timeLog->log_type : $defaultLogType, // Set default log type for suspensions
+                // For suspension days:
+                // - Always override log_type to 'suspension'  
+                // - Only override time fields if: original day type = 'regular_workday' AND suspension is paid AND employee is eligible
+                // - For non-eligible employees or non-regular days, keep existing time values or null
+                'time_in' => ($suspensionInfo['is_suspension'] && $originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) ? $defaultTimeIn : ($timeLog && $timeLog->time_in ? Carbon::parse($timeLog->time_in) : $defaultTimeIn),
+                'time_out' => ($suspensionInfo['is_suspension'] && $originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) ? $defaultTimeOut : ($timeLog && $timeLog->time_out ? Carbon::parse($timeLog->time_out) : $defaultTimeOut),
+                'break_in' => ($suspensionInfo['is_suspension'] && $originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) ? $defaultBreakIn : ($timeLog && $timeLog->break_in ? Carbon::parse($timeLog->break_in) : $defaultBreakIn),
+                'break_out' => ($suspensionInfo['is_suspension'] && $originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) ? $defaultBreakOut : ($timeLog && $timeLog->break_out ? Carbon::parse($timeLog->break_out) : $defaultBreakOut),
+                'log_type' => $suspensionInfo['is_suspension'] ? $defaultLogType : ($timeLog ? $timeLog->log_type : $defaultLogType), // Always override log type for suspensions
                 'remarks' => $timeLog ? $timeLog->remarks : null,
                 'regular_hours' => $timeLog ? ($timeLog->regular_hours ?? 0) : 0,
                 'overtime_hours' => $timeLog ? ($timeLog->overtime_hours ?? 0) : 0,

@@ -130,6 +130,9 @@ class NoWorkSuspendedSettingController extends Controller
             $validated['time_to'] = null;
         }
 
+        // Handle is_paid checkbox (defaults to false if not checked)
+        $validated['is_paid'] = $request->has('is_paid') ? true : false;
+
         // Set default values for pay settings if not provided
         if (!$validated['is_paid']) {
             $validated['pay_percentage'] = null;
