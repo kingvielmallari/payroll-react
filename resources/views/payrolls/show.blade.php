@@ -103,6 +103,11 @@
                                             $allowances = 0;
                                             if (isset($allowanceSettings) && $allowanceSettings->isNotEmpty()) {
                                                 foreach($allowanceSettings as $allowanceSetting) {
+                                                    // Check if this allowance setting applies to this employee's benefit status
+                                                    if (!$allowanceSetting->appliesTo($detail->employee)) {
+                                                        continue; // Skip this setting for this employee
+                                                    }
+                                                    
                                                     $calculatedAllowanceAmount = 0;
                                                     if($allowanceSetting->calculation_type === 'percentage') {
                                                         $calculatedAllowanceAmount = ($basicPay * $allowanceSetting->rate_percentage) / 100;
@@ -169,6 +174,11 @@
                                             $taxableIncomeForSummary = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay;
                                             if (isset($allowanceBonusSettings) && $allowanceBonusSettings->isNotEmpty()) {
                                                 foreach($allowanceBonusSettings as $abSetting) {
+                                                    // Check if this allowance/bonus setting applies to this employee's benefit status
+                                                    if (!$abSetting->appliesTo($detail->employee)) {
+                                                        continue; // Skip this setting for this employee
+                                                    }
+                                                    
                                                     if ($abSetting->is_taxable) {
                                                         $calculatedAllowanceAmount = $abSetting->calculateAmount(
                                                             $basicPay, // Use calculated basic pay for the period
@@ -1590,6 +1600,11 @@
                                                 <!-- DRAFT MODE: Show Dynamic Calculations -->
                                                 @foreach($allowanceSettings as $setting)
                                                     @php
+                                                        // Check if this allowance setting applies to this employee's benefit status
+                                                        if (!$setting->appliesTo($detail->employee)) {
+                                                            continue; // Skip this setting for this employee
+                                                        }
+                                                        
                                                         // Calculate actual amount for display based on setting configuration
                                                         $displayAmount = 0;
                                                         if($setting->calculation_type === 'percentage') {
@@ -1741,6 +1756,11 @@
                                                     <!-- Fallback: Show Active Bonus Settings if no breakdown available -->
                                                     @foreach($bonusSettings as $setting)
                                                         @php
+                                                            // Check if this bonus setting applies to this employee's benefit status
+                                                            if (!$setting->appliesTo($detail->employee)) {
+                                                                continue; // Skip this setting for this employee
+                                                            }
+                                                            
                                                             // Calculate actual amount for display
                                                             $displayAmount = 0;
                                                             if($setting->calculation_type === 'percentage') {
@@ -1901,6 +1921,11 @@
                                                     // Add only taxable allowances/bonuses
                                                     if ($allSettings->isNotEmpty()) {
                                                         foreach($allSettings as $setting) {
+                                                            // Check if this setting applies to this employee's benefit status
+                                                            if (!$setting->appliesTo($detail->employee)) {
+                                                                continue; // Skip this setting for this employee
+                                                            }
+                                                            
                                                             // Only add if this setting is taxable
                                                             if (!$setting->is_taxable) {
                                                                 continue;
@@ -2022,6 +2047,11 @@
                                                     <!-- Show Active Deduction Settings with Calculated Amounts -->
                                                     @foreach($deductionSettings as $setting)
                                                         @php
+                                                            // Check if this deduction setting applies to this employee's benefit status
+                                                            if (!$setting->appliesTo($detail->employee)) {
+                                                                continue; // Skip this setting for this employee
+                                                            }
+                                                            
                                                             // Calculate actual deduction amount for this employee
                                                             $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->basic_pay ?? 0;
                                                             // Use the CALCULATED gross pay from the Gross Pay column instead of stored value
@@ -2171,6 +2201,12 @@
                                                 @if(isset($isDynamic) && $isDynamic && $deductionSettings->isNotEmpty())
                                                     <!-- Show Available Deduction Settings when no deductions applied -->
                                                     @foreach($deductionSettings as $setting)
+                                                        @php
+                                                            // Check if this deduction setting applies to this employee's benefit status
+                                                            if (!$setting->appliesTo($detail->employee)) {
+                                                                continue; // Skip this setting for this employee
+                                                            }
+                                                        @endphp
                                                         <div class="text-xs text-gray-400">
                                                             <span>{{ $setting->name }}:</span>
                                                             <span>
