@@ -41,7 +41,6 @@
                     <option value="">Select Type</option>
                     <option value="regular" {{ old('type') == 'regular' ? 'selected' : '' }}>Regular Holiday</option>
                     <option value="special_non_working" {{ old('type') == 'special_non_working' ? 'selected' : '' }}>Special Non-Working Holiday</option>
-                    <option value="special_working" {{ old('type') == 'special_working' ? 'selected' : '' }}>Special Working Holiday</option>
                 </select>
                 @error('type')
                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>

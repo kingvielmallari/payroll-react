@@ -964,7 +964,9 @@ class TimeLogController extends Controller
         $holidays = \App\Models\Holiday::where('is_active', true)
             ->whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
             ->get()
-            ->keyBy('date');
+            ->keyBy(function ($holiday) {
+                return Carbon::parse($holiday->date)->format('Y-m-d');
+            });
 
         // Get suspension days for the period
         $suspensionDays = \App\Models\NoWorkSuspendedSetting::where('status', 'active')
@@ -1037,66 +1039,77 @@ class TimeLogController extends Controller
                 ]);
             }
 
-            // Determine default log type and default times for suspension days
-            $defaultLogType = null;
-            $defaultTimeIn = $timeIn;
-            $defaultTimeOut = $timeOut;
-            $defaultBreakIn = $breakIn;
-            $defaultBreakOut = $breakOut;
+            // FRONTEND DYNAMIC LOGIC: Always override based on current active status
+            // This ensures frontend shows current state regardless of existing database records
 
-            // Determine what the original day type would be (without suspension)
-            $originalDayType = 'regular_workday'; // Default
-            if (!$isRestDay && !$holiday) {
-                $originalDayType = 'regular_workday';
-            } elseif ($isRestDay && !$holiday) {
-                $originalDayType = 'rest_day';
-            } elseif (!$isRestDay && $holiday) {
-                $originalDayType = (in_array($holiday->type, ['special_non_working', 'special_working'])) ? 'special_holiday' : 'regular_holiday';
-            } elseif ($isRestDay && $holiday) {
-                $originalDayType = (in_array($holiday->type, ['special_non_working', 'special_working'])) ? 'rest_day_special_holiday' : 'rest_day_regular_holiday';
-            }
+            $frontendLogType = null;
+            $frontendTimeIn = null;
+            $frontendTimeOut = null;
+            $frontendBreakIn = null;
+            $frontendBreakOut = null;
 
-            // Set default log type based on the original day type (this will be used if no existing time log)
-            $defaultLogType = $originalDayType;
-
-            // If it's a suspension day, automatically set log type and conditionally handle time auto-fill
+            // PRIORITY 1: Active suspension takes highest priority
             if ($suspensionInfo['is_suspension']) {
-                $defaultLogType = 'suspension';
+                $frontendLogType = 'suspension';
 
-                // Only auto-fill time logs if:
-                // 1. Original day type would be "regular_workday" 
-                // 2. This is a paid suspension
-                // 3. Employee is eligible for the paid suspension based on "Applicable To" setting
+                // Auto-fill times for paid suspensions on regular workdays for eligible employees
+                $originalDayType = $isRestDay ? 'rest_day' : 'regular_workday';
                 if ($originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) {
                     // Auto-fill with employee's regular schedule for eligible employees only
                     if ($employee->timeSchedule) {
-                        $defaultTimeIn = Carbon::parse($employee->timeSchedule->time_in);
-                        $defaultTimeOut = Carbon::parse($employee->timeSchedule->time_out);
+                        $frontendTimeIn = Carbon::parse($employee->timeSchedule->time_in);
+                        $frontendTimeOut = Carbon::parse($employee->timeSchedule->time_out);
 
                         // Set break times if employee has fixed breaks
                         if ($employee->timeSchedule->break_start && $employee->timeSchedule->break_end) {
-                            $defaultBreakIn = Carbon::parse($employee->timeSchedule->break_start);
-                            $defaultBreakOut = Carbon::parse($employee->timeSchedule->break_end);
-                        } else {
-                            // Clear break times if no fixed breaks
-                            $defaultBreakIn = null;
-                            $defaultBreakOut = null;
+                            $frontendBreakIn = Carbon::parse($employee->timeSchedule->break_start);
+                            $frontendBreakOut = Carbon::parse($employee->timeSchedule->break_end);
                         }
                     } else {
-                        // Fallback if no schedule defined - use default 8-5 schedule
-                        $defaultTimeIn = Carbon::parse('08:00');
-                        $defaultTimeOut = Carbon::parse('17:00');
-                        $defaultBreakIn = null;
-                        $defaultBreakOut = null;
+                        // Fallback schedule
+                        $frontendTimeIn = Carbon::parse('08:00');
+                        $frontendTimeOut = Carbon::parse('17:00');
                     }
                 }
-                // For employees not eligible for paid suspension OR non-regular workdays, 
-                // don't auto-fill times - keep existing time values (or null if no existing time logs)
-            } else {
-                // For non-suspension days, defaultLogType is already set to originalDayType
-                // No additional logic needed - holidays are automatically handled
+                // For unpaid suspensions or non-eligible employees, don't auto-fill times
+            }
+            // PRIORITY 2: Active holiday (if no suspension)
+            elseif ($holiday && $holiday->is_active) {
+                // Determine holiday log type based on rest day combination
+                if (!$isRestDay && $holiday->type === 'regular') {
+                    $frontendLogType = 'regular_holiday';
+                } elseif (!$isRestDay && $holiday->type === 'special_non_working') {
+                    $frontendLogType = 'special_holiday';
+                } elseif ($isRestDay && $holiday->type === 'regular') {
+                    $frontendLogType = 'rest_day_regular_holiday';
+                } elseif ($isRestDay && $holiday->type === 'special_non_working') {
+                    $frontendLogType = 'rest_day_special_holiday';
+                }
+                // For holidays, clear existing times - user should enter manually if needed
+                $frontendTimeIn = null;
+                $frontendTimeOut = null;
+                $frontendBreakIn = null;
+                $frontendBreakOut = null;
+            }
+            // PRIORITY 3: No active holiday/suspension - show original day type
+            else {
+                // Force back to original day type regardless of existing database record
+                $frontendLogType = $isRestDay ? 'rest_day' : 'regular_workday';
+
+                // If no active holiday/suspension, clear times to force user to original state
+                // This ensures when user saves, it overwrites with original day type
+                $frontendTimeIn = null;
+                $frontendTimeOut = null;
+                $frontendBreakIn = null;
+                $frontendBreakOut = null;
             }
 
+            // The frontend will always use these values regardless of existing database records
+            $defaultLogType = $frontendLogType;
+            $defaultTimeIn = $frontendTimeIn;
+            $defaultTimeOut = $frontendTimeOut;
+            $defaultBreakIn = $frontendBreakIn;
+            $defaultBreakOut = $frontendBreakOut;
             $dayData = [
                 'date' => $currentDate->copy(),
                 'day' => $currentDate->format('d'),
@@ -1104,18 +1117,16 @@ class TimeLogController extends Controller
                 'is_weekend' => $isRestDay, // Keep field name for compatibility but use dynamic logic
                 'is_holiday' => $holiday ? $holiday->name : null,
                 'holiday_type' => $holiday ? $holiday->type : null, // Add holiday type for auto day type selection
+                'is_holiday_active' => $holiday && $holiday->is_active, // Add flag for active holidays
                 'is_suspension' => $suspensionInfo['is_suspension'],
                 'suspension_info' => $suspensionInfo['info'],
                 'time_log' => $timeLog,
-                // For suspension days:
-                // - Always override log_type to 'suspension'  
-                // - Only override time fields if: original day type = 'regular_workday' AND suspension is paid AND employee is eligible
-                // - For non-eligible employees or non-regular days, keep existing time values or null
-                'time_in' => ($suspensionInfo['is_suspension'] && $originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) ? $defaultTimeIn : ($timeLog && $timeLog->time_in ? Carbon::parse($timeLog->time_in) : $defaultTimeIn),
-                'time_out' => ($suspensionInfo['is_suspension'] && $originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) ? $defaultTimeOut : ($timeLog && $timeLog->time_out ? Carbon::parse($timeLog->time_out) : $defaultTimeOut),
-                'break_in' => ($suspensionInfo['is_suspension'] && $originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) ? $defaultBreakIn : ($timeLog && $timeLog->break_in ? Carbon::parse($timeLog->break_in) : $defaultBreakIn),
-                'break_out' => ($suspensionInfo['is_suspension'] && $originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) ? $defaultBreakOut : ($timeLog && $timeLog->break_out ? Carbon::parse($timeLog->break_out) : $defaultBreakOut),
-                'log_type' => $suspensionInfo['is_suspension'] ? $defaultLogType : ($timeLog ? $timeLog->log_type : $defaultLogType), // Always override log type for suspensions
+                // DYNAMIC FRONTEND BEHAVIOR: Always use frontend-determined values regardless of existing records
+                'time_in' => $defaultTimeIn,
+                'time_out' => $defaultTimeOut,
+                'break_in' => $defaultBreakIn,
+                'break_out' => $defaultBreakOut,
+                'log_type' => $defaultLogType,
                 'remarks' => $timeLog ? $timeLog->remarks : null,
                 'regular_hours' => $timeLog ? ($timeLog->regular_hours ?? 0) : 0,
                 'overtime_hours' => $timeLog ? ($timeLog->overtime_hours ?? 0) : 0,
@@ -1389,34 +1400,22 @@ class TimeLogController extends Controller
                     !empty($logData['time_in_hidden']) || !empty($logData['time_out_hidden']) ||
                     !empty($logData['break_in_hidden']) || !empty($logData['break_out_hidden']);
 
-                // Check if this is a day type change (different from default for the day)
+                // Check if this is a day type change or special day (different from default for the day)
                 $date = Carbon::parse($logData['log_date']);
                 $employee = Employee::with('daySchedule')->findOrFail($validated['employee_id']);
                 $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($date) : $date->isWeekend();
                 $isHoliday = $logData['is_holiday'] ?? false;
+                $isActiveHoliday = $logData['is_holiday_active'] ?? false;
+                $isSuspension = $logData['is_suspension'] ?? false;
 
-                // Determine what the default log type should be
-                $defaultLogType = 'regular_workday'; // Default
-                if (!$isRestDay && !$isHoliday) {
-                    $defaultLogType = 'regular_workday';
-                } elseif ($isRestDay && !$isHoliday) {
-                    $defaultLogType = 'rest_day';
-                } elseif (!$isRestDay && $isHoliday) {
-                    $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
-                        ->where('is_active', true)
-                        ->first();
-                    $defaultLogType = ($holiday && in_array($holiday->type, ['special_non_working', 'special_working'])) ? 'special_holiday' : 'regular_holiday';
-                } elseif ($isRestDay && $isHoliday) {
-                    $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
-                        ->where('is_active', true)
-                        ->first();
-                    $defaultLogType = ($holiday && in_array($holiday->type, ['special_non_working', 'special_working'])) ? 'rest_day_special_holiday' : 'rest_day_regular_holiday';
-                }
+                // Determine what the default log type should be for a regular day (no special circumstances)
+                $basicDefaultLogType = $isRestDay ? 'rest_day' : 'regular_workday';
 
-                $isDayTypeChange = ($logData['log_type'] !== $defaultLogType);
+                // For special days (holidays, suspensions), we should always save the record
+                $isSpecialDay = $isActiveHoliday || $isSuspension || ($logData['log_type'] !== $basicDefaultLogType);
 
-                // Skip only if no existing record, no time data, AND no day type change
-                if (!$existingLog && !$hasAnyTimeData && !$isDayTypeChange) {
+                // Skip only if no existing record, no time data, AND no special day circumstances
+                if (!$existingLog && !$hasAnyTimeData && !$isSpecialDay) {
                     $skippedCount++;
                     continue;
                 }
@@ -1428,14 +1427,40 @@ class TimeLogController extends Controller
                 $breakIn = !empty($logData['break_in']) ? $logData['break_in'] : (!empty($logData['break_in_hidden']) ? $logData['break_in_hidden'] : null);
                 $breakOut = !empty($logData['break_out']) ? $logData['break_out'] : (!empty($logData['break_out_hidden']) ? $logData['break_out_hidden'] : null);
 
-                // Determine log_type: use provided value or reset to default based on day if all time fields are blank
-                $logType = $logData['log_type'];
+                // FORCE OVERRIDE: Auto-detect and force log_type for active suspensions and holidays
+                $forcedLogType = null;
+
+                // Priority 1: Check for active suspension (highest priority)
+                if ($isSuspension) {
+                    $forcedLogType = 'suspension';
+                }
+                // Priority 2: Check for active holiday (if no suspension)
+                elseif ($isActiveHoliday) {
+                    // Get the holiday to determine correct log type
+                    $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
+                        ->where('is_active', true)
+                        ->first();
+
+                    if ($holiday) {
+                        if (!$isRestDay && $holiday->type === 'regular') {
+                            $forcedLogType = 'regular_holiday';
+                        } elseif (!$isRestDay && $holiday->type === 'special_non_working') {
+                            $forcedLogType = 'special_holiday';
+                        } elseif ($isRestDay && $holiday->type === 'regular') {
+                            $forcedLogType = 'rest_day_regular_holiday';
+                        } elseif ($isRestDay && $holiday->type === 'special_non_working') {
+                            $forcedLogType = 'rest_day_special_holiday';
+                        }
+                    }
+                }
+
+                // Use forced log_type if determined, otherwise use form data
+                $logType = $forcedLogType ?? $logData['log_type'];
 
                 // If all time fields are blank, we can still allow day type changes
+                // The log_type has already been determined above (including forced overrides)
                 if (!$timeIn && !$timeOut && !$breakIn && !$breakOut) {
-                    // Keep the user-selected log_type (already validated above)
-                    // This allows users to change day types even without time data
-                    $logType = $logData['log_type'];
+                    // Keep the determined log_type (already set above)
                 }
 
                 // Calculate hours only if we have time_in and time_out

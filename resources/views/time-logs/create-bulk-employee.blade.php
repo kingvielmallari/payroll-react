@@ -176,7 +176,7 @@
                                                 $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
                                             }
                                         @endphp
-                                        <tr class="{{ $day['is_weekend'] ? 'bg-gray-100' : '' }} {{ $day['is_holiday'] ? 'bg-yellow-50' : '' }}"
+                                        <tr class="{{ $day['is_weekend'] ? 'bg-gray-100' : '' }}"
                                             data-is-paid-suspension="{{ $isPaidSuspension ? 'true' : 'false' }}"
                                             data-employee-has-benefits="{{ $employeeHasBenefits ? 'true' : 'false' }}"
                                             data-time-in-default="{{ $defaultTimeIn }}"
@@ -192,23 +192,13 @@
                                                 @if($day['date']->isWeekend())
                                                     <span class="text-xs text-blue-600">(Weekend)</span>
                                                 @endif
-                                                @if($day['is_holiday'])
-                                                    @php
-                                                        $holidayTypeDisplay = '';
-                                                        if ($day['holiday_type'] == 'regular') {
-                                                            $holidayTypeDisplay = 'Regular';
-                                                        } elseif ($day['holiday_type'] == 'special_non_working') {
-                                                            $holidayTypeDisplay = 'Special Non-Working';
-                                                        } elseif ($day['holiday_type'] == 'special_working') {
-                                                            $holidayTypeDisplay = 'Special Working';
-                                                        }
-                                                    @endphp
-                                                    <span class="text-xs text-red-600">({{ $holidayTypeDisplay }} Holiday: {{ $day['is_holiday'] }})</span>
-                                                @endif
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 @php
                                                     $isSuspension = ($day['is_suspension'] ?? false);
+                                                    $isActiveHoliday = ($day['is_holiday_active'] ?? false);
+                                                    $isDropdownDisabled = $isSuspension || $isActiveHoliday; // Disable dropdown for both suspensions and active holidays
+                                                    $isTimeInputDisabled = $isSuspension; // Only disable time inputs for suspensions
                                                     $inputClass = $isSuspension ? 'bg-gray-100 cursor-not-allowed' : '';
                                                 @endphp
                                                 <input type="time" 
@@ -217,7 +207,7 @@
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
                                                        data-row="{{ $index }}"
                                                        onchange="calculateHours({{ $index }})"
-                                                       {{ $isSuspension ? 'disabled' : '' }}>
+                                                       {{ $isTimeInputDisabled ? 'disabled' : '' }}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
@@ -226,28 +216,28 @@
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
                                                        data-row="{{ $index }}"
                                                        onchange="calculateHours({{ $index }})"
-                                                       {{ $isSuspension ? 'disabled' : '' }}>
+                                                       {{ $isTimeInputDisabled ? 'disabled' : '' }}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][break_in]" 
                                                        value="{{ $day['break_in'] ? (is_string($day['break_in']) ? (strlen($day['break_in']) >= 5 ? substr($day['break_in'], 0, 5) : $day['break_in']) : $day['break_in']->format('H:i')) : '' }}"
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
-                                                       {{ $isSuspension ? 'disabled' : '' }}>
+                                                       {{ $isTimeInputDisabled ? 'disabled' : '' }}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][break_out]" 
                                                        value="{{ $day['break_out'] ? (is_string($day['break_out']) ? (strlen($day['break_out']) >= 5 ? substr($day['break_out'], 0, 5) : $day['break_out']) : $day['break_out']->format('H:i')) : '' }}"
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
-                                                       {{ $isSuspension ? 'disabled' : '' }}>
+                                                       {{ $isTimeInputDisabled ? 'disabled' : '' }}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <select name="time_logs[{{ $index }}][log_type]" 
-                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $isSuspension ? 'bg-gray-100 cursor-not-allowed' : '' }} log-type-{{ $index }}"
+                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $isDropdownDisabled ? 'bg-gray-100 cursor-not-allowed' : '' }} log-type-{{ $index }}"
                                                         data-row="{{ $index }}"
                                                         onchange="handleLogTypeChange({{ $index }})"
-                                                        {{ $isSuspension ? 'disabled' : '' }}>>
+                                                        {{ $isDropdownDisabled ? 'disabled' : '' }}>
                                                     @foreach($logTypes as $value => $label)
                                                         @php
                                                             $selected = '';
@@ -271,14 +261,14 @@
                                                                 } elseif ($isHoliday && $holidayType === 'regular' && !$day['is_weekend'] && $value === 'regular_holiday') {
                                                                     // 3. Regular Holiday (default for active regular holidays on work days)
                                                                     $selected = 'selected';
-                                                                } elseif ($isHoliday && in_array($holidayType, ['special_non_working', 'special_working']) && !$day['is_weekend'] && $value === 'special_holiday') {
-                                                                    // 4. Special Holiday (default for active special holidays on work days)
+                                                                } elseif ($isHoliday && $holidayType === 'special_non_working' && !$day['is_weekend'] && $value === 'special_holiday') {
+                                                                    // 4. Special Holiday (default for active special non-working holidays on work days)
                                                                     $selected = 'selected';
                                                                 } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'regular' && $value === 'rest_day_regular_holiday') {
                                                                     // Rest Day + Regular Holiday (rest day + regular holiday)
                                                                     $selected = 'selected';
-                                                                } elseif ($day['is_weekend'] && $isHoliday && in_array($holidayType, ['special_non_working', 'special_working']) && $value === 'rest_day_special_holiday') {
-                                                                    // Rest Day + Special Holiday (rest day + special holiday)
+                                                                } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'special_non_working' && $value === 'rest_day_special_holiday') {
+                                                                    // Rest Day + Special Holiday (rest day + special non-working holiday)
                                                                     $selected = 'selected';
                                                                 }
                                                             }
@@ -308,12 +298,21 @@
                                                     <input type="hidden" name="time_logs[{{ $index }}][time_out_hidden]" value="{{ $defaultTimeOut ?? '' }}">
                                                     <input type="hidden" name="time_logs[{{ $index }}][break_in_hidden]" value="{{ $defaultBreakIn ?? '' }}">
                                                     <input type="hidden" name="time_logs[{{ $index }}][break_out_hidden]" value="{{ $defaultBreakOut ?? '' }}">
+                                                @elseif($isActiveHoliday)
+                                                    {{-- For active holidays, add hidden input for log_type since disabled selects won't submit --}}
+                                                    @php
+                                                        $selectedLogType = $day['log_type'] ?? '';
+                                                    @endphp
+                                                    <input type="hidden" name="time_logs[{{ $index }}][log_type]" value="{{ $selectedLogType }}">
                                                 @endif
                                                 @if($day['is_weekend'])
                                                     <input type="hidden" name="time_logs[{{ $index }}][is_rest_day]" value="1">
                                                 @endif
                                                 @if($day['is_holiday'])
                                                     <input type="hidden" name="time_logs[{{ $index }}][is_holiday]" value="1">
+                                                @endif
+                                                @if($isActiveHoliday)
+                                                    <input type="hidden" name="time_logs[{{ $index }}][is_holiday_active]" value="1">
                                                 @endif
                                                 @if($day['is_suspension'] ?? false)
                                                     <input type="hidden" name="time_logs[{{ $index }}][is_suspension]" value="1">

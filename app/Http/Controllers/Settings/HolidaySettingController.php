@@ -53,7 +53,7 @@ class HolidaySettingController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'date' => 'required|date',
-            'type' => 'required|in:regular,special_non_working,special_working',
+            'type' => 'required|in:regular,special_non_working',
         ]);
 
         // Auto-extract year from date
@@ -91,7 +91,7 @@ class HolidaySettingController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'date' => 'required|date',
-            'type' => 'required|in:regular,special_non_working,special_working',
+            'type' => 'required|in:regular,special_non_working',
         ]);
 
         // Auto-extract year from date
