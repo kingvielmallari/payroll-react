@@ -150,13 +150,35 @@
                                         @php
                                             $suspensionInfo = $day['suspension_info'] ?? null;
                                             $isPaidSuspension = $suspensionInfo && ($suspensionInfo['is_paid'] ?? false);
-                                            $defaultTimeIn = $isPaidSuspension && $day['time_in'] ? $day['time_in']->format('H:i') : null;
-                                            $defaultTimeOut = $isPaidSuspension && $day['time_out'] ? $day['time_out']->format('H:i') : null;
-                                            $defaultBreakIn = $isPaidSuspension && $day['break_in'] ? $day['break_in']->format('H:i') : null;
-                                            $defaultBreakOut = $isPaidSuspension && $day['break_out'] ? $day['break_out']->format('H:i') : null;
+                                            $isSuspension = $day['is_suspension'] ?? false;
+                                            $employeeHasBenefits = $selectedEmployee->benefits_status === 'with_benefits';
+                                            
+                                            // Handle suspension auto-fill logic
+                                            if ($isSuspension) {
+                                                if ($isPaidSuspension && $employeeHasBenefits) {
+                                                    // PAID SUSPENSION + WITH BENEFITS: Auto-fill with default schedule times
+                                                    $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
+                                                    $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
+                                                    $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
+                                                    $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
+                                                } else {
+                                                    // UNPAID SUSPENSION OR WITHOUT BENEFITS: Clear all time fields (blank)
+                                                    $defaultTimeIn = null;
+                                                    $defaultTimeOut = null;
+                                                    $defaultBreakIn = null;
+                                                    $defaultBreakOut = null;
+                                                }
+                                            } else {
+                                                // NOT SUSPENSION: Use existing data as is
+                                                $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
+                                                $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
+                                                $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
+                                                $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
+                                            }
                                         @endphp
                                         <tr class="{{ $day['is_weekend'] ? 'bg-gray-100' : '' }} {{ $day['is_holiday'] ? 'bg-yellow-50' : '' }}"
                                             data-is-paid-suspension="{{ $isPaidSuspension ? 'true' : 'false' }}"
+                                            data-employee-has-benefits="{{ $employeeHasBenefits ? 'true' : 'false' }}"
                                             data-time-in-default="{{ $defaultTimeIn }}"
                                             data-time-out-default="{{ $defaultTimeOut }}"
                                             data-break-in-default="{{ $defaultBreakIn }}"
@@ -171,7 +193,17 @@
                                                     <span class="text-xs text-blue-600">(Weekend)</span>
                                                 @endif
                                                 @if($day['is_holiday'])
-                                                    <span class="text-xs text-red-600">({{ $day['is_holiday'] }})</span>
+                                                    @php
+                                                        $holidayTypeDisplay = '';
+                                                        if ($day['holiday_type'] == 'regular') {
+                                                            $holidayTypeDisplay = 'Regular';
+                                                        } elseif ($day['holiday_type'] == 'special_non_working') {
+                                                            $holidayTypeDisplay = 'Special Non-Working';
+                                                        } elseif ($day['holiday_type'] == 'special_working') {
+                                                            $holidayTypeDisplay = 'Special Working';
+                                                        }
+                                                    @endphp
+                                                    <span class="text-xs text-red-600">({{ $holidayTypeDisplay }} Holiday: {{ $day['is_holiday'] }})</span>
                                                 @endif
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
@@ -219,9 +251,8 @@
                                                     @foreach($logTypes as $value => $label)
                                                         @php
                                                             $selected = '';
-                                                            $dateKey = $day['date']->format('Y-m-d');
-                                                            $isHoliday = isset($holidays[$dateKey]);
-                                                            $holidayType = $isHoliday ? $holidays[$dateKey]->type : null;
+                                                            $isHoliday = $day['is_holiday'] ? true : false;
+                                                            $holidayType = $day['holiday_type'] ?? null;
                                                             
                                                             // Priority 1: Use actual log_type from database if exists
                                                             if ($day['log_type'] && $value === $day['log_type']) {
@@ -240,13 +271,13 @@
                                                                 } elseif ($isHoliday && $holidayType === 'regular' && !$day['is_weekend'] && $value === 'regular_holiday') {
                                                                     // 3. Regular Holiday (default for active regular holidays on work days)
                                                                     $selected = 'selected';
-                                                                } elseif ($isHoliday && $holidayType === 'special' && !$day['is_weekend'] && $value === 'special_holiday') {
+                                                                } elseif ($isHoliday && in_array($holidayType, ['special_non_working', 'special_working']) && !$day['is_weekend'] && $value === 'special_holiday') {
                                                                     // 4. Special Holiday (default for active special holidays on work days)
                                                                     $selected = 'selected';
                                                                 } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'regular' && $value === 'rest_day_regular_holiday') {
                                                                     // Rest Day + Regular Holiday (rest day + regular holiday)
                                                                     $selected = 'selected';
-                                                                } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'special' && $value === 'rest_day_special_holiday') {
+                                                                } elseif ($day['is_weekend'] && $isHoliday && in_array($holidayType, ['special_non_working', 'special_working']) && $value === 'rest_day_special_holiday') {
                                                                     // Rest Day + Special Holiday (rest day + special holiday)
                                                                     $selected = 'selected';
                                                                 }
@@ -273,10 +304,10 @@
                                                     @endphp
                                                     <input type="hidden" name="time_logs[{{ $index }}][log_type]" value="{{ $selectedLogType }}">
                                                     {{-- Add hidden inputs for suspension days since disabled time inputs won't submit their values --}}
-                                                    <input type="hidden" name="time_logs[{{ $index }}][time_in_hidden]" value="{{ $day['time_in'] ? (is_string($day['time_in']) ? (strlen($day['time_in']) >= 5 ? substr($day['time_in'], 0, 5) : $day['time_in']) : $day['time_in']->format('H:i')) : '' }}">
-                                                    <input type="hidden" name="time_logs[{{ $index }}][time_out_hidden]" value="{{ $day['time_out'] ? (is_string($day['time_out']) ? (strlen($day['time_out']) >= 5 ? substr($day['time_out'], 0, 5) : $day['time_out']) : $day['time_out']->format('H:i')) : '' }}">
-                                                    <input type="hidden" name="time_logs[{{ $index }}][break_in_hidden]" value="{{ $day['break_in'] ? (is_string($day['break_in']) ? (strlen($day['break_in']) >= 5 ? substr($day['break_in'], 0, 5) : $day['break_in']) : $day['break_in']->format('H:i')) : '' }}">
-                                                    <input type="hidden" name="time_logs[{{ $index }}][break_out_hidden]" value="{{ $day['break_out'] ? (is_string($day['break_out']) ? (strlen($day['break_out']) >= 5 ? substr($day['break_out'], 0, 5) : $day['break_out']) : $day['break_out']->format('H:i')) : '' }}">
+                                                    <input type="hidden" name="time_logs[{{ $index }}][time_in_hidden]" value="{{ $defaultTimeIn ?? '' }}">
+                                                    <input type="hidden" name="time_logs[{{ $index }}][time_out_hidden]" value="{{ $defaultTimeOut ?? '' }}">
+                                                    <input type="hidden" name="time_logs[{{ $index }}][break_in_hidden]" value="{{ $defaultBreakIn ?? '' }}">
+                                                    <input type="hidden" name="time_logs[{{ $index }}][break_out_hidden]" value="{{ $defaultBreakOut ?? '' }}">
                                                 @endif
                                                 @if($day['is_weekend'])
                                                     <input type="hidden" name="time_logs[{{ $index }}][is_rest_day]" value="1">
@@ -565,17 +596,27 @@
                 // Get row element to check for suspension data attributes
                 const row = document.querySelector(`[data-row="${rowIndex}"]`).closest('tr');
                 const isPaidSuspension = row && row.dataset.isPaidSuspension === 'true';
+                const employeeHasBenefits = row && row.dataset.employeeHasBenefits === 'true';
                 
                 // Check if this is an inherent suspension day (from suspension settings)
                 const hasHiddenSuspensionInput = document.querySelector(`input[name="time_logs[${rowIndex}][is_suspension]"][type="hidden"]`);
                 
                 timeInputs.forEach(input => {
                     if (hasHiddenSuspensionInput) {
-                        // For suspension setting days, keep disabled but preserve values (don't clear existing time log data)
-                        input.disabled = true;
-                        input.classList.add('bg-gray-100', 'cursor-not-allowed');
-                        input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
-                        // DON'T clear values - preserve actual time logs from database
+                        // For suspension setting days - check if employee has benefits
+                        if (isPaidSuspension && employeeHasBenefits) {
+                            // Paid suspension + with benefits: preserve auto-filled values
+                            input.disabled = true;
+                            input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
+                            // Keep existing values (already set by PHP)
+                        } else {
+                            // Unpaid suspension OR without benefits: disable and clear values
+                            input.disabled = true;
+                            input.value = ''; // Clear the input for unpaid suspension or employees without benefits
+                            input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
+                        }
                     } else if (isSuspension) {
                         if (isPaidSuspension) {
                             // For paid suspensions (manual selection), enable inputs but fill with default schedule
@@ -592,9 +633,9 @@
                                 }
                             }
                         } else {
-                            // For unpaid suspensions, disable inputs but preserve existing values (don't clear actual time logs)
+                            // For unpaid suspensions (manual selection), disable inputs and clear values
                             input.disabled = true;
-                            // DON'T clear values - input.value = ''; 
+                            input.value = ''; // Clear the input for unpaid suspension
                             input.classList.add('bg-gray-100', 'cursor-not-allowed');
                             input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
                         }

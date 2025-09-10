@@ -34,7 +34,7 @@ class Holiday extends Model
     ];
 
     protected $attributes = [
-        'is_active' => false, // DISABLED by default for fresh installations
+        'is_active' => true, // Default to active (will be auto-disabled if past date)
         'is_recurring' => false,
         'is_double_pay' => false,
         'type' => 'regular',
@@ -42,4 +42,12 @@ class Holiday extends Model
         'double_pay_rate' => 2.00,
         'pay_rule' => 'holiday_rate'
     ];
+
+    /**
+     * Check if this holiday is in the past
+     */
+    public function isPast()
+    {
+        return $this->date < now()->startOfDay();
+    }
 }

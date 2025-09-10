@@ -51,79 +51,17 @@
             </div>
 
             <div class="mt-6">
-                <label for="description" class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea name="description" id="description" rows="3" 
-                          class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ old('description', $holiday->description) }}</textarea>
-                @error('description')
+                <label for="type" class="block text-sm font-medium text-gray-700 mb-2">Holiday Type</label>
+                <select name="type" id="type" 
+                        class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+                    <option value="">Select Type</option>
+                    <option value="regular" {{ old('type', $holiday->type) == 'regular' ? 'selected' : '' }}>Regular Holiday</option>
+                    <option value="special_non_working" {{ old('type', $holiday->type) == 'special_non_working' ? 'selected' : '' }}>Special Non-Working Holiday</option>
+                    <option value="special_working" {{ old('type', $holiday->type) == 'special_working' ? 'selected' : '' }}>Special Working Holiday</option>
+                </select>
+                @error('type')
                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                 @enderror
-            </div>
-
-            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label for="type" class="block text-sm font-medium text-gray-700 mb-2">Holiday Type</label>
-                    <select name="type" id="type" 
-                            class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                        <option value="">Select Type</option>
-                        <option value="regular" {{ old('type', $holiday->type) == 'regular' ? 'selected' : '' }}>Regular Holiday</option>
-                        <option value="special_non_working" {{ old('type', $holiday->type) == 'special_non_working' ? 'selected' : '' }}>Special Non-Working</option>
-                        <option value="local" {{ old('type', $holiday->type) == 'local' ? 'selected' : '' }}>Local Holiday</option>
-                        <option value="company" {{ old('type', $holiday->type) == 'company' ? 'selected' : '' }}>Company Holiday</option>
-                    </select>
-                    @error('type')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="pay_rate_multiplier" class="block text-sm font-medium text-gray-700 mb-2">Pay Rate Multiplier</label>
-                    <input type="number" name="pay_rate_multiplier" id="pay_rate_multiplier" step="0.01" min="0"
-                           class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
-                           value="{{ old('pay_rate_multiplier', $holiday->pay_rate_multiplier) }}" required>
-                    <p class="mt-1 text-xs text-gray-500">e.g., 2.0 for double pay, 1.5 for time and a half</p>
-                    @error('pay_rate_multiplier')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-            </div>
-
-            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label for="applicable_locations" class="block text-sm font-medium text-gray-700 mb-2">Applicable Locations</label>
-                    <input type="text" name="applicable_locations" id="applicable_locations" 
-                           class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
-                           value="{{ old('applicable_locations', $holiday->applicable_locations) }}" 
-                           placeholder="e.g., All, NCR, Cebu, etc.">
-                    @error('applicable_locations')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="year" class="block text-sm font-medium text-gray-700 mb-2">Year</label>
-                    <input type="number" name="year" id="year" min="2020" max="2050"
-                           class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
-                           value="{{ old('year', $holiday->year) }}" required>
-                    @error('year')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-            </div>
-
-            <div class="mt-6 space-y-4">
-                <div class="flex items-center">
-                    <input type="checkbox" name="is_recurring" id="is_recurring" value="1" 
-                           {{ old('is_recurring', $holiday->is_recurring) ? 'checked' : '' }}
-                           class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
-                    <label for="is_recurring" class="ml-2 block text-sm text-gray-700">Recurring Holiday (same date every year)</label>
-                </div>
-
-                <div class="flex items-center">
-                    <input type="checkbox" name="is_active" id="is_active" value="1" 
-                           {{ old('is_active', $holiday->is_active) ? 'checked' : '' }}
-                           class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
-                    <label for="is_active" class="ml-2 block text-sm text-gray-700">Active</label>
-                </div>
             </div>
 
             <div class="mt-8 flex justify-end space-x-3">
@@ -139,17 +77,6 @@
         </form>
     </div>
 </div>
-
-<script>
-// Auto-populate year based on selected date
-document.getElementById('date').addEventListener('change', function() {
-    const dateValue = this.value;
-    if (dateValue) {
-        const year = new Date(dateValue).getFullYear();
-        document.getElementById('year').value = year;
-    }
-});
-</script>
     </div>
 </div>
 </x-app-layout>

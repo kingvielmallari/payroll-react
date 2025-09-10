@@ -11,10 +11,30 @@ class HolidaySettingController extends Controller
     public function index()
     {
         $currentYear = date('Y');
-        $holidays = Holiday::where('year', $currentYear)
-            ->orderBy('date')
-            ->get()
-            ->groupBy('type');
+
+        // Get holidays with custom ordering: Regular first, then Special, each sorted by date desc
+        $holidays = collect();
+
+        // Get Regular Holidays first (ordered from Dec to Jan)
+        $regularHolidays = Holiday::where('year', $currentYear)
+            ->where('type', 'regular')
+            ->orderBy('date', 'desc')
+            ->get();
+
+        if ($regularHolidays->count() > 0) {
+            $holidays->put('regular', $regularHolidays);
+        }
+
+        // Get Special Holidays second (ordered from Dec to Jan)
+        $specialHolidays = Holiday::where('year', $currentYear)
+            ->whereIn('type', ['special', 'special_non_working'])
+            ->orderBy('date', 'desc')
+            ->get();
+
+        if ($specialHolidays->count() > 0) {
+            // Group them under a single key for display
+            $holidays->put('special_non_working', $specialHolidays);
+        }
 
         $years = Holiday::selectRaw('DISTINCT year')
             ->orderBy('year', 'desc')
@@ -34,16 +54,21 @@ class HolidaySettingController extends Controller
             'name' => 'required|string|max:255',
             'date' => 'required|date',
             'type' => 'required|in:regular,special_non_working,special_working',
-            'rate_multiplier' => 'required|numeric|min:1|max:5',
-            'is_double_pay' => 'boolean',
-            'double_pay_rate' => 'nullable|numeric|min:1|max:5',
-            'pay_rule' => 'required|in:regular_rate,holiday_rate,double_pay,no_pay',
-            'description' => 'nullable|string',
-            'is_recurring' => 'boolean',
-            'is_active' => 'boolean',
         ]);
 
+        // Auto-extract year from date
         $validated['year'] = date('Y', strtotime($validated['date']));
+
+        // Check for duplicates (same date only - each date can only have one holiday)
+        $existingHoliday = Holiday::where('date', $validated['date'])->first();
+
+        if ($existingHoliday) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors([
+                    'date' => 'A holiday already exists on this date. Each date can only have one holiday.'
+                ]);
+        }
 
         Holiday::create($validated);
 
@@ -67,16 +92,23 @@ class HolidaySettingController extends Controller
             'name' => 'required|string|max:255',
             'date' => 'required|date',
             'type' => 'required|in:regular,special_non_working,special_working',
-            'rate_multiplier' => 'required|numeric|min:1|max:5',
-            'is_double_pay' => 'boolean',
-            'double_pay_rate' => 'nullable|numeric|min:1|max:5',
-            'pay_rule' => 'required|in:regular_rate,holiday_rate,double_pay,no_pay',
-            'description' => 'nullable|string',
-            'is_recurring' => 'boolean',
-            'is_active' => 'boolean',
         ]);
 
+        // Auto-extract year from date
         $validated['year'] = date('Y', strtotime($validated['date']));
+
+        // Check for duplicates (same date only - each date can only have one holiday) excluding current holiday
+        $existingHoliday = Holiday::where('date', $validated['date'])
+            ->where('id', '!=', $holiday->id)
+            ->first();
+
+        if ($existingHoliday) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors([
+                    'date' => 'A holiday already exists on this date. Each date can only have one holiday.'
+                ]);
+        }
 
         $holiday->update($validated);
 
@@ -104,11 +136,30 @@ class HolidaySettingController extends Controller
     public function filterByYear(Request $request)
     {
         $year = $request->year ?? date('Y');
-        
-        $holidays = Holiday::where('year', $year)
-            ->orderBy('date')
-            ->get()
-            ->groupBy('type');
+
+        // Get holidays with custom ordering: Regular first, then Special, each sorted by date desc
+        $holidays = collect();
+
+        // Get Regular Holidays first (ordered from Dec to Jan)
+        $regularHolidays = Holiday::where('year', $year)
+            ->where('type', 'regular')
+            ->orderBy('date', 'desc')
+            ->get();
+
+        if ($regularHolidays->count() > 0) {
+            $holidays->put('regular', $regularHolidays);
+        }
+
+        // Get Special Holidays second (ordered from Dec to Jan)
+        $specialHolidays = Holiday::where('year', $year)
+            ->whereIn('type', ['special', 'special_non_working'])
+            ->orderBy('date', 'desc')
+            ->get();
+
+        if ($specialHolidays->count() > 0) {
+            // Group them under a single key for display
+            $holidays->put('special_non_working', $specialHolidays);
+        }
 
         return response()->json([
             'holidays' => $holidays
@@ -118,7 +169,7 @@ class HolidaySettingController extends Controller
     public function generateRecurring(Request $request)
     {
         $targetYear = $request->validate(['year' => 'required|integer|min:2020|max:2030'])['year'];
-        
+
         $recurringHolidays = Holiday::where('is_recurring', true)
             ->where('year', $targetYear - 1)
             ->get();
@@ -126,11 +177,11 @@ class HolidaySettingController extends Controller
         $created = 0;
         foreach ($recurringHolidays as $holiday) {
             $newDate = date('Y-m-d', strtotime(str_replace($targetYear - 1, $targetYear, $holiday->date)));
-            
+
             $exists = Holiday::where('date', $newDate)
                 ->where('year', $targetYear)
                 ->exists();
-                
+
             if (!$exists) {
                 Holiday::create([
                     'name' => $holiday->name,

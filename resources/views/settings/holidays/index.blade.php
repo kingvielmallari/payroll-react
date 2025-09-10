@@ -33,7 +33,6 @@
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recurring</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     </tr>
                 </thead>
@@ -41,23 +40,14 @@
                     @foreach($typeHolidays as $holiday)
                         <tr class="hover:bg-gray-50 cursor-pointer {{ !$holiday->is_active ? 'opacity-50 bg-gray-50' : '' }}"
                             data-context-menu
-                            oncontextmenu="showHolidayContextMenu(event, {{ $holiday->id }}, {{ json_encode($holiday->name) }}, {{ json_encode($type) }}, {{ $holiday->is_active ? 'true' : 'false' }}, {{ $holiday->is_recurring ? 'true' : 'false' }})">
+                            oncontextmenu="showHolidayContextMenu(event, {{ $holiday->id }}, {{ json_encode($holiday->name) }}, {{ json_encode($type) }}, {{ $holiday->is_active ? 'true' : 'false' }})">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm font-medium {{ !$holiday->is_active ? 'text-gray-400' : 'text-gray-900' }}">{{ $holiday->name }}</div>
-                                @if($holiday->description)
-                                    <div class="text-sm {{ !$holiday->is_active ? 'text-gray-400' : 'text-gray-500' }}">{{ $holiday->description }}</div>
-                                @endif
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm {{ !$holiday->is_active ? 'text-gray-400' : 'text-gray-900' }}">
                                     {{ is_string($holiday->date) ? \Carbon\Carbon::parse($holiday->date)->format('M j, Y') : $holiday->date->format('M j, Y') }}
                                 </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                    {{ $holiday->is_recurring ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800' }}">
-                                    {{ $holiday->is_recurring ? 'Yes' : 'No' }}
-                                </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
@@ -96,7 +86,7 @@ function filterByYear(year) {
     window.location.href = `{{ route('settings.holidays.index') }}?year=${year}`;
 }
 
-function showHolidayContextMenu(event, holidayId, holidayName, holidayType, isActive, isRecurring) {
+function showHolidayContextMenu(event, holidayId, holidayName, holidayType, isActive) {
     const config = {
         id: holidayId,
         name: holidayName,

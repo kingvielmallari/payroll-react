@@ -960,8 +960,9 @@ class TimeLogController extends Controller
             'dates' => $timeLogs->keys()->toArray()
         ]);
 
-        // Get holidays for the period
-        $holidays = \App\Models\Holiday::whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+        // Get holidays for the period (only active holidays)
+        $holidays = \App\Models\Holiday::where('is_active', true)
+            ->whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
             ->get()
             ->keyBy('date');
 
@@ -1050,10 +1051,13 @@ class TimeLogController extends Controller
             } elseif ($isRestDay && !$holiday) {
                 $originalDayType = 'rest_day';
             } elseif (!$isRestDay && $holiday) {
-                $originalDayType = ($holiday->type === 'special') ? 'special_holiday' : 'regular_holiday';
+                $originalDayType = (in_array($holiday->type, ['special_non_working', 'special_working'])) ? 'special_holiday' : 'regular_holiday';
             } elseif ($isRestDay && $holiday) {
-                $originalDayType = ($holiday->type === 'special') ? 'rest_day_special_holiday' : 'rest_day_regular_holiday';
+                $originalDayType = (in_array($holiday->type, ['special_non_working', 'special_working'])) ? 'rest_day_special_holiday' : 'rest_day_regular_holiday';
             }
+
+            // Set default log type based on the original day type (this will be used if no existing time log)
+            $defaultLogType = $originalDayType;
 
             // If it's a suspension day, automatically set log type and conditionally handle time auto-fill
             if ($suspensionInfo['is_suspension']) {
@@ -1088,6 +1092,9 @@ class TimeLogController extends Controller
                 }
                 // For employees not eligible for paid suspension OR non-regular workdays, 
                 // don't auto-fill times - keep existing time values (or null if no existing time logs)
+            } else {
+                // For non-suspension days, defaultLogType is already set to originalDayType
+                // No additional logic needed - holidays are automatically handled
             }
 
             $dayData = [
@@ -1096,6 +1103,7 @@ class TimeLogController extends Controller
                 'day_name' => $currentDate->format('l'),
                 'is_weekend' => $isRestDay, // Keep field name for compatibility but use dynamic logic
                 'is_holiday' => $holiday ? $holiday->name : null,
+                'holiday_type' => $holiday ? $holiday->type : null, // Add holiday type for auto day type selection
                 'is_suspension' => $suspensionInfo['is_suspension'],
                 'suspension_info' => $suspensionInfo['info'],
                 'time_log' => $timeLog,
@@ -1397,12 +1405,12 @@ class TimeLogController extends Controller
                     $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
                         ->where('is_active', true)
                         ->first();
-                    $defaultLogType = ($holiday && $holiday->type === 'special') ? 'special_holiday' : 'regular_holiday';
+                    $defaultLogType = ($holiday && in_array($holiday->type, ['special_non_working', 'special_working'])) ? 'special_holiday' : 'regular_holiday';
                 } elseif ($isRestDay && $isHoliday) {
                     $holiday = \App\Models\Holiday::where('date', $logData['log_date'])
                         ->where('is_active', true)
                         ->first();
-                    $defaultLogType = ($holiday && $holiday->type === 'special') ? 'rest_day_special_holiday' : 'rest_day_regular_holiday';
+                    $defaultLogType = ($holiday && in_array($holiday->type, ['special_non_working', 'special_working'])) ? 'rest_day_special_holiday' : 'rest_day_regular_holiday';
                 }
 
                 $isDayTypeChange = ($logData['log_type'] !== $defaultLogType);

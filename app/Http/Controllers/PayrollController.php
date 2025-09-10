@@ -5408,6 +5408,13 @@ class PayrollController extends Controller
                     continue;
                 }
 
+                // Check if this allowance/bonus setting applies to this employee's benefit status
+                // This ensures snapshot calculation matches dynamic calculation logic
+                if (!$setting->appliesTo($employee)) {
+                    Log::info("Skipping setting not applicable to employee benefit status: {$setting->code} ({$setting->type}) for employee {$employee->id} (benefit status: {$employee->benefits_status})");
+                    continue;
+                }
+
                 Log::info("Processing taxable setting: {$setting->code} ({$setting->type})");
 
                 $calculatedAmount = 0;                // Calculate the amount based on the setting type
