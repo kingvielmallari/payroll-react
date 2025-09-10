@@ -35,7 +35,7 @@ class TimeLogSettingController extends Controller
         $gracePeriodData = [
             'late_grace_minutes' => $gracePeriodSettings->late_grace_minutes,
             'undertime_grace_minutes' => $gracePeriodSettings->undertime_grace_minutes,
-            'overtime_threshold_minutes' => $gracePeriodSettings->overtime_threshold_minutes,
+            // overtime_threshold_minutes removed - now schedule-specific
         ];
 
         // Get night differential settings

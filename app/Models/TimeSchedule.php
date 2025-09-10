@@ -46,103 +46,54 @@ class TimeSchedule extends Model
 
     public function getTimeRangeAttribute()
     {
-        return $this->time_in->format('H:i') . ' - ' . $this->time_out->format('H:i');
+        return $this->time_in->format('g:i A') . ' - ' . $this->time_out->format('g:i A');
     }
 
     public function getTimeRangeDisplayAttribute()
     {
-        return $this->time_in->format('g:iA') . ' - ' . $this->time_out->format('g:iA');
-    }
-
-    public function getWorkingHoursAttribute()
-    {
-        $timeIn = $this->time_in;
-        $timeOut = $this->time_out;
-        $breakStart = $this->break_start;
-        $breakEnd = $this->break_end;
-
-        // Calculate total working hours
-        $totalMinutes = $timeOut->diffInMinutes($timeIn);
-
-        // Subtract break time if applicable
-        if ($breakStart && $breakEnd) {
-            $breakMinutes = $breakEnd->diffInMinutes($breakStart);
-            $totalMinutes -= $breakMinutes;
-        }
-
-        return round($totalMinutes / 60, 2);
+        return $this->time_in->format('g:i A') . ' - ' . $this->time_out->format('g:i A');
     }
 
     /**
-     * Calculate and return total working hours based on break type
+     * Calculate the total working hours in minutes for this time schedule.
+     * This will be used as the overtime threshold for employees on this schedule.
      */
-    public function calculateTotalHours()
+    public function getOvertimeThresholdMinutes()
     {
         if (!$this->time_in || !$this->time_out) {
-            return 0;
+            return 480; // Default 8 hours = 480 minutes
         }
 
-        // Handle both datetime and time formats
-        if ($this->time_in instanceof \Carbon\Carbon) {
-            $timeIn = $this->time_in->copy();
-            $timeOut = $this->time_out->copy();
-        } else {
-            $timeIn = \Carbon\Carbon::createFromFormat('H:i:s', $this->time_in);
-            $timeOut = \Carbon\Carbon::createFromFormat('H:i:s', $this->time_out);
-        }
+        // Calculate total scheduled minutes
+        $timeIn = \Carbon\Carbon::parse($this->time_in);
+        $timeOut = \Carbon\Carbon::parse($this->time_out);
 
-        // Handle overnight schedules
-        if ($timeOut->lessThan($timeIn)) {
+        // Handle next day time out
+        if ($timeOut->lt($timeIn)) {
             $timeOut->addDay();
         }
 
-        // Calculate total minutes
-        $totalMinutes = $timeIn->diffInMinutes($timeOut);
+        $totalScheduledMinutes = $timeIn->diffInMinutes($timeOut);
 
-        // Handle different break types
-        if ($this->break_duration_minutes > 0) {
-            // Flexible break - use break_duration_minutes
-            $totalMinutes -= $this->break_duration_minutes;
-        } elseif ($this->break_start && $this->break_end) {
-            // Fixed break times - calculate break duration
-            if ($this->break_start instanceof \Carbon\Carbon) {
-                $breakStart = $this->break_start->copy();
-                $breakEnd = $this->break_end->copy();
-            } else {
-                $breakStart = \Carbon\Carbon::createFromFormat('H:i:s', $this->break_start);
-                $breakEnd = \Carbon\Carbon::createFromFormat('H:i:s', $this->break_end);
+        // Subtract break time based on break configuration
+        if ($this->break_start && $this->break_end) {
+            // Fixed break: subtract the fixed break duration
+            $breakStart = \Carbon\Carbon::parse($this->break_start);
+            $breakEnd = \Carbon\Carbon::parse($this->break_end);
+
+            // Handle next day break end
+            if ($breakEnd->lt($breakStart)) {
+                $breakEnd->addDay();
             }
+
             $breakMinutes = $breakStart->diffInMinutes($breakEnd);
-            $totalMinutes -= $breakMinutes;
+            $totalScheduledMinutes -= $breakMinutes;
+        } elseif ($this->break_duration_minutes && $this->break_duration_minutes > 0) {
+            // Flexible break: subtract the flexible break duration
+            $totalScheduledMinutes -= $this->break_duration_minutes;
         }
-        // No break type - no deduction
+        // If no break configured, use full scheduled time
 
-        return round($totalMinutes / 60, 2);
-    }
-
-    /**
-     * Update the total_hours field
-     */
-    public function updateTotalHours()
-    {
-        $this->total_hours = $this->calculateTotalHours();
-        $this->save();
-        return $this;
-    }
-
-    /**
-     * Mutator to handle empty break_start values
-     */
-    public function setBreakStartAttribute($value)
-    {
-        $this->attributes['break_start'] = empty($value) ? null : $value;
-    }
-
-    /**
-     * Mutator to handle empty break_end values
-     */
-    public function setBreakEndAttribute($value)
-    {
-        $this->attributes['break_end'] = empty($value) ? null : $value;
+        return max(0, $totalScheduledMinutes);
     }
 }

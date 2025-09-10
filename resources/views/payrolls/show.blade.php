@@ -3077,17 +3077,20 @@
                                                             $actualTimeIn = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', 
                                                                 $timeLog->log_date->format('Y-m-d') . ' ' . \Carbon\Carbon::parse($timeLog->time_in)->format('H:i:s'));
                                                             
-                                                            // Calculate overtime threshold dynamically from grace period settings
-                                                            $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
-                                                            $overtimeThresholdMinutes = $gracePeriodSettings ? $gracePeriodSettings->overtime_threshold_minutes : 480; // default 8 hours = 480 minutes
-                                                            $baseWorkingHours = $overtimeThresholdMinutes / 60; // Convert to hours (e.g., 500 minutes = 8.33 hours)
+                                                            // Calculate overtime threshold from employee's time schedule
+                                                            $employee = $detail->employee;
+                                                            $timeSchedule = $employee->timeSchedule;
                                                             
-                                                            $clockHoursForRegular = $baseWorkingHours; // Use dynamic overtime threshold
+                                                            // NEW: Use schedule-specific overtime threshold instead of global setting
+                                                            $overtimeThresholdMinutes = $timeSchedule ? $timeSchedule->getOvertimeThresholdMinutes() : 480; // Default 8 hours
+                                                            $baseWorkingHours = $overtimeThresholdMinutes / 60; // Convert to hours (e.g., 540 minutes = 9 hours)
+                                                            
+                                                            $clockHoursForRegular = $baseWorkingHours; // Use schedule-specific overtime threshold
                                                             
                                                             if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
                                                                 // Add break duration to working hours to get total clock hours
                                                                 $breakDuration = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                                                                $clockHoursForRegular = $baseWorkingHours + $breakDuration; // dynamic working hours + break time
+                                                                $clockHoursForRegular = $baseWorkingHours + $breakDuration; // schedule working hours + break time
                                                             }
                                                             
                                                             // Check if employee is within grace period by comparing actual time_in with scheduled time
@@ -3373,7 +3376,7 @@
                                                     @foreach($timePeriodBreakdown as $period)
                                                         @if($period['type'] === 'regular_overtime' || $period['type'] === 'night_diff_overtime')
                                                         <div class="{{ $period['color_class'] }} text-xs">
-                                                            {{ $period['start_time'] }} - {{ $period['end_time'] }} ({{ number_format($period['hours'] * 60, 0) }}ms) {{ floor($period['hours']) }}h {{ round(($period['hours'] - floor($period['hours'])) * 60) }}ms
+                                                            {{ $period['start_time'] }} - {{ $period['end_time'] }} ({{ number_format($period['hours'] * 60, 0) }}m) {{ floor($period['hours']) }}h {{ round(($period['hours'] - floor($period['hours'])) * 60) }}m
                                                             @if($period['type'] === 'regular_overtime')
                                                              
                                                             @elseif($period['type'] === 'night_diff_overtime')

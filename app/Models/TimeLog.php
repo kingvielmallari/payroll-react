@@ -354,20 +354,10 @@ class TimeLog extends Model
             $scheduledEnd->addDay();
         }
 
-        // Get overtime threshold (default 8 hours)
-        $overtimeThreshold = 8;
+        // Get overtime threshold from time schedule (in hours, converted from minutes for compatibility)
+        $overtimeThreshold = 8; // Default 8 hours
         if ($timeSchedule) {
-            if ($timeSchedule->break_start && $timeSchedule->break_end) {
-                // Fixed break: calculate based on schedule minus break time
-                $scheduledHours = $scheduledStart->diffInHours($scheduledEnd);
-                $breakHours = $timeSchedule->break_start->diffInHours($timeSchedule->break_end);
-                $overtimeThreshold = $scheduledHours - $breakHours;
-            } elseif ($timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0) {
-                // Flexible break: calculate based on schedule minus break duration
-                $scheduledHours = $scheduledStart->diffInHours($scheduledEnd);
-                $breakHours = $timeSchedule->break_duration_minutes / 60;
-                $overtimeThreshold = $scheduledHours - $breakHours;
-            }
+            $overtimeThreshold = $timeSchedule->getOvertimeThresholdMinutes() / 60; // Convert minutes to hours
         }
 
         // Calculate overtime start time

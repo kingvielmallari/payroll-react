@@ -84,6 +84,7 @@ function showContextMenu(event, element) {
                                 <div class="font-medium text-gray-900">{{ $schedule->name }}</div>
                                 <div class="text-sm text-gray-600">{{ $schedule->time_range_display }}</div>
                                 <div class="text-xs text-green-600 font-semibold">Total Hours: {{ $schedule->total_hours ?? 'N/A' }}</div>
+                                <div class="text-xs text-purple-600 font-semibold">OT Threshold: {{ number_format($schedule->getOvertimeThresholdMinutes() / 60, 1) }} hrs ({{ $schedule->getOvertimeThresholdMinutes() }} min)</div>
                                 @if($schedule->break_duration_minutes > 0)
                                     <div class="text-xs text-blue-600">Break: {{ $schedule->break_duration_minutes }} min</div>
                                 @elseif($schedule->break_start && $schedule->break_end)
@@ -113,13 +114,13 @@ function showContextMenu(event, element) {
                             <p class="text-xs text-gray-500 mt-1">Minutes before deducting from working hours</p>
                         </div>
                         
-                        <div>
-                            <label for="overtime_threshold_minutes" class="block text-sm font-medium text-gray-700">Overtime Threshold (minutes)</label>
-                            <input type="number" id="overtime_threshold_minutes" name="overtime_threshold_minutes" min="0" max="600" 
-                                   value="{{ $gracePeriodData['overtime_threshold_minutes'] }}"
-                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
-                            <p class="text-xs text-gray-500 mt-1">Minutes before counting as overtime</p>
-                        </div>
+                        <!-- REMOVED: Overtime Threshold (now schedule-specific) -->
+                        {{-- <div class="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                            <p class="text-sm text-blue-800">
+                                <strong>Note:</strong> Overtime threshold is now automatically calculated from each employee's time schedule working hours. 
+                                For example: 8am-5pm with 1hr break = 8 hours (480 minutes) overtime threshold.
+                            </p>
+                        </div> --}}
 
                         <div>
                             <label for="undertime_grace_minutes" class="block text-sm font-medium text-gray-700">Undertime Grace Period (minutes)</label>

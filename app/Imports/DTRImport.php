@@ -332,11 +332,13 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
             $schedEnd->addDay();
         }
 
-        // Get grace period settings
+        // Get grace period settings (except overtime threshold)
         $gracePeriodSettings = \App\Models\GracePeriodSetting::current();
         $lateGracePeriodMinutes = $gracePeriodSettings->late_grace_minutes;
         $undertimeGracePeriodMinutes = $gracePeriodSettings->undertime_grace_minutes;
-        $overtimeThresholdMinutes = $gracePeriodSettings->overtime_threshold_minutes;
+
+        // NEW: Use schedule-specific overtime threshold instead of global setting
+        $overtimeThresholdMinutes = $timeSchedule ? $timeSchedule->getOvertimeThresholdMinutes() : 480; // Default 8 hours
 
         // STEP 1: Calculate work period based on employee schedule boundaries and grace period
         // Apply late grace period for ALL day types (regular days, rest days, holidays): 
