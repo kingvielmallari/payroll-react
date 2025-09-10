@@ -1091,17 +1091,22 @@ class TimeLogController extends Controller
                 $frontendBreakIn = null;
                 $frontendBreakOut = null;
             }
-            // PRIORITY 3: No active holiday/suspension - show original day type
+            // PRIORITY 3: No active holiday/suspension - preserve existing data
             else {
-                // Force back to original day type regardless of existing database record
-                $frontendLogType = $isRestDay ? 'rest_day' : 'regular_workday';
-
-                // If no active holiday/suspension, clear times to force user to original state
-                // This ensures when user saves, it overwrites with original day type
-                $frontendTimeIn = null;
-                $frontendTimeOut = null;
-                $frontendBreakIn = null;
-                $frontendBreakOut = null;
+                // If no active holiday/suspension, preserve existing data from database
+                // This restores normal behavior when no overrides are active
+                if ($timeLog) {
+                    // Preserve existing log type from database (could be special_holiday, etc.)
+                    $frontendLogType = $timeLog->log_type;
+                    $frontendTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : null;
+                    $frontendTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : null;
+                    $frontendBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
+                    $frontendBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
+                } else {
+                    // If no existing time log, use original day type for blank form
+                    $frontendLogType = $isRestDay ? 'rest_day' : 'regular_workday';
+                    // Times remain null (blank form)
+                }
             }
 
             // The frontend will always use these values regardless of existing database records
