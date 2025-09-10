@@ -165,7 +165,28 @@
                                                 $allowances = $detail->allowances ?? 0;
                                             }
                                             
-                                            $bonuses = $detail->bonuses ?? 0;
+                                            // Calculate DYNAMIC bonuses (same logic as Bonuses column)
+                                            $bonuses = 0;
+                                            if (isset($bonusSettings) && $bonusSettings->isNotEmpty()) {
+                                                foreach($bonusSettings as $bonusSetting) {
+                                                    // Check if this bonus setting applies to this employee's benefit status
+                                                    if (!$bonusSetting->appliesTo($detail->employee)) {
+                                                        continue; // Skip this setting for this employee
+                                                    }
+                                                    
+                                                    $calculatedBonusAmount = 0;
+                                                    if($bonusSetting->calculation_type === 'percentage') {
+                                                        $calculatedBonusAmount = ($basicPay * $bonusSetting->rate_percentage) / 100;
+                                                    } elseif($bonusSetting->calculation_type === 'fixed_amount') {
+                                                        $calculatedBonusAmount = $bonusSetting->fixed_amount;
+                                                    }
+                                                    
+                                                    $bonuses += $calculatedBonusAmount;
+                                                }
+                                            } else {
+                                                // Fallback to stored value if no active settings
+                                                $bonuses = $detail->bonuses ?? 0;
+                                            }
                                             
                                             // Calculate total gross pay like in the Gross Pay column
                                             $calculatedGrossPayForSummary = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
@@ -701,8 +722,17 @@
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="flex items-center">
                                             <div>
-                                                <div class="text-sm font-medium text-gray-900">
-                                                    {{ $detail->employee->first_name }} {{ $detail->employee->last_name }}
+                                                <div class="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                    <span>{{ $detail->employee->first_name }} {{ $detail->employee->last_name }}</span>
+                                                    @if($detail->employee->benefits_status === 'with_benefits')
+                                                        <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                                            Premium
+                                                        </span>
+                                                    @else
+                                                        <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                                                            Basic
+                                                        </span>
+                                                    @endif
                                                 </div>
                                                 <div class="text-sm text-gray-500">
                                                     {{ $detail->employee->employee_number }}
@@ -1731,7 +1761,50 @@
                                     <!-- Bonuses Column -->
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         <div class="space-y-1">
-                                            @if($detail->bonuses > 0)
+                                            @if(isset($isDynamic) && $isDynamic && isset($bonusSettings) && $bonusSettings->isNotEmpty())
+                                                <!-- DYNAMIC PAYROLL: Calculate and display from settings -->
+                                                @php
+                                                    $dynamicBonusTotal = 0;
+                                                    $hasDynamicBonuses = false;
+                                                @endphp
+                                                @foreach($bonusSettings as $setting)
+                                                    @php
+                                                        // Check if this bonus setting applies to this employee's benefit status
+                                                        if (!$setting->appliesTo($detail->employee)) {
+                                                            continue; // Skip this setting for this employee
+                                                        }
+                                                        $hasDynamicBonuses = true;
+                                                        
+                                                        // Calculate actual amount for display
+                                                        $displayAmount = 0;
+                                                        if($setting->calculation_type === 'percentage') {
+                                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                                            $displayAmount = ($basicPay * $setting->rate_percentage) / 100;
+                                                        } elseif($setting->calculation_type === 'fixed_amount') {
+                                                            $displayAmount = $setting->fixed_amount;
+                                                        }
+                                                        $dynamicBonusTotal += $displayAmount;
+                                                    @endphp
+                                                    @if($displayAmount > 0)
+                                                        <div class="text-xs text-gray-500">
+                                                            <span>{{ $setting->name }}:</span>
+                                                            <span>₱{{ number_format($displayAmount, 2) }}</span>
+                                                        </div>
+                                                    @endif
+                                                @endforeach
+                                                
+                                                <div class="font-bold text-blue-600">
+                                                    ₱{{ number_format($dynamicBonusTotal, 2) }}
+                                                </div>
+                                                <div class="text-xs text-blue-500">
+                                                    <span class="inline-flex items-center">
+                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                                        </svg>
+                                                        Current settings
+                                                    </span>
+                                                </div>
+                                            @elseif($detail->bonuses > 0)
                                                 <!-- PROCESSING/APPROVED: Show Bonus Breakdown from Snapshot -->
                                                 @php
                                                     // Get bonuses breakdown from the fetched snapshot
@@ -1752,109 +1825,59 @@
                                                             </div>
                                                         @endif
                                                     @endforeach
-                                                @elseif(isset($isDynamic) && $isDynamic && isset($bonusSettings) && $bonusSettings->isNotEmpty())
-                                                    <!-- Fallback: Show Active Bonus Settings if no breakdown available -->
-                                                    @foreach($bonusSettings as $setting)
-                                                        @php
-                                                            // Check if this bonus setting applies to this employee's benefit status
-                                                            if (!$setting->appliesTo($detail->employee)) {
-                                                                continue; // Skip this setting for this employee
-                                                            }
-                                                            
-                                                            // Calculate actual amount for display
-                                                            $displayAmount = 0;
-                                                            if($setting->calculation_type === 'percentage') {
-                                                                $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
-                                                                $displayAmount = ($basicPay * $setting->rate_percentage) / 100;
-                                                            } elseif($setting->calculation_type === 'fixed_amount') {
-                                                                $displayAmount = $setting->fixed_amount;
-                                                            }
-                                                        @endphp
-                                                        @if($displayAmount > 0)
-                                                            <div class="text-xs text-gray-500">
-                                                                <span>{{ $setting->name }}:</span>
-                                                                <span>₱{{ number_format($displayAmount, 2) }}</span>
-                                                            </div>
-                                                        @endif
-                                                    @endforeach
-                                                @else
-                                                    <!-- Debug: Show why breakdown is not displaying -->
-                                                    <div class="text-xs text-red-500">
-                                                        @if(!isset($isDynamic))
-                                                            No isDynamic
-                                                        @elseif(!$isDynamic)
-                                                            Not dynamic
-                                                        @elseif(!isset($bonusSettings))
-                                                            No bonusSettings
-                                                        @elseif($bonusSettings->isEmpty())
-                                                            Empty bonusSettings
-                                                        @else
-                                                            Unknown issue
-                                                        @endif
-                                                    </div>
                                                 @endif
                                                 
                                                 <div class="font-bold text-blue-600">
                                                     ₱{{ number_format($detail->bonuses, 2) }}
                                                 </div>
-                                                @if(isset($isDynamic) && $isDynamic)
-                                                    <div class="text-xs text-blue-500">
-                                                        <span class="inline-flex items-center">
-                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                                                            </svg>
-                                                            Current settings
-                                                        </span>
-                                                    </div>
-                                                @else
-                                                    <div class="text-xs text-gray-500">
-                                                        <span class="inline-flex items-center">
-                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-                                                            </svg>
-                                                            Locked snapshot
-                                                        </span>
-                                                    </div>
-                                                @endif
+                                                <div class="text-xs text-gray-500">
+                                                    <span class="inline-flex items-center">
+                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                                        </svg>
+                                                        Locked snapshot
+                                                    </span>
+                                                </div>
                                             @else
+                                                <!-- No bonuses -->
                                                 <div class="text-gray-400">₱0.00</div>
                                             @endif
                                         </div>
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
-                                        @php
-                                            // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances + Bonuses
-                                            $allowances = $detail->allowances ?? 0;
-                                            $bonuses = $detail->bonuses ?? 0;
-                                            
-                                            // Handle basic pay - use the same calculation as the Basic column for consistency
-                                            $basicPayForGross = round($basicPay, 2); // Use rounded value to match display
-                                            
-                                            // Handle holiday pay - use the same calculation as the Holiday column for consistency
-                                            $holidayPayForGross = round($holidayPay, 2); // Use rounded value to match display
-                                            
-                                            // Handle rest pay - use the same calculation as the Rest column for consistency
-                                            $restPayForGross = round($restDayPay, 2); // Use rounded value to match display
-                                            
-                            // Handle overtime pay - use the SAME variable that was calculated in the Overtime column
-                                            // DO NOT recalculate, just use the $overtimePay that was already computed above
-                                            // This ensures 100% consistency between Overtime column and Gross Pay breakdown
-                                            
-                                            // Round overtime pay to match display precision
-                                            $overtimePay = round($overtimePay, 2);
-                                            
-                                            // Calculate gross pay using stored snapshot value or dynamic calculation
-                                            if ($payroll->status !== 'draft' && $employeeSnapshot && isset($employeeSnapshot->gross_pay)) {
-                                                // For processing/approved payrolls, ALWAYS use stored gross pay from snapshot
-                                                // This ensures gross pay is locked and doesn't change when settings are modified
-                                                $calculatedGrossPay = $employeeSnapshot->gross_pay;
-                                            } else {
-                                                // For draft payrolls or if no valid snapshot data, calculate gross pay dynamically
-                                                $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
-                                            }
-                                        @endphp
-                                        
-                                        <!-- Show Gross Pay Breakdown -->
+                        @php
+                            // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances + Bonuses
+                            $allowances = $detail->allowances ?? 0;
+                            
+                            // Use dynamic bonus total if available (calculated in Bonuses column above)
+                            $bonuses = isset($dynamicBonusTotal) ? $dynamicBonusTotal : ($detail->bonuses ?? 0);
+                            
+                            // Handle basic pay - use the same calculation as the Basic column for consistency
+                            $basicPayForGross = round($basicPay, 2); // Use rounded value to match display
+                            
+                            // Handle holiday pay - use the same calculation as the Holiday column for consistency
+                            $holidayPayForGross = round($holidayPay, 2); // Use rounded value to match display
+                            
+                            // Handle rest pay - use the same calculation as the Rest column for consistency
+                            $restPayForGross = round($restDayPay, 2); // Use rounded value to match display
+                            
+            // Handle overtime pay - use the SAME variable that was calculated in the Overtime column
+                            // DO NOT recalculate, just use the $overtimePay that was already computed above
+                            // This ensures 100% consistency between Overtime column and Gross Pay breakdown
+                            
+                            // Round overtime pay to match display precision
+                            $overtimePay = round($overtimePay, 2);
+                            
+                            // Calculate gross pay using stored snapshot value or dynamic calculation
+                            if ($payroll->status !== 'draft' && $employeeSnapshot && isset($employeeSnapshot->gross_pay)) {
+                                // For processing/approved payrolls, ALWAYS use stored gross pay from snapshot
+                                // This ensures gross pay is locked and doesn't change when settings are modified
+                                $calculatedGrossPay = $employeeSnapshot->gross_pay;
+                            } else {
+                                // For draft payrolls or if no valid snapshot data, calculate gross pay dynamically
+                                $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses;
+                            }
+                        @endphp                                        <!-- Show Gross Pay Breakdown -->
                                         <div class="space-y-1">
                                             @if($calculatedGrossPay > 0)
                                                
@@ -2405,6 +2428,11 @@
                                             } elseif(isset($isDynamic) && $isDynamic && isset($deductionSettings) && $deductionSettings->isNotEmpty()) {
                                                 // Use dynamic calculation with SAME variables as deduction column
                                                 foreach($deductionSettings as $setting) {
+                                                    // Check if this deduction setting applies to this employee's benefit status - SAME AS DEDUCTIONS COLUMN
+                                                    if (!$setting->appliesTo($detail->employee)) {
+                                                        continue; // Skip this setting for this employee
+                                                    }
+                                                    
                                                     // Use same variable mapping as deduction column calculation
                                                     $basicPayForDeduction = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->basic_pay ?? 0;
                                                     // Use the CALCULATED gross pay from the Gross Pay column instead of stored value

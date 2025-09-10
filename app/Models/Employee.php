@@ -551,22 +551,11 @@ class Employee extends Model
                 // MBS should always be calculated for a full month, not just the payroll period
 
                 if ($periodStart && $periodEnd) {
-                    // Get expected hours per day from time schedule
-                    $hoursPerDay = 8; // Default
-                    if ($this->timeSchedule) {
-                        $startTime = \Carbon\Carbon::parse($this->timeSchedule->start_time);
-                        $endTime = \Carbon\Carbon::parse($this->timeSchedule->end_time);
-                        $breakDuration = 0;
-
-                        if ($this->timeSchedule->break_duration_minutes) {
-                            $breakDuration = $this->timeSchedule->break_duration_minutes / 60;
-                        } elseif ($this->timeSchedule->break_start && $this->timeSchedule->break_end) {
-                            $breakStart = \Carbon\Carbon::parse($this->timeSchedule->break_start);
-                            $breakEnd = \Carbon\Carbon::parse($this->timeSchedule->break_end);
-                            $breakDuration = $breakEnd->diffInHours($breakStart);
-                        }
-
-                        $hoursPerDay = $endTime->diffInHours($startTime) - $breakDuration;
+                    // Get expected hours per day from time schedule's total_hours field (dynamically calculated)
+                    $hoursPerDay = 8; // Default fallback
+                    if ($this->timeSchedule && $this->timeSchedule->total_hours) {
+                        // Use the total_hours field from time_schedules table - this is the correct total hours per day
+                        $hoursPerDay = $this->timeSchedule->total_hours;
                     }
 
                     // Calculate working days for the full month (not just the payroll period)
@@ -577,8 +566,12 @@ class Employee extends Model
 
                     return $fixedRate * $hoursPerDay * $workingDaysInMonth;
                 } else {
-                    // Fallback: Use average 8 hours * 22 working days per month
-                    return $fixedRate * 8 * 22;
+                    // Fallback: Use hours from time schedule or default 8 hours * 22 working days per month
+                    $fallbackHours = 8; // Default
+                    if ($this->timeSchedule && $this->timeSchedule->total_hours) {
+                        $fallbackHours = $this->timeSchedule->total_hours;
+                    }
+                    return $fixedRate * $fallbackHours * 22;
                 }
 
             default:
