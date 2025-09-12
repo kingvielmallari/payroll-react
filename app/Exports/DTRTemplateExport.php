@@ -21,9 +21,9 @@ class DTRTemplateExport implements FromCollection, WithHeadings, WithStyles, Sho
     {
         // Get first 3 active employees as examples
         $employees = Employee::with('user')
-                            ->where('employment_status', 'active')
-                            ->take(3)
-                            ->get();
+            ->where('employment_status', 'active')
+            ->take(3)
+            ->get();
 
         $sampleData = collect();
 
@@ -31,39 +31,27 @@ class DTRTemplateExport implements FromCollection, WithHeadings, WithStyles, Sho
             // Add 5 sample days for each employee
             for ($i = 1; $i <= 5; $i++) {
                 $date = now()->subDays($i)->format('Y-m-d');
-                
+
                 $sampleData->push([
                     'employee_number' => $employee->employee_number,
-                    'email' => $employee->user->email ?? '',
-                    'employee_name' => $employee->first_name . ' ' . $employee->last_name,
                     'date' => $date,
-                    'time_in' => '08:00',
-                    'time_out' => '17:00',
-                    'break_in' => '12:00',
-                    'break_out' => '13:00',
-                    'log_type' => 'regular',
-                    'is_holiday' => 'no',
-                    'is_rest_day' => 'no',
-                    'remarks' => '',
+                    'time_in' => '8:00 AM',
+                    'time_out' => '5:00 PM',
+                    'break_in' => '12:00 PM',
+                    'break_out' => '1:00 PM',
                 ]);
             }
         }
 
         // Add empty rows for users to fill
-        for ($i = 0; $i < 10; $i++) {
+        for ($i = 0; $i < 20; $i++) {
             $sampleData->push([
                 'employee_number' => '',
-                'email' => '',
-                'employee_name' => '',
                 'date' => '',
                 'time_in' => '',
                 'time_out' => '',
                 'break_in' => '',
                 'break_out' => '',
-                'log_type' => 'regular',
-                'is_holiday' => 'no',
-                'is_rest_day' => 'no',
-                'remarks' => '',
             ]);
         }
 
@@ -77,17 +65,11 @@ class DTRTemplateExport implements FromCollection, WithHeadings, WithStyles, Sho
     {
         return [
             'Employee Number',
-            'Email',
-            'Employee Name',
             'Date (YYYY-MM-DD)',
-            'Time In (HH:MM)',
-            'Time Out (HH:MM)',
-            'Break In (HH:MM)',
-            'Break Out (HH:MM)',
-            'Log Type',
-            'Is Holiday (yes/no)',
-            'Is Rest Day (yes/no)',
-            'Remarks',
+            'Time In (8:00 AM or 08:00)',
+            'Time Out (5:00 PM or 17:00)',
+            'Break In (12:00 PM or 12:00)',
+            'Break Out (1:00 PM or 13:00)',
         ];
     }
 
@@ -118,9 +100,9 @@ class DTRTemplateExport implements FromCollection, WithHeadings, WithStyles, Sho
                     ],
                 ],
             ],
-            
+
             // Style all cells
-            'A:L' => [
+            'A:F' => [
                 'borders' => [
                     'allBorders' => [
                         'borderStyle' => Border::BORDER_THIN,
@@ -133,14 +115,14 @@ class DTRTemplateExport implements FromCollection, WithHeadings, WithStyles, Sho
             ],
 
             // Style date column
-            'D:D' => [
+            'B:B' => [
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_CENTER,
                 ],
             ],
 
             // Style time columns
-            'E:H' => [
+            'C:F' => [
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_CENTER,
                 ],

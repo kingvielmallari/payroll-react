@@ -20,14 +20,20 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     use Importable, SkipsErrors, SkipsFailures;
 
     private $overwriteExisting;
+    private $previewMode;
+    private $importId;
     private $importedCount = 0;
     private $skippedCount = 0;
     private $errorCount = 0;
-    private $errors = [];
+    private $customErrors = [];
+    private $previewData = [];
+    private $validRecordsCount = 0;
 
-    public function __construct($overwriteExisting = false)
+    public function __construct($overwriteExisting = false, $previewMode = false, $importId = null)
     {
         $this->overwriteExisting = $overwriteExisting;
+        $this->previewMode = $previewMode;
+        $this->importId = $importId ?? 'DTR_IMPORT_' . now()->format('Y_m_d_H_i_s');
     }
 
     /**
@@ -36,20 +42,24 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     public function model(array $row)
     {
         try {
-            // Find employee by employee number only
+            // Find ACTIVE employee by employee number
             $employee = null;
 
             if (!empty($row['employee_number'])) {
-                $employee = Employee::where('employee_number', $row['employee_number'])->first();
+                $employee = Employee::with(['user', 'daySchedule'])
+                    ->where('employee_number', $row['employee_number'])
+                    ->where('employment_status', 'active')
+                    ->first();
             }
 
             if (!$employee) {
                 $this->errorCount++;
-                $this->errors[] = "Employee not found for employee number: " . ($row['employee_number'] ?? 'N/A') . " in row: " . json_encode($row);
+                $this->customErrors[] = "Active employee not found for employee number: " . ($row['employee_number'] ?? 'N/A');
+                $this->skippedCount++;
                 return null;
             }
 
-            // Parse date
+            // Parse date - handle various formats
             $logDate = null;
             if (!empty($row['date'])) {
                 try {
@@ -57,19 +67,19 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
                         // Excel date number
                         $logDate = Carbon::createFromFormat('Y-m-d', \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($row['date'])->format('Y-m-d'));
                     } else {
-                        // String date
+                        // String date - support multiple formats
                         $logDate = Carbon::parse($row['date']);
                     }
                 } catch (\Exception $e) {
                     $this->errorCount++;
-                    $this->errors[] = "Invalid date format for row: " . json_encode($row);
+                    $this->customErrors[] = "Invalid date format: " . ($row['date'] ?? 'N/A') . " for employee: " . $employee->employee_number;
                     return null;
                 }
             }
 
             if (!$logDate) {
                 $this->errorCount++;
-                $this->errors[] = "Missing date for row: " . json_encode($row);
+                $this->customErrors[] = "Missing date for employee: " . $employee->employee_number;
                 return null;
             }
 
@@ -79,18 +89,61 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
                 ->first();
 
             if ($existingLog && !$this->overwriteExisting) {
-                $this->skippedCount++;
-                return null;
+                // Calculate completeness of current row vs existing
+                $currentCompleteness = $this->calculateCompletenessScore($row);
+                $existingCompleteness = $this->calculateExistingLogCompleteness($existingLog);
+
+                // Only skip if existing record is more or equally complete
+                if ($existingCompleteness >= $currentCompleteness) {
+                    $this->skippedCount++;
+                    return null;
+                }
+                // If current row is more complete, we'll update the existing record below
             }
 
-            // Parse time values - now supports AM/PM format and 24-hour format
-            $timeIn = $this->parseTime($row['time_in'] ?? null);
-            $timeOut = $this->parseTime($row['time_out'] ?? null);
-            $breakIn = $this->parseTime($row['break_in'] ?? null);
-            $breakOut = $this->parseTime($row['break_out'] ?? null);
+            // Parse time values with enhanced format support (both 24-hour and 12-hour with AM/PM)
+            $timeIn = $this->parseTimeEnhanced($row['time_in'] ?? null);
+            $timeOut = $this->parseTimeEnhanced($row['time_out'] ?? null);
+            $breakIn = $this->parseTimeEnhanced($row['break_in'] ?? null);
+            $breakOut = $this->parseTimeEnhanced($row['break_out'] ?? null);
 
-            // Calculate hours with dynamic calculation based on employee schedule
-            $calculatedHours = $this->calculateWorkingHoursForEmployee($employee, $logDate, $timeIn, $timeOut, $breakIn, $breakOut);
+            // Validate basic time logic
+            if ($timeIn && $timeOut) {
+                $timeInCarbon = Carbon::createFromFormat('H:i', $timeIn);
+                $timeOutCarbon = Carbon::createFromFormat('H:i', $timeOut);
+
+                // Handle next day time out
+                if ($timeOutCarbon->lt($timeInCarbon)) {
+                    $timeOutCarbon->addDay();
+                }
+            }
+
+            // Auto-detect log type based on date and employee schedule
+            $isRestDay = $employee->daySchedule ? !$employee->daySchedule->isWorkingDay($logDate) : $logDate->isWeekend();
+
+            // Check for active holidays
+            $holiday = \App\Models\Holiday::where('date', $logDate->format('Y-m-d'))
+                ->where('is_active', true)
+                ->first();
+
+            $logType = 'regular_workday'; // Default
+
+            if ($holiday) {
+                if (!$isRestDay && $holiday->type === 'regular') {
+                    $logType = 'regular_holiday';
+                } elseif (!$isRestDay && $holiday->type === 'special_non_working') {
+                    $logType = 'special_holiday';
+                } elseif ($isRestDay && $holiday->type === 'regular') {
+                    $logType = 'rest_day_regular_holiday';
+                } elseif ($isRestDay && $holiday->type === 'special_non_working') {
+                    $logType = 'rest_day_special_holiday';
+                }
+            } elseif ($isRestDay) {
+                $logType = 'rest_day';
+            }
+
+            // Calculate hours using same logic as bulk time logs creation
+            $calculatedHours = $this->calculateHoursLikeBulkCreation($employee, $logDate, $timeIn, $timeOut, $breakIn, $breakOut, $logType);
 
             $timeLogData = [
                 'employee_id' => $employee->id,
@@ -104,10 +157,31 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
                 'overtime_hours' => $calculatedHours['overtime_hours'],
                 'late_hours' => $calculatedHours['late_hours'],
                 'undertime_hours' => $calculatedHours['undertime_hours'],
-                'log_type' => 'regular',
-                'creation_method' => 'imported',
-                'remarks' => $row['remarks'] ?? null,
+                'log_type' => $logType,
+                'is_holiday' => $holiday ? true : false,
+                'is_rest_day' => $isRestDay,
+                'creation_method' => $this->importId,
+                'remarks' => 'Imported from Excel/CSV',
             ];
+
+            // If in preview mode, collect data for preview instead of creating records
+            if ($this->previewMode) {
+                $this->validRecordsCount++;
+                $this->previewData[] = [
+                    'employee_number' => $employee->employee_number,
+                    'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                    'log_date' => $logDate->format('Y-m-d'),
+                    'time_in' => $timeIn,
+                    'time_out' => $timeOut,
+                    'break_in' => $breakIn,
+                    'break_out' => $breakOut,
+                    'total_hours' => $calculatedHours['total_hours'],
+                    'log_type' => $logType,
+                    'action' => $existingLog ? 'Update' : 'Create',
+                    'existing_record' => $existingLog ? true : false
+                ];
+                return null;
+            }
 
             if ($existingLog) {
                 $existingLog->update($timeLogData);
@@ -119,7 +193,7 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
             }
         } catch (\Exception $e) {
             $this->errorCount++;
-            $this->errors[] = "Error processing row: " . $e->getMessage() . " - Row data: " . json_encode($row);
+            $this->customErrors[] = "Error processing row for employee " . ($row['employee_number'] ?? 'N/A') . ": " . $e->getMessage();
             return null;
         }
     }
@@ -189,9 +263,10 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     }
 
     /**
-     * Parse time string into H:i:s format - supports AM/PM and 24-hour format
+     * Parse time string into H:i format - Enhanced to support multiple formats
+     * Supports: 8:00 AM, 8:00PM, 08:00, 17:00, etc.
      */
-    private function parseTime($timeValue)
+    private function parseTimeEnhanced($timeValue)
     {
         if (empty($timeValue)) {
             return null;
@@ -200,17 +275,186 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         try {
             // Handle Excel time format (decimal)
             if (is_numeric($timeValue)) {
-                $timeValue = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($timeValue)->format('H:i:s');
-            } else {
-                // Handle string time formats - both 12-hour and 24-hour
-                $time = Carbon::parse($timeValue);
-                $timeValue = $time->format('H:i:s');
+                $time = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($timeValue);
+                return $time->format('H:i');
             }
 
-            return $timeValue;
+            // Clean the input string
+            $cleanTime = trim($timeValue);
+
+            // Handle various string time formats
+            // Support formats like: "8:00 AM", "8:00PM", "08:00", "17:00", "8AM", "5PM"
+
+            // Try to parse with Carbon (handles most formats)
+            try {
+                $time = Carbon::parse($cleanTime);
+                return $time->format('H:i');
+            } catch (\Exception $e) {
+                // Try manual parsing for edge cases
+
+                // Remove extra spaces and make uppercase
+                $cleanTime = preg_replace('/\s+/', ' ', strtoupper(trim($cleanTime)));
+
+                // Handle formats like "8AM" or "5PM" (without colon)
+                if (preg_match('/^(\d{1,2})\s*(AM|PM)$/i', $cleanTime, $matches)) {
+                    $hour = (int)$matches[1];
+                    $ampm = strtoupper($matches[2]);
+
+                    if ($ampm === 'PM' && $hour !== 12) {
+                        $hour += 12;
+                    } elseif ($ampm === 'AM' && $hour === 12) {
+                        $hour = 0;
+                    }
+
+                    return sprintf('%02d:00', $hour);
+                }
+
+                // Handle formats like "8:30AM" or "5:15PM" 
+                if (preg_match('/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i', $cleanTime, $matches)) {
+                    $hour = (int)$matches[1];
+                    $minute = (int)$matches[2];
+                    $ampm = strtoupper($matches[3]);
+
+                    if ($ampm === 'PM' && $hour !== 12) {
+                        $hour += 12;
+                    } elseif ($ampm === 'AM' && $hour === 12) {
+                        $hour = 0;
+                    }
+
+                    return sprintf('%02d:%02d', $hour, $minute);
+                }
+
+                // Handle 24-hour format like "08:00" or "17:30"
+                if (preg_match('/^(\d{1,2}):(\d{2})$/', $cleanTime, $matches)) {
+                    $hour = (int)$matches[1];
+                    $minute = (int)$matches[2];
+
+                    if ($hour >= 0 && $hour <= 23 && $minute >= 0 && $minute <= 59) {
+                        return sprintf('%02d:%02d', $hour, $minute);
+                    }
+                }
+
+                return null;
+            }
         } catch (\Exception $e) {
             return null;
         }
+    }
+
+    /**
+     * Calculate hours using the same logic as bulk time logs creation
+     */
+    private function calculateHoursLikeBulkCreation($employee, $logDate, $timeIn, $timeOut, $breakIn, $breakOut, $logType)
+    {
+        // Initialize default values
+        $totalHours = 0;
+        $regularHours = 0;
+        $overtimeHours = 0;
+        $lateHours = 0;
+        $undertimeHours = 0;
+
+        // Calculate hours only if we have time_in and time_out
+        if ($timeIn && $timeOut) {
+            try {
+                $timeInCarbon = Carbon::createFromFormat('H:i', $timeIn);
+                $timeOutCarbon = Carbon::createFromFormat('H:i', $timeOut);
+
+                // Handle next day checkout
+                if ($timeOutCarbon->lt($timeInCarbon)) {
+                    $timeOutCarbon->addDay();
+                }
+
+                $totalMinutes = $timeInCarbon->diffInMinutes($timeOutCarbon);
+
+                // Deduct break time
+                if ($breakIn && $breakOut) {
+                    $breakInCarbon = Carbon::createFromFormat('H:i', $breakIn);
+                    $breakOutCarbon = Carbon::createFromFormat('H:i', $breakOut);
+
+                    if ($breakOutCarbon->gt($breakInCarbon)) {
+                        $breakMinutes = $breakInCarbon->diffInMinutes($breakOutCarbon);
+                        $totalMinutes -= $breakMinutes;
+                    }
+                } else {
+                    // Auto-deduct 1 hour break if not specified (same as bulk creation)
+                    $totalMinutes -= 60;
+                }
+
+                $totalHours = max(0, $totalMinutes / 60);
+
+                // Standard work hours (same as bulk creation)
+                $standardHours = 8;
+
+                if ($totalHours <= $standardHours) {
+                    $regularHours = $totalHours;
+                } else {
+                    $regularHours = $standardHours;
+                    $overtimeHours = $totalHours - $standardHours;
+                }
+
+                // Calculate late hours (if applicable)
+                if ($employee->daySchedule) {
+                    $dayOfWeek = $logDate->dayOfWeek; // 0 = Sunday, 1 = Monday, etc.
+                    $scheduleStartTime = null;
+
+                    switch ($dayOfWeek) {
+                        case 1:
+                            $scheduleStartTime = $employee->daySchedule->monday_start;
+                            break;
+                        case 2:
+                            $scheduleStartTime = $employee->daySchedule->tuesday_start;
+                            break;
+                        case 3:
+                            $scheduleStartTime = $employee->daySchedule->wednesday_start;
+                            break;
+                        case 4:
+                            $scheduleStartTime = $employee->daySchedule->thursday_start;
+                            break;
+                        case 5:
+                            $scheduleStartTime = $employee->daySchedule->friday_start;
+                            break;
+                        case 6:
+                            $scheduleStartTime = $employee->daySchedule->saturday_start;
+                            break;
+                        case 0:
+                            $scheduleStartTime = $employee->daySchedule->sunday_start;
+                            break;
+                    }
+
+                    if ($scheduleStartTime) {
+                        $scheduledStart = Carbon::createFromFormat('H:i:s', $scheduleStartTime);
+                        $actualStart = Carbon::createFromFormat('H:i', $timeIn);
+
+                        if ($actualStart->gt($scheduledStart)) {
+                            $lateMinutes = $scheduledStart->diffInMinutes($actualStart);
+                            $lateHours = $lateMinutes / 60;
+                        }
+                    }
+                }
+
+                // Calculate undertime (if applicable)
+                if ($totalHours < $standardHours) {
+                    $undertimeHours = $standardHours - $totalHours;
+                }
+            } catch (\Exception $e) {
+                // If any calculation fails, return zeros
+                return [
+                    'total_hours' => 0,
+                    'regular_hours' => 0,
+                    'overtime_hours' => 0,
+                    'late_hours' => 0,
+                    'undertime_hours' => 0,
+                ];
+            }
+        }
+
+        return [
+            'total_hours' => round($totalHours, 2),
+            'regular_hours' => round($regularHours, 2),
+            'overtime_hours' => round($overtimeHours, 2),
+            'late_hours' => round($lateHours, 2),
+            'undertime_hours' => round($undertimeHours, 2),
+        ];
     }
 
     /**
@@ -221,7 +465,10 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         return [
             'employee_number' => 'required',
             'date' => 'required',
-            'time_in' => 'required',
+            'time_in' => 'nullable',
+            'time_out' => 'nullable',
+            'break_in' => 'nullable',
+            'break_out' => 'nullable',
         ];
     }
 
@@ -233,7 +480,6 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
         return [
             'employee_number.required' => 'Employee number is required.',
             'date.required' => 'Date is required.',
-            'time_in.required' => 'Time in is required.',
         ];
     }
 
@@ -266,7 +512,63 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
      */
     public function getErrors()
     {
-        return $this->errors;
+        return $this->customErrors;
+    }
+
+    /**
+     * Get preview data for confirmation
+     */
+    public function getPreviewData()
+    {
+        return $this->previewData;
+    }
+
+    /**
+     * Get the number of valid records that will be imported
+     */
+    public function getValidRecordsCount()
+    {
+        return $this->validRecordsCount;
+    }
+
+    /**
+     * Calculate completeness score of a row (higher score = more complete)
+     */
+    private function calculateCompletenessScore(array $row)
+    {
+        $score = 0;
+
+        // Basic required fields
+        if (!empty($row['employee_number'])) $score += 10;
+        if (!empty($row['date'])) $score += 10;
+
+        // Time fields (more important)
+        if (!empty($row['time_in'])) $score += 20;
+        if (!empty($row['time_out'])) $score += 20;
+
+        // Break fields (less important but still valuable)
+        if (!empty($row['break_in'])) $score += 5;
+        if (!empty($row['break_out'])) $score += 5;
+
+        return $score;
+    }
+
+    /**
+     * Calculate completeness score of an existing TimeLog record
+     */
+    private function calculateExistingLogCompleteness(TimeLog $timeLog)
+    {
+        $score = 20; // Employee and date are always present for existing records
+
+        // Time fields (more important)
+        if (!empty($timeLog->time_in)) $score += 20;
+        if (!empty($timeLog->time_out)) $score += 20;
+
+        // Break fields (less important but still valuable)
+        if (!empty($timeLog->break_in)) $score += 5;
+        if (!empty($timeLog->break_out)) $score += 5;
+
+        return $score;
     }
 
     /**

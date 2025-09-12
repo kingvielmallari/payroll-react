@@ -15,31 +15,7 @@
 
     <div class="py-6">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-            
-            <!-- Instructions Card -->
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
-                <div class="flex items-start">
-                    <div class="flex-shrink-0">
-                        <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                        </svg>
-                    </div>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-blue-800">Import Instructions</h3>
-                        <div class="mt-2 text-sm text-blue-700">
-                            <ul class="list-disc list-inside space-y-1">
-                                <li>Download the template file below to see the correct format</li>
-                                <li>Fill in the employee data using either Employee Number or Email</li>
-                                <li>Use date format: YYYY-MM-DD (e.g., 2024-08-09)</li>
-                                <li>Use time format: HH:MM (24-hour format, e.g., 08:00, 17:30) or 12-hour format with AM/PM</li>
-                                <li>Time Out can be empty for ongoing shifts</li>
-                                <li>Break times are optional - if not provided, 1 hour will be automatically deducted</li>
-                                <li>Supported file formats: .xlsx, .xls, .csv (max 2MB)</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
+       
 
             <!-- Template Download Card -->
             <div class="bg-white overflow-hidden shadow rounded-lg">
@@ -48,7 +24,8 @@
                         <div>
                             <h3 class="text-lg leading-6 font-medium text-gray-900">Download Template</h3>
                             <p class="mt-1 max-w-2xl text-sm text-gray-500">
-                                Download a pre-formatted Excel template with sample data and empty rows for your entries.
+                                Download a simple Excel template with the required columns: Employee Number, Date, Time In, Time Out, Break In, Break Out.
+                                Includes sample data showing both 12-hour (AM/PM) and 24-hour time formats.
                             </p>
                         </div>
                         <div class="flex-shrink-0">
@@ -75,7 +52,7 @@
                         <!-- File Upload -->
                         <div>
                             <label for="dtr_file" class="block text-sm font-medium text-gray-700">DTR File</label>
-                            <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                            <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md" id="drop-zone">
                                 <div class="space-y-1 text-center">
                                     <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
                                         <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -88,6 +65,7 @@
                                         <p class="pl-1">or drag and drop</p>
                                     </div>
                                     <p class="text-xs text-gray-500">Excel or CSV files up to 2MB</p>
+                                    <div id="file-info" class="hidden mt-2 text-sm text-green-600"></div>
                                 </div>
                             </div>
                             @error('dtr_file')
@@ -135,38 +113,37 @@
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee Number</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee Name</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time In</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Out</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Break In</th>
                                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Break Out</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <tr>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">EMP-2025-0001</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">juan.doe@company.com</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Juan Dela Cruz</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2024-08-09</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">08:00</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">EMP-2025-0024</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">10/09/2024</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">8:00 am</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">5:00 pm</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">12:00 pm</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1:00 pm</td>
+                                </tr>
+                                <tr class="bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">EMP-2025-0024</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">11/09/2024</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">8:00</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">17:00</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">12:00</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">13:00</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Regular day</td>
                                 </tr>
-                                <tr class="bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">EMP-2025-0002</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">maria.santos@company.com</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Maria Santos</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2024-08-09</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">09:00</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">18:30</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Overtime</td>
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">EMP-2025-0024</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">13/09/2024</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">9:00 am</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">6:00 pm</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 italic">(empty)</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 italic">(empty)</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -174,10 +151,12 @@
                     <div class="mt-4 text-sm text-gray-600">
                         <p><strong>Notes:</strong></p>
                         <ul class="list-disc list-inside space-y-1 mt-2">
-                            <li>Either Employee Number or Email is required to identify the employee</li>
-                            <li>Employee Name column is for reference only and not used in import</li>
-                            <li>Break times are optional - if omitted, 1 hour break will be automatically deducted</li>
-                            <li>All imported time logs will be automatically approved</li>
+                            <li><strong>Employee Number</strong> and <strong>Date</strong> are required - records without these will be skipped</li>
+                            <li>Only active employees will be imported - inactive employee records will be skipped</li>
+                            <li>Time fields support both <strong>12-hour format</strong> (8:00 AM, 5:00 PM) and <strong>24-hour format</strong> (08:00, 17:00)</li>
+                            <li>Break times are optional - empty values are allowed</li>
+                            <li>For duplicate employee + date combinations, the most complete record will be imported</li>
+                            <li>Import will behave exactly like the manual bulk time log creation process</li>
                         </ul>
                     </div>
                 </div>
@@ -190,7 +169,9 @@
     <script>
         // File upload drag and drop functionality
         const fileInput = document.getElementById('dtr_file');
-        const dropZone = fileInput.closest('.border-dashed');
+        const dropZone = document.getElementById('drop-zone');
+        const fileInfo = document.getElementById('file-info');
+        let currentImportId = null;
         
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, preventDefaults, false);
@@ -223,8 +204,10 @@
             const dt = e.dataTransfer;
             const files = dt.files;
             
-            fileInput.files = files;
-            updateFileName(files[0]);
+            if (files.length > 0) {
+                fileInput.files = files;
+                updateFileName(files[0]);
+            }
         }
         
         fileInput.addEventListener('change', function(e) {
@@ -234,10 +217,13 @@
         });
         
         function updateFileName(file) {
-            const fileNameDisplay = dropZone.querySelector('.text-sm.text-gray-600');
-            if (fileNameDisplay) {
-                fileNameDisplay.innerHTML = `<span class="font-medium text-blue-600">${file.name}</span> (${formatFileSize(file.size)})`;
-            }
+            // Show file info
+            fileInfo.classList.remove('hidden');
+            fileInfo.innerHTML = `✓ Selected: <strong>${file.name}</strong> (${formatFileSize(file.size)})`;
+            
+            // Update drop zone to show success
+            dropZone.classList.add('border-green-400', 'bg-green-50');
+            dropZone.classList.remove('border-gray-300');
         }
         
         function formatFileSize(bytes) {
@@ -246,6 +232,217 @@
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Enhanced form submission with preview and confirmation
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function(e) {
+            e.preventDefault(); // Always prevent default to handle via JavaScript
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                showAlert('Please select a file to import.', 'error');
+                return false;
+            }
+            
+            handleImportPreview();
+        });
+
+        async function handleImportPreview() {
+            const formData = new FormData();
+            formData.append('dtr_file', fileInput.files[0]);
+            formData.append('_token', document.querySelector('input[name="_token"]').value);
+
+            try {
+                showLoadingState('Analyzing file...');
+                
+                const response = await fetch('{{ route("dtr.import-preview") }}', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                hideLoadingState();
+
+                if (result.success) {
+                    showConfirmationDialog(result);
+                } else {
+                    showAlert(result.message || 'Failed to analyze file', 'error');
+                }
+            } catch (error) {
+                hideLoadingState();
+                showAlert('Error analyzing file: ' + error.message, 'error');
+            }
+        }
+
+        function showConfirmationDialog(previewResult) {
+            const message = `
+                <div class="text-left">
+                    <h3 class="text-lg font-semibold mb-4">Import Confirmation</h3>
+                    <p class="mb-2"><strong>Records to be imported:</strong> ${previewResult.valid_records_count}</p>
+                    ${previewResult.skipped_count > 0 ? `<p class="mb-2 text-yellow-600"><strong>Records to be skipped:</strong> ${previewResult.skipped_count}</p>` : ''}
+                    ${previewResult.error_count > 0 ? `<p class="mb-2 text-red-600"><strong>Records with errors:</strong> ${previewResult.error_count}</p>` : ''}
+                    <p class="mt-4 text-sm text-gray-600">Do you want to proceed with the import?</p>
+                    ${previewResult.error_count > 0 ? `<div class="mt-2 text-xs text-red-500">Some records contain errors and will be skipped.</div>` : ''}
+                </div>
+            `;
+
+            if (confirm(`Import Confirmation\n\nRecords to be imported: ${previewResult.valid_records_count}\n${previewResult.skipped_count > 0 ? `Records to be skipped: ${previewResult.skipped_count}\n` : ''}${previewResult.error_count > 0 ? `Records with errors: ${previewResult.error_count}\n` : ''}\nDo you want to proceed with the import?`)) {
+                proceedWithImport();
+            }
+        }
+
+        async function proceedWithImport() {
+            const formData = new FormData();
+            formData.append('dtr_file', fileInput.files[0]);
+            formData.append('overwrite_existing', document.getElementById('overwrite_existing').checked ? '1' : '0');
+            formData.append('_token', document.querySelector('input[name="_token"]').value);
+
+            try {
+                showLoadingState('Importing records...');
+                
+                const response = await fetch('{{ route("dtr.import") }}', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                hideLoadingState();
+
+                if (result.success) {
+                    currentImportId = result.import_id;
+                    showSuccessMessage(result);
+                } else {
+                    showAlert(result.message || 'Import failed', 'error');
+                }
+            } catch (error) {
+                hideLoadingState();
+                showAlert('Error during import: ' + error.message, 'error');
+            }
+        }
+
+        function showSuccessMessage(result) {
+            let successHtml = `
+                <div class="bg-green-50 border border-green-200 rounded-md p-4 mb-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-green-800">Import Completed Successfully!</h3>
+                            <div class="mt-2 text-sm text-green-700">
+                                <p><strong>Successfully imported:</strong> ${result.imported_count} records</p>
+                                ${result.skipped_count > 0 ? `<p><strong>Skipped:</strong> ${result.skipped_count} records</p>` : ''}
+                                ${result.error_count > 0 ? `<p><strong>Errors:</strong> ${result.error_count} records</p>` : ''}
+                            </div>
+                            <div class="mt-4">
+                                <button onclick="deleteLatestImport()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded text-sm">
+                                    Delete All Latest Import from DB
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Insert success message at the top of the container
+            const container = document.querySelector('.max-w-7xl.mx-auto.py-10.px-4');
+            container.insertAdjacentHTML('afterbegin', successHtml);
+
+            // Reset form
+            form.reset();
+            fileInfo.classList.add('hidden');
+            dropZone.classList.remove('border-green-400', 'bg-green-50');
+            dropZone.classList.add('border-gray-300');
+        }
+
+        async function deleteLatestImport() {
+            if (!currentImportId) {
+                showAlert('No import ID found', 'error');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to delete all records from the latest import? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                showLoadingState('Deleting records...');
+                
+                const response = await fetch('{{ route("dtr.delete-latest-import") }}', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
+                    },
+                    body: JSON.stringify({
+                        import_id: currentImportId
+                    })
+                });
+
+                const result = await response.json();
+                hideLoadingState();
+
+                if (result.success) {
+                    showAlert(`Successfully deleted ${result.deleted_count} records from the latest import.`, 'success');
+                    currentImportId = null;
+                    // Remove the success message div
+                    const successDiv = document.querySelector('.bg-green-50');
+                    if (successDiv) {
+                        successDiv.remove();
+                    }
+                } else {
+                    showAlert(result.message || 'Failed to delete records', 'error');
+                }
+            } catch (error) {
+                hideLoadingState();
+                showAlert('Error deleting records: ' + error.message, 'error');
+            }
+        }
+
+        function showLoadingState(message) {
+            const loadingHtml = `
+                <div id="loading-overlay" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                        <div class="mt-3 text-center">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                            <h3 class="text-lg font-medium text-gray-900 mt-2">${message}</h3>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', loadingHtml);
+        }
+
+        function hideLoadingState() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.remove();
+            }
+        }
+
+        function showAlert(message, type = 'info') {
+            const alertClass = type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 
+                             type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 
+                             'bg-blue-50 border-blue-200 text-blue-800';
+            
+            const alertHtml = `
+                <div class="${alertClass} border rounded-md p-4 mb-4">
+                    <p>${message}</p>
+                </div>
+            `;
+            
+            const container = document.querySelector('.max-w-7xl.mx-auto.py-10.px-4');
+            container.insertAdjacentHTML('afterbegin', alertHtml);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                const alert = container.querySelector(`.${alertClass.split(' ')[0]}`);
+                if (alert) {
+                    alert.remove();
+                }
+            }, 5000);
         }
     </script>
 </x-app-layout>

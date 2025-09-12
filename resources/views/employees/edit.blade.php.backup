@@ -528,12 +528,39 @@
     @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Salary input elements
+            // Get references to all salary fields
             const hourlyRateInput = document.getElementById('hourly_rate');
             const dailyRateInput = document.getElementById('daily_rate');
             const weeklyRateInput = document.getElementById('weekly_rate');
             const semiMonthlyRateInput = document.getElementById('semi_monthly_rate');
             const basicSalaryInput = document.getElementById('basic_salary');
+            
+            // Get references to raw value fields
+            const hourlyRateRaw = document.getElementById('hourly_rate_raw');
+            const dailyRateRaw = document.getElementById('daily_rate_raw');
+            const weeklyRateRaw = document.getElementById('weekly_rate_raw');
+            const semiMonthlyRateRaw = document.getElementById('semi_monthly_rate_raw');
+            const basicSalaryRaw = document.getElementById('basic_salary_raw');
+            
+            // Calculation display elements
+            const calcHourly = document.getElementById('calc_hourly');
+            const calcDaily = document.getElementById('calc_daily');
+            const calcWeekly = document.getElementById('calc_weekly');
+            const calcSemi = document.getElementById('calc_semi');
+            const calcMonthly = document.getElementById('calc_monthly');
+            
+            let isCalculating = false;
+
+            // Format number as peso
+            function formatPeso(value) {
+                if (!value || value === 0) return '';
+                const num = typeof value === 'string' ? parseFloat(value) : value;
+                if (isNaN(num)) return '';
+                return '₱' + num.toLocaleString('en-PH', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            }
 
             // Parse peso formatted string to number
             function parsePeso(value) {
@@ -544,25 +571,483 @@
                 return isNaN(num) ? 0 : num;
             }
 
-            // Salary rate input field containers for highlighting
-            const hourlyRateField = hourlyRateInput ? hourlyRateInput.closest('div') : null;
-            const dailyRateField = dailyRateInput ? dailyRateInput.closest('div') : null;
-            const weeklyRateField = weeklyRateInput ? weeklyRateInput.closest('div') : null;
-            const semiMonthlyRateField = semiMonthlyRateInput ? semiMonthlyRateInput.closest('div') : null;
-            const monthlyRateField = basicSalaryInput ? basicSalaryInput.closest('div') : null;
+            // Update calculation breakdown display
+            function updateCalculationDisplay(rates) {
+                if (calcHourly) calcHourly.textContent = formatPeso(rates.hourly || 0);
+                if (calcDaily) calcDaily.textContent = formatPeso(rates.daily || 0);
+                if (calcWeekly) calcWeekly.textContent = formatPeso(rates.weekly || 0);
+                if (calcSemi) calcSemi.textContent = formatPeso(rates.semiMonthly || 0);
+                if (calcMonthly) calcMonthly.textContent = formatPeso(rates.monthly || 0);
+            }
 
-            // Function to highlight a specific rate field when clicked
-            function highlightRateField(targetField) {
-                console.log('highlightRateField called for:', targetField ? targetField.querySelector('input')?.id : 'null');
+            // Clear all other fields except the current one
+            function clearOtherFields(currentField) {
+                if (isCalculating) return;
                 
-                // Reset all fields to default styling
+                const fieldMap = {
+                    'hourly': hourlyRateInput,
+                    'daily': dailyRateInput,
+                    'weekly': weeklyRateInput,
+                    'semi': semiMonthlyRateInput,
+                    'basic': basicSalaryInput
+                };
+                
+                const rawMap = {
+                    'hourly': hourlyRateRaw,
+                    'daily': dailyRateRaw,
+                    'weekly': weeklyRateRaw,
+                    'semi': semiMonthlyRateRaw,
+                    'basic': basicSalaryRaw
+                };
+                
+                Object.keys(fieldMap).forEach(key => {
+                    if (key !== currentField) {
+                        if (fieldMap[key]) fieldMap[key].value = '';
+                        if (rawMap[key]) rawMap[key].value = '';
+                    }
+                });
+            }
+
+            // Function to update fixed_rate when highlighted field value changes
+            function updateFixedRateIfHighlighted(changedInput) {
+                const rateTypeInput = document.getElementById('rate_type');
+                const fixedRateInput = document.getElementById('fixed_rate');
+                
+                console.log('updateFixedRateIfHighlighted called for:', changedInput.id); // Debug
+                console.log('Current rate_type:', rateTypeInput ? rateTypeInput.value : 'not found'); // Debug
+                console.log('Changed input value:', changedInput.value); // Debug
+                
+                if (rateTypeInput && fixedRateInput && rateTypeInput.value) {
+                    // Check if the changed input is the currently highlighted one
+                    let isHighlighted = false;
+                    switch(rateTypeInput.value) {
+                        case 'hourly':
+                            isHighlighted = changedInput.id === 'hourly_rate';
+                            break;
+                        case 'daily':
+                            isHighlighted = changedInput.id === 'daily_rate';
+                            break;
+                        case 'weekly':
+                            isHighlighted = changedInput.id === 'weekly_rate';
+                            break;
+                        case 'semi_monthly':
+                            isHighlighted = changedInput.id === 'semi_monthly_rate';
+                            break;
+                        case 'monthly':
+                            isHighlighted = changedInput.id === 'basic_salary';
+                            break;
+                    }
+                    
+                    console.log('Is highlighted?', isHighlighted); // Debug
+                    
+                    if (isHighlighted) {
+                        const newValue = parsePeso(changedInput.value) || 0;
+                        fixedRateInput.value = newValue;
+                        console.log('Updated fixed_rate to:', newValue); // Debug
+                    }
+                } else {
+                    console.log('Missing elements:', { 
+                        rateType: !!rateTypeInput, 
+                        fixedRate: !!fixedRateInput, 
+                        hasValue: rateTypeInput ? !!rateTypeInput.value : false 
+                    }); // Debug
+                }
+            }
+
+            // Enable all salary input fields
+            function enableAllSalaryInputs() {
+                [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
+                    if (input) {
+                        input.disabled = false;
+                        input.classList.remove('bg-gray-100', 'text-gray-500');
+                    }
+                });
+            }
+
+            // Disable other salary inputs except the active one
+            function disableOtherSalaryInputs(activeInput) {
+                [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
+                    if (input && input !== activeInput) {
+                        input.disabled = true;
+                        input.classList.add('bg-gray-100', 'text-gray-500');
+                    }
+                });
+            }
+
+            // Calculate all rates from hourly rate
+            function calculateFromHourly() {
+                if (isCalculating) return;
+                
+                const rawValue = parsePeso(hourlyRateInput.value);
+                
+                // If input is empty or zero, clear other fields and enable all inputs
+                if (!hourlyRateInput.value.trim() || rawValue === 0) {
+                    clearOtherFields('hourly');
+                    if (hourlyRateRaw) hourlyRateRaw.value = '';
+                    enableAllSalaryInputs();
+                    updateCalculationDisplay({});
+                    return;
+                }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(hourlyRateInput);
+                
+                isCalculating = true;
+                
+                if (rawValue > 0) {
+                    const rates = {
+                        hourly: rawValue,
+                        daily: rawValue * 8,
+                        weekly: rawValue * 8 * 5,
+                        semiMonthly: rawValue * 8 * 11,
+                        monthly: rawValue * 8 * 22
+                    };
+                    
+                    if (dailyRateInput) dailyRateInput.value = formatPeso(rates.daily);
+                    if (weeklyRateInput) weeklyRateInput.value = formatPeso(rates.weekly);
+                    if (semiMonthlyRateInput) semiMonthlyRateInput.value = formatPeso(rates.semiMonthly);
+                    if (basicSalaryInput) basicSalaryInput.value = formatPeso(rates.monthly);
+                    
+                    // Update raw values
+                    if (hourlyRateRaw) hourlyRateRaw.value = rates.hourly;
+                    if (dailyRateRaw) dailyRateRaw.value = rates.daily;
+                    if (weeklyRateRaw) weeklyRateRaw.value = rates.weekly;
+                    if (semiMonthlyRateRaw) semiMonthlyRateRaw.value = rates.semiMonthly;
+                    if (basicSalaryRaw) basicSalaryRaw.value = rates.monthly;
+                    
+                    updateCalculationDisplay(rates);
+                }
+                isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(hourlyRateInput);
+            }
+
+            // Calculate all rates from daily rate
+            function calculateFromDaily() {
+                if (isCalculating) return;
+                
+                const rawValue = parsePeso(dailyRateInput.value);
+                
+                // If input is empty or zero, clear other fields and enable all inputs
+                if (!dailyRateInput.value.trim() || rawValue === 0) {
+                    clearOtherFields('daily');
+                    if (dailyRateRaw) dailyRateRaw.value = '';
+                    enableAllSalaryInputs();
+                    updateCalculationDisplay({});
+                    return;
+                }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(dailyRateInput);
+                
+                isCalculating = true;
+                
+                if (rawValue > 0) {
+                    const rates = {
+                        hourly: rawValue / 8,
+                        daily: rawValue,
+                        weekly: rawValue * 5,
+                        semiMonthly: rawValue * 11,
+                        monthly: rawValue * 22
+                    };
+                    
+                    if (hourlyRateInput) hourlyRateInput.value = formatPeso(rates.hourly);
+                    if (weeklyRateInput) weeklyRateInput.value = formatPeso(rates.weekly);
+                    if (semiMonthlyRateInput) semiMonthlyRateInput.value = formatPeso(rates.semiMonthly);
+                    if (basicSalaryInput) basicSalaryInput.value = formatPeso(rates.monthly);
+                    
+                    // Update raw values
+                    if (hourlyRateRaw) hourlyRateRaw.value = rates.hourly;
+                    if (dailyRateRaw) dailyRateRaw.value = rates.daily;
+                    if (weeklyRateRaw) weeklyRateRaw.value = rates.weekly;
+                    if (semiMonthlyRateRaw) semiMonthlyRateRaw.value = rates.semiMonthly;
+                    if (basicSalaryRaw) basicSalaryRaw.value = rates.monthly;
+                    
+                    updateCalculationDisplay(rates);
+                }
+                isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(dailyRateInput);
+            }
+
+            // Calculate all rates from weekly rate
+            function calculateFromWeekly() {
+                if (isCalculating) return;
+                
+                const rawValue = parsePeso(weeklyRateInput.value);
+                
+                // If input is empty or zero, clear other fields and enable all inputs
+                if (!weeklyRateInput.value.trim() || rawValue === 0) {
+                    clearOtherFields('weekly');
+                    if (weeklyRateRaw) weeklyRateRaw.value = '';
+                    enableAllSalaryInputs();
+                    updateCalculationDisplay({});
+                    return;
+                }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(weeklyRateInput);
+                
+                isCalculating = true;
+                
+                if (rawValue > 0) {
+                    const rates = {
+                        hourly: rawValue / (8 * 5),
+                        daily: rawValue / 5,
+                        weekly: rawValue,
+                        semiMonthly: rawValue * 2.2,
+                        monthly: rawValue * 4.4
+                    };
+                    
+                    if (hourlyRateInput) hourlyRateInput.value = formatPeso(rates.hourly);
+                    if (dailyRateInput) dailyRateInput.value = formatPeso(rates.daily);
+                    if (semiMonthlyRateInput) semiMonthlyRateInput.value = formatPeso(rates.semiMonthly);
+                    if (basicSalaryInput) basicSalaryInput.value = formatPeso(rates.monthly);
+                    
+                    // Update raw values
+                    if (hourlyRateRaw) hourlyRateRaw.value = rates.hourly;
+                    if (dailyRateRaw) dailyRateRaw.value = rates.daily;
+                    if (weeklyRateRaw) weeklyRateRaw.value = rates.weekly;
+                    if (semiMonthlyRateRaw) semiMonthlyRateRaw.value = rates.semiMonthly;
+                    if (basicSalaryRaw) basicSalaryRaw.value = rates.monthly;
+                    
+                    updateCalculationDisplay(rates);
+                }
+                isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(weeklyRateInput);
+            }
+
+            // Calculate all rates from semi-monthly rate
+            function calculateFromSemiMonthly() {
+                if (isCalculating) return;
+                
+                const rawValue = parsePeso(semiMonthlyRateInput.value);
+                
+                // If input is empty or zero, clear other fields and enable all inputs
+                if (!semiMonthlyRateInput.value.trim() || rawValue === 0) {
+                    clearOtherFields('semi');
+                    if (semiMonthlyRateRaw) semiMonthlyRateRaw.value = '';
+                    enableAllSalaryInputs();
+                    updateCalculationDisplay({});
+                    return;
+                }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(semiMonthlyRateInput);
+                
+                isCalculating = true;
+                
+                if (rawValue > 0) {
+                    const rates = {
+                        hourly: rawValue / (8 * 11),
+                        daily: rawValue / 11,
+                        weekly: rawValue / 2.2,
+                        semiMonthly: rawValue,
+                        monthly: rawValue * 2
+                    };
+                    
+                    if (hourlyRateInput) hourlyRateInput.value = formatPeso(rates.hourly);
+                    if (dailyRateInput) dailyRateInput.value = formatPeso(rates.daily);
+                    if (weeklyRateInput) weeklyRateInput.value = formatPeso(rates.weekly);
+                    if (basicSalaryInput) basicSalaryInput.value = formatPeso(rates.monthly);
+                    
+                    // Update raw values
+                    if (hourlyRateRaw) hourlyRateRaw.value = rates.hourly;
+                    if (dailyRateRaw) dailyRateRaw.value = rates.daily;
+                    if (weeklyRateRaw) weeklyRateRaw.value = rates.weekly;
+                    if (semiMonthlyRateRaw) semiMonthlyRateRaw.value = rates.semiMonthly;
+                    if (basicSalaryRaw) basicSalaryRaw.value = rates.monthly;
+                    
+                    updateCalculationDisplay(rates);
+                }
+                isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(semiMonthlyRateInput);
+            }
+
+            // Calculate all rates from monthly salary
+            function calculateFromBasic() {
+                if (isCalculating) return;
+                
+                const rawValue = parsePeso(basicSalaryInput.value);
+                
+                // If input is empty or zero, clear other fields and enable all inputs
+                if (!basicSalaryInput.value.trim() || rawValue === 0) {
+                    clearOtherFields('basic');
+                    if (basicSalaryRaw) basicSalaryRaw.value = '';
+                    enableAllSalaryInputs();
+                    updateCalculationDisplay({});
+                    return;
+                }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(basicSalaryInput);
+                
+                isCalculating = true;
+                
+                if (rawValue > 0) {
+                    const rates = {
+                        hourly: rawValue / (8 * 22),
+                        daily: rawValue / 22,
+                        weekly: rawValue / 4.4,
+                        semiMonthly: rawValue / 2,
+                        monthly: rawValue
+                    };
+                    
+                    if (hourlyRateInput) hourlyRateInput.value = formatPeso(rates.hourly);
+                    if (dailyRateInput) dailyRateInput.value = formatPeso(rates.daily);
+                    if (weeklyRateInput) weeklyRateInput.value = formatPeso(rates.weekly);
+                    if (semiMonthlyRateInput) semiMonthlyRateInput.value = formatPeso(rates.semiMonthly);
+                    
+                    // Update raw values
+                    if (hourlyRateRaw) hourlyRateRaw.value = rates.hourly;
+                    if (dailyRateRaw) dailyRateRaw.value = rates.daily;
+                    if (weeklyRateRaw) weeklyRateRaw.value = rates.weekly;
+                    if (semiMonthlyRateRaw) semiMonthlyRateRaw.value = rates.semiMonthly;
+                    if (basicSalaryRaw) basicSalaryRaw.value = rates.monthly;
+                    
+                    updateCalculationDisplay(rates);
+                }
+                isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(basicSalaryInput);
+            }
+
+            // Format input on blur
+            function formatInput(input, rawInput) {
+                const rawValue = parsePeso(input.value);
+                if (rawValue > 0) {
+                    input.value = formatPeso(rawValue);
+                    if (rawInput) rawInput.value = rawValue;
+                } else {
+                    input.value = '';
+                    if (rawInput) rawInput.value = '';
+                }
+            }
+
+            // Handle input formatting and allow only numbers, commas, periods, and peso sign
+            function handleSalaryInput(e) {
+                const input = e.target;
+                let value = input.value;
+                
+                // Allow backspace, delete, tab, escape, enter
+                if (['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                    return;
+                }
+                
+                // Allow numbers, decimal point, and peso sign
+                if (!/[0-9₱.,]/.test(e.key)) {
+                    e.preventDefault();
+                }
+            }
+
+            // Format existing values on page load and initialize calculation display
+            function formatExistingValues() {
+                let hasValue = false;
+                let rates = {};
+                
+                // Check if any field has a value and format them
+                if (hourlyRateInput && hourlyRateInput.value && !isNaN(parseFloat(hourlyRateInput.value))) {
+                    const value = parseFloat(hourlyRateInput.value);
+                    hourlyRateInput.value = formatPeso(value);
+                    if (hourlyRateRaw) hourlyRateRaw.value = value;
+                    rates.hourly = value;
+                    hasValue = true;
+                }
+                
+                if (dailyRateInput && dailyRateInput.value && !isNaN(parseFloat(dailyRateInput.value))) {
+                    const value = parseFloat(dailyRateInput.value);
+                    dailyRateInput.value = formatPeso(value);
+                    if (dailyRateRaw) dailyRateRaw.value = value;
+                    rates.daily = value;
+                    hasValue = true;
+                }
+                
+                if (weeklyRateInput && weeklyRateInput.value && !isNaN(parseFloat(weeklyRateInput.value))) {
+                    const value = parseFloat(weeklyRateInput.value);
+                    weeklyRateInput.value = formatPeso(value);
+                    if (weeklyRateRaw) weeklyRateRaw.value = value;
+                    rates.weekly = value;
+                    hasValue = true;
+                }
+                
+                if (semiMonthlyRateInput && semiMonthlyRateInput.value && !isNaN(parseFloat(semiMonthlyRateInput.value))) {
+                    const value = parseFloat(semiMonthlyRateInput.value);
+                    semiMonthlyRateInput.value = formatPeso(value);
+                    if (semiMonthlyRateRaw) semiMonthlyRateRaw.value = value;
+                    rates.semiMonthly = value;
+                    hasValue = true;
+                }
+                
+                if (basicSalaryInput && basicSalaryInput.value && !isNaN(parseFloat(basicSalaryInput.value))) {
+                    const value = parseFloat(basicSalaryInput.value);
+                    basicSalaryInput.value = formatPeso(value);
+                    if (basicSalaryRaw) basicSalaryRaw.value = value;
+                    rates.monthly = value;
+                    hasValue = true;
+                }
+                
+                // If we have values, update the calculation display
+                if (hasValue) {
+                    updateCalculationDisplay(rates);
+                }
+            }
+
+            // Initialize on page load
+            formatExistingValues();
+
+            // Add event listeners to all salary fields
+            if (hourlyRateInput) {
+                hourlyRateInput.addEventListener('input', calculateFromHourly);
+                hourlyRateInput.addEventListener('blur', () => formatInput(hourlyRateInput, hourlyRateRaw));
+                hourlyRateInput.addEventListener('keydown', handleSalaryInput);
+            }
+            
+            if (dailyRateInput) {
+                dailyRateInput.addEventListener('input', calculateFromDaily);
+                dailyRateInput.addEventListener('blur', () => formatInput(dailyRateInput, dailyRateRaw));
+                dailyRateInput.addEventListener('keydown', handleSalaryInput);
+            }
+            
+            if (weeklyRateInput) {
+                weeklyRateInput.addEventListener('input', calculateFromWeekly);
+                weeklyRateInput.addEventListener('blur', () => formatInput(weeklyRateInput, weeklyRateRaw));
+                weeklyRateInput.addEventListener('keydown', handleSalaryInput);
+            }
+            
+            if (semiMonthlyRateInput) {
+                semiMonthlyRateInput.addEventListener('input', calculateFromSemiMonthly);
+                semiMonthlyRateInput.addEventListener('blur', () => formatInput(semiMonthlyRateInput, semiMonthlyRateRaw));
+                semiMonthlyRateInput.addEventListener('keydown', handleSalaryInput);
+            }
+            
+            if (basicSalaryInput) {
+                basicSalaryInput.addEventListener('input', calculateFromBasic);
+                basicSalaryInput.addEventListener('blur', () => formatInput(basicSalaryInput, basicSalaryRaw));
+                basicSalaryInput.addEventListener('keydown', handleSalaryInput);
+            }
+
+            // Salary rate input fields
+            const hourlyRateField = document.getElementById('hourly_rate').closest('div');
+            const dailyRateField = document.getElementById('daily_rate').closest('div');
+            const weeklyRateField = document.getElementById('weekly_rate').closest('div');
+            const semiMonthlyRateField = document.getElementById('semi_monthly_rate').closest('div');
+            const monthlyRateField = document.getElementById('basic_salary').closest('div');
+            
+            // Function to highlight a specific rate field
+            function highlightRateField(targetField) {
+                // Reset all fields to default styling and enable them
                 [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
-                    if (!field) return;
                     const input = field.querySelector('input[type="text"]');
                     const label = field.querySelector('label');
                     
                     if (input) {
-                        // Remove all highlighting classes first
                         input.classList.remove('border-green-500', 'bg-green-50', 'focus:border-green-500', 'focus:ring-green-500');
                         input.classList.add('border-gray-300', 'focus:border-indigo-500', 'focus:ring-indigo-500');
                         
@@ -570,15 +1055,9 @@
                         if (field !== targetField) {
                             input.classList.add('bg-gray-100', 'text-gray-400');
                             input.setAttribute('readonly', true);
-                            input.setAttribute('tabindex', '-1'); // Prevent tab navigation
-                            input.style.pointerEvents = 'none'; // Prevent clicking
-                            console.log('Disabling field:', input.id);
                         } else {
                             input.classList.remove('bg-gray-100', 'text-gray-400');
                             input.removeAttribute('readonly');
-                            input.removeAttribute('tabindex');
-                            input.style.pointerEvents = 'auto'; // Allow clicking
-                            console.log('Enabling field:', input.id);
                         }
                     }
                     if (label) {
@@ -603,9 +1082,6 @@
                         input.classList.remove('border-gray-300', 'focus:border-indigo-500', 'focus:ring-indigo-500', 'bg-gray-100', 'text-gray-400');
                         input.classList.add('border-green-500', 'bg-green-50', 'focus:border-green-500', 'focus:ring-green-500');
                         input.removeAttribute('readonly');
-                        input.removeAttribute('tabindex');
-                        input.style.pointerEvents = 'auto';
-                        console.log('Highlighted field:', input.id);
                     }
                     if (label) {
                         label.classList.remove('text-gray-700', 'text-gray-400');
@@ -650,48 +1126,13 @@
 
             // Add click event listeners to all salary input fields
             [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
-                if (!field) return;
                 const input = field.querySelector('input[type="text"]');
                 if (input) {
-                    // Click handler
-                    input.addEventListener('click', (e) => {
-                        // Prevent interaction if field is disabled
-                        if (input.hasAttribute('readonly')) {
-                            e.preventDefault();
-                            console.log('Blocked click on disabled field:', input.id);
-                            return false;
-                        }
+                    input.addEventListener('click', () => {
                         highlightRateField(field);
                     });
-                    
-                    // Focus handler
-                    input.addEventListener('focus', (e) => {
-                        // Prevent interaction if field is disabled
-                        if (input.hasAttribute('readonly')) {
-                            e.preventDefault();
-                            input.blur(); // Remove focus
-                            console.log('Blocked focus on disabled field:', input.id);
-                            return false;
-                        }
+                    input.addEventListener('focus', () => {
                         highlightRateField(field);
-                    });
-                    
-                    // Input handler to block typing in disabled fields
-                    input.addEventListener('input', (e) => {
-                        if (input.hasAttribute('readonly')) {
-                            e.preventDefault();
-                            console.log('Blocked input on disabled field:', input.id);
-                            return false;
-                        }
-                    });
-                    
-                    // Keydown handler to block all keyboard input on disabled fields
-                    input.addEventListener('keydown', (e) => {
-                        if (input.hasAttribute('readonly')) {
-                            e.preventDefault();
-                            console.log('Blocked keydown on disabled field:', input.id);
-                            return false;
-                        }
                     });
                 }
             });
@@ -728,36 +1169,29 @@
                     }
                     
                     if (targetField) {
-                        console.log('Highlighting field for rate type:', rateType);
+                        console.log('Highlighting field for rate type:', rateType); // Debug
                         highlightRateField(targetField);
+                        
+                        // Trigger calculation to populate other fields
+                        const input = targetField.querySelector('input[type="text"]');
+                        if (input && input.value) {
+                            const inputEvent = new Event('input', { bubbles: true });
+                            input.dispatchEvent(inputEvent);
+                        }
+                    } else {
+                        console.log('No target field found for rate type:', rateType); // Debug
                     }
+                } else {
+                    console.log('No rate type value found in hidden field'); // Debug
                 }
             }
-
-            // Initialize highlighting after a short delay to ensure DOM is ready
+            
+            // Initialize highlighting on page load with a small delay to ensure DOM is ready
             setTimeout(() => {
                 initializeHighlighting();
             }, 100);
 
-            // Add input listeners to update fixed_rate when typing in highlighted field
-            [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
-                if (!input) return;
-                input.addEventListener('input', function() {
-                    // Check if this input is currently highlighted
-                    if (input.classList.contains('border-green-500')) {
-                        const rateTypeInput = document.getElementById('rate_type');
-                        const fixedRateInput = document.getElementById('fixed_rate');
-                        
-                        if (rateTypeInput && fixedRateInput) {
-                            const newValue = parsePeso(input.value) || 0;
-                            fixedRateInput.value = newValue;
-                            console.log('Updated fixed_rate to:', newValue);
-                        }
-                    }
-                });
-            });
-
-            // Form submission
+            // Form submission - ensure only highlighted field data is sent
             const form = document.querySelector('form');
             if (form) {
                 form.addEventListener('submit', function(e) {
@@ -766,7 +1200,73 @@
                     const rateTypeInput = document.getElementById('rate_type');
                     const fixedRateInput = document.getElementById('fixed_rate');
                     
-                    console.log('Final values being submitted:', {
+                    if (rateTypeInput && fixedRateInput) {
+                        // Detect which field is highlighted (has green border)
+                        let activeField = null;
+                        let activeRateType = '';
+                        let activeRateValue = 0;
+                        
+                        const salaryFields = [
+                            { element: hourlyRateInput, type: 'hourly' },
+                            { element: dailyRateInput, type: 'daily' },
+                            { element: weeklyRateInput, type: 'weekly' },
+                            { element: semiMonthlyRateInput, type: 'semi_monthly' },
+                            { element: basicSalaryInput, type: 'monthly' }
+                        ];
+                        
+                        for (const field of salaryFields) {
+                            if (field.element && field.element.classList.contains('border-green-500')) {
+                                activeField = field.element;
+                                activeRateType = field.type;
+                                activeRateValue = parsePeso(field.element.value) || 0;
+                                break;
+                            }
+                        }
+                        
+                        // If no highlighted field found, fall back to rate_type value
+                        if (!activeField && rateTypeInput.value) {
+                            activeRateType = rateTypeInput.value;
+                            const typeToField = {
+                                'hourly': hourlyRateInput,
+                                'daily': dailyRateInput,
+                                'weekly': weeklyRateInput,
+                                'semi_monthly': semiMonthlyRateInput,
+                                'monthly': basicSalaryInput
+                            };
+                            activeField = typeToField[activeRateType];
+                            if (activeField) {
+                                activeRateValue = parsePeso(activeField.value) || 0;
+                            }
+                        }
+                        
+                        console.log('Active field detected:', activeRateType, 'with value:', activeRateValue);
+                        
+                        // Update the hidden fields with the highlighted field's data
+                        rateTypeInput.value = activeRateType;
+                        fixedRateInput.value = activeRateValue;
+                        
+                        // COMPLETELY REMOVE name attributes from ALL salary fields
+                        // This prevents ANY salary field data from being submitted
+                        salaryFields.forEach(field => {
+                            if (field.element) {
+                                console.log(`Removing name attribute from ${field.type} field`);
+                                field.element.setAttribute('data-original-name', field.element.name || '');
+                                field.element.removeAttribute('name');
+                            }
+                        });
+                        
+                        // Also remove raw value fields
+                        const rawFields = ['hourly_rate_raw', 'daily_rate_raw', 'weekly_rate_raw', 'semi_monthly_rate_raw', 'basic_salary_raw'];
+                        rawFields.forEach(fieldName => {
+                            const rawField = document.getElementById(fieldName);
+                            if (rawField) {
+                                rawField.setAttribute('data-original-name', rawField.name || '');
+                                rawField.removeAttribute('name');
+                            }
+                        });
+                    }
+                    
+                    console.log('Final values being submitted (only rate_type and fixed_rate):', {
                         rate_type: rateTypeInput ? rateTypeInput.value : '',
                         fixed_rate: fixedRateInput ? fixedRateInput.value : ''
                     });

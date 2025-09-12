@@ -239,8 +239,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/import/form', [DTRController::class, 'importForm'])
                 ->name('import-form')
                 ->middleware('can:import time logs');
+            Route::post('/import/preview', [DTRController::class, 'previewImport'])
+                ->name('import-preview')
+                ->middleware('can:import time logs');
             Route::post('/import', [DTRController::class, 'import'])
                 ->name('import')
+                ->middleware('can:import time logs');
+            Route::delete('/import/delete-latest', [DTRController::class, 'deleteLatestImport'])
+                ->name('delete-latest-import')
                 ->middleware('can:import time logs');
             Route::get('/export/template', [DTRController::class, 'exportTemplate'])
                 ->name('export-template')

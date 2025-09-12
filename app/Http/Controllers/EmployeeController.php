@@ -383,7 +383,12 @@ class EmployeeController extends Controller
         try {
             Log::info('Employee update attempt', [
                 'employee_id' => $employee->id,
-                'validated_data' => $validated
+                'validated_data' => $validated,
+                'before_update' => [
+                    'rate_type' => $employee->rate_type,
+                    'fixed_rate' => $employee->fixed_rate,
+                    'basic_salary' => $employee->basic_salary
+                ]
             ]);
 
             // Map employment status to user status
@@ -410,37 +415,84 @@ class EmployeeController extends Controller
             // Update employee record
             $employeeData = collect($validated)->except(['email', 'role'])->toArray();
 
-            // Map raw rate values to actual database fields
-            if (isset($employeeData['hourly_rate_raw'])) {
-                $employeeData['hourly_rate'] = $employeeData['hourly_rate_raw'];
+            // Only process the selected rate type, ignore other rate fields
+            if (isset($validated['rate_type']) && isset($validated['fixed_rate'])) {
+                // Clear all rate fields first
+                $employeeData['hourly_rate'] = null;
+                $employeeData['daily_rate'] = null;
+                $employeeData['weekly_rate'] = null;
+                $employeeData['semi_monthly_rate'] = null;
+                $employeeData['basic_salary'] = null;
+
+                // Set only the selected rate type
+                switch ($validated['rate_type']) {
+                    case 'hourly':
+                        $employeeData['hourly_rate'] = $validated['fixed_rate'];
+                        break;
+                    case 'daily':
+                        $employeeData['daily_rate'] = $validated['fixed_rate'];
+                        break;
+                    case 'weekly':
+                        $employeeData['weekly_rate'] = $validated['fixed_rate'];
+                        break;
+                    case 'semi_monthly':
+                        $employeeData['semi_monthly_rate'] = $validated['fixed_rate'];
+                        break;
+                    case 'monthly':
+                        $employeeData['basic_salary'] = $validated['fixed_rate'];
+                        break;
+                }
+
+                // Remove raw rate fields from processing
                 unset($employeeData['hourly_rate_raw']);
-            }
-            if (isset($employeeData['daily_rate_raw'])) {
-                $employeeData['daily_rate'] = $employeeData['daily_rate_raw'];
                 unset($employeeData['daily_rate_raw']);
-            }
-            if (isset($employeeData['weekly_rate_raw'])) {
-                $employeeData['weekly_rate'] = $employeeData['weekly_rate_raw'];
                 unset($employeeData['weekly_rate_raw']);
-            }
-            if (isset($employeeData['semi_monthly_rate_raw'])) {
-                $employeeData['semi_monthly_rate'] = $employeeData['semi_monthly_rate_raw'];
                 unset($employeeData['semi_monthly_rate_raw']);
-            }
-            if (isset($employeeData['basic_salary_raw'])) {
-                $employeeData['basic_salary'] = $employeeData['basic_salary_raw'];
                 unset($employeeData['basic_salary_raw']);
+            } else {
+                // Fallback to old behavior if rate_type/fixed_rate not provided
+                // Map raw rate values to actual database fields
+                if (isset($employeeData['hourly_rate_raw'])) {
+                    $employeeData['hourly_rate'] = $employeeData['hourly_rate_raw'];
+                    unset($employeeData['hourly_rate_raw']);
+                }
+                if (isset($employeeData['daily_rate_raw'])) {
+                    $employeeData['daily_rate'] = $employeeData['daily_rate_raw'];
+                    unset($employeeData['daily_rate_raw']);
+                }
+                if (isset($employeeData['weekly_rate_raw'])) {
+                    $employeeData['weekly_rate'] = $employeeData['weekly_rate_raw'];
+                    unset($employeeData['weekly_rate_raw']);
+                }
+                if (isset($employeeData['semi_monthly_rate_raw'])) {
+                    $employeeData['semi_monthly_rate'] = $employeeData['semi_monthly_rate_raw'];
+                    unset($employeeData['semi_monthly_rate_raw']);
+                }
+                if (isset($employeeData['basic_salary_raw'])) {
+                    $employeeData['basic_salary'] = $employeeData['basic_salary_raw'];
+                    unset($employeeData['basic_salary_raw']);
+                }
+
+                // Map fixed_rate to basic_salary for backward compatibility
+                if (isset($employeeData['fixed_rate']) && !isset($employeeData['basic_salary'])) {
+                    $employeeData['basic_salary'] = $employeeData['fixed_rate'];
+                }
             }
 
-            // Map fixed_rate to basic_salary for backward compatibility
-            if (isset($employeeData['fixed_rate']) && !isset($employeeData['basic_salary'])) {
-                $employeeData['basic_salary'] = $employeeData['fixed_rate'];
-            }
+            Log::info('Employee data prepared for update', [
+                'employee_id' => $employee->id,
+                'employee_data' => $employeeData
+            ]);
 
             $employee->update($employeeData);
 
             Log::info('Employee updated successfully', [
                 'employee_id' => $employee->id,
+                'after_update' => [
+                    'rate_type' => $employee->fresh()->rate_type,
+                    'fixed_rate' => $employee->fresh()->fixed_rate,
+                    'basic_salary' => $employee->fresh()->basic_salary
+                ],
                 'new_employment_status' => $employee->fresh()->employment_status,
                 'user_status' => $userStatus
             ]);
@@ -448,6 +500,13 @@ class EmployeeController extends Controller
             return redirect()->route('employees.show', $employee)
                 ->with('success', 'Employee updated successfully!');
         } catch (\Exception $e) {
+            Log::error('Employee update failed', [
+                'employee_id' => $employee->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+
             return back()->withInput()
                 ->withErrors(['error' => 'Failed to update employee: ' . $e->getMessage()]);
         }
