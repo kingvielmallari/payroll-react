@@ -1242,17 +1242,11 @@ class PayrollController extends Controller
         // The grossPay already includes basic + holiday + rest + overtime
         $taxableIncomeForDeductions = $grossPay; // This includes basic + holiday + rest + overtime
 
-        // Detect pay frequency based on period duration
-        $periodDays = \Carbon\Carbon::parse($periodStart)->diffInDays(\Carbon\Carbon::parse($periodEnd)) + 1;
-        if ($periodDays <= 1) {
-            $payFrequency = 'daily';
-        } elseif ($periodDays <= 7) {
-            $payFrequency = 'weekly';
-        } elseif ($periodDays <= 16) {
-            $payFrequency = 'semi_monthly';
-        } else {
-            $payFrequency = 'monthly';
-        }
+        // Detect pay frequency based on period duration using dynamic pay schedule settings
+        $payFrequency = \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+            \Carbon\Carbon::parse($periodStart),
+            \Carbon\Carbon::parse($periodEnd)
+        );
 
         $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal, $payFrequency, $periodStart, $periodEnd);
 
@@ -5163,7 +5157,19 @@ class PayrollController extends Controller
                 'breakdown_types' => array_keys($employeeBreakdown)
             ]);
 
-            $basicPay = 0; // Regular workday pay only
+            // Calculate Basic Pay using the same method as the dynamic view
+            $calculatedBasicPay = $employee->calculateBasicPayForPeriod(
+                \Carbon\Carbon::parse($payroll->period_start),
+                \Carbon\Carbon::parse($payroll->period_end)
+            );
+
+            // Calculate Monthly Basic Pay using the same method as the dynamic view
+            $currentMonth = \Carbon\Carbon::now();
+            $currentMonthStart = $currentMonth->copy()->startOfMonth();
+            $currentMonthEnd = $currentMonth->copy()->endOfMonth();
+            $calculatedMonthlyBasicPay = $employee->calculateMonthlyBasicSalary($currentMonthStart, $currentMonthEnd);
+
+            $basicPay = 0; // Regular workday pay only from time logs
             $holidayPay = 0; // All holiday-related pay
             $restPay = 0; // Rest day pay
             $overtimePay = 0; // Overtime pay
@@ -5528,7 +5534,7 @@ class PayrollController extends Controller
                 'employee_name' => $employee->first_name . ' ' . $employee->last_name,
                 'department' => $employee->department->name ?? 'N/A',
                 'position' => $employee->position->title ?? 'N/A',
-                'basic_salary' => $employee->basic_salary ?? 0,
+                'basic_salary' => $calculatedMonthlyBasicPay, // Use calculated Monthly Basic Pay (same as dynamic view)
                 'daily_rate' => $employee->daily_rate ?? 0,
                 'hourly_rate' => $this->calculateHourlyRate($employee, $employee->basic_salary ?? 0),
                 'days_worked' => $payrollCalculation['days_worked'] ?? 0,
@@ -5536,7 +5542,7 @@ class PayrollController extends Controller
                 'overtime_hours' => $regularWorkdayOvertimeHours, // Only regular workday overtime hours
                 'holiday_hours' => $totalHolidayHours, // Total holiday hours (regular + overtime)
                 'night_differential_hours' => $payrollCalculation['night_differential_hours'] ?? 0,
-                'regular_pay' => $basicPay, // Use calculated basic pay
+                'regular_pay' => $calculatedBasicPay, // Use rate-based calculated basic pay (same as dynamic view)
                 'overtime_pay' => $overtimePay, // Use calculated overtime pay
                 'holiday_pay' => $holidayPay, // Use calculated holiday pay
                 'rest_day_pay' => $restPay, // Use calculated rest day pay
@@ -5753,19 +5759,13 @@ class PayrollController extends Controller
     {
         $breakdown = [];
 
-        // Detect pay frequency from payroll period if payroll object is provided
+        // Detect pay frequency from payroll period if payroll object is provided using dynamic pay schedule settings
         $payFrequency = 'semi_monthly'; // default
         if ($payroll) {
-            $periodDays = \Carbon\Carbon::parse($payroll->period_start)->diffInDays(\Carbon\Carbon::parse($payroll->period_end)) + 1;
-            if ($periodDays <= 1) {
-                $payFrequency = 'daily';
-            } elseif ($periodDays <= 7) {
-                $payFrequency = 'weekly';
-            } elseif ($periodDays <= 16) {
-                $payFrequency = 'semi_monthly';
-            } else {
-                $payFrequency = 'monthly';
-            }
+            $payFrequency = \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                \Carbon\Carbon::parse($payroll->period_start),
+                \Carbon\Carbon::parse($payroll->period_end)
+            );
         }
 
         // Get active deduction settings that apply to this employee's benefit status

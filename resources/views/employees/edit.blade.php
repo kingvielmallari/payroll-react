@@ -131,18 +131,19 @@
                             </div>
 
                             <div>
-                                <label for="role" class="block text-sm font-medium text-gray-700">User Role <span class="text-red-500">*</span></label>
-                                <select name="role" id="role" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                    <option value="">Select Role</option>
-                                    @foreach($roles as $role)
-                                        <option value="{{ $role->name }}" {{ old('role', $employee->user?->roles->first()?->name) == $role->name ? 'selected' : '' }}>
-                                            {{ $role->name }}
-                                        </option>
-                                    @endforeach
+                                <label for="role" class="block text-sm font-medium text-gray-700">User Role</label>
+                                <select name="role" id="role" disabled class="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm cursor-not-allowed">
+                                    @php
+                                        $currentRole = old('role', $employee->user?->roles->first()?->name) ?? 'No Role Assigned';
+                                    @endphp
+                                    <option value="{{ $currentRole }}" selected>{{ ucfirst($currentRole) }}</option>
                                 </select>
+                                <!-- Hidden input to ensure role value is submitted -->
+                                <input type="hidden" name="role" value="{{ $currentRole }}">
                                 @error('role')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
+                                <p class="mt-1 text-xs text-gray-500">Role cannot be changed from this form. Contact administrator if role change is needed.</p>
                             </div>
                         </div>
 
@@ -281,16 +282,6 @@
                             </div>
 
                             <div>
-                                <label for="paid_leaves" class="block text-sm font-medium text-gray-700">Number of Paid Leaves <span class="text-red-500">*</span></label>
-                                <input type="number" name="paid_leaves" id="paid_leaves" value="{{ old('paid_leaves', $employee->paid_leaves) }}" required min="0" max="365"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                @error('paid_leaves')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Annual paid leave entitlement</p>
-                            </div>
-
-                            <div>
                                 <label for="employment_status" class="block text-sm font-medium text-gray-700">Employment Status <span class="text-red-500">*</span></label>
                                 <select name="employment_status" id="employment_status" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                     <option value="">Select Status</option>
@@ -311,12 +302,12 @@
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6">
                         <h3 class="text-lg font-medium text-gray-900 mb-4">Salary Information</h3>
-                        <p class="text-sm text-gray-600 mb-4">Enter any rate and others will calculate automatically. Based on 8 hours/day, 5 days/week, and 22 days/month.</p>
+     
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                             <div>
                                 <label for="hourly_rate" class="block text-sm font-medium text-gray-700">Hourly Rate</label>
-                                <input type="text" name="hourly_rate" id="hourly_rate" value="{{ old('hourly_rate', $employee->hourly_rate ? number_format($employee->hourly_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
+                                <input type="text" name="hourly_rate" id="hourly_rate" value="{{ old('hourly_rate', ($employee->rate_type === 'hourly' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
                                 <input type="hidden" name="hourly_rate_raw" id="hourly_rate_raw">
                                 @error('hourly_rate')
@@ -327,7 +318,7 @@
 
                             <div>
                                 <label for="daily_rate" class="block text-sm font-medium text-gray-700">Daily Rate</label>
-                                <input type="text" name="daily_rate" id="daily_rate" value="{{ old('daily_rate', $employee->daily_rate ? number_format($employee->daily_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
+                                <input type="text" name="daily_rate" id="daily_rate" value="{{ old('daily_rate', ($employee->rate_type === 'daily' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
                                 <input type="hidden" name="daily_rate_raw" id="daily_rate_raw">
                                 @error('daily_rate')
@@ -338,7 +329,7 @@
 
                             <div>
                                 <label for="weekly_rate" class="block text-sm font-medium text-gray-700">Weekly Rate</label>
-                                <input type="text" name="weekly_rate" id="weekly_rate" value="{{ old('weekly_rate', $employee->weekly_rate ? number_format($employee->weekly_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
+                                <input type="text" name="weekly_rate" id="weekly_rate" value="{{ old('weekly_rate', ($employee->rate_type === 'weekly' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
                                 <input type="hidden" name="weekly_rate_raw" id="weekly_rate_raw">
                                 @error('weekly_rate')
@@ -349,7 +340,7 @@
 
                             <div>
                                 <label for="semi_monthly_rate" class="block text-sm font-medium text-gray-700">Semi-Monthly Rate</label>
-                                <input type="text" name="semi_monthly_rate" id="semi_monthly_rate" value="{{ old('semi_monthly_rate', $employee->semi_monthly_rate ? number_format($employee->semi_monthly_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
+                                <input type="text" name="semi_monthly_rate" id="semi_monthly_rate" value="{{ old('semi_monthly_rate', ($employee->rate_type === 'semi_monthly' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
                                 <input type="hidden" name="semi_monthly_rate_raw" id="semi_monthly_rate_raw">
                                 @error('semi_monthly_rate')
@@ -360,7 +351,7 @@
 
                             <div>
                                 <label for="basic_salary" class="block text-sm font-medium text-gray-700">Monthly Rate</label>
-                                <input type="text" name="basic_salary" id="basic_salary" value="{{ old('basic_salary', $employee->basic_salary ? number_format($employee->basic_salary, 2, '.', '') : '') }}" placeholder="₱0.00"
+                                <input type="text" name="basic_salary" id="basic_salary" value="{{ old('basic_salary', ($employee->rate_type === 'monthly' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
                                 <input type="hidden" name="basic_salary_raw" id="basic_salary_raw">
                                 @error('basic_salary')
@@ -370,8 +361,12 @@
                             </div>
                         </div>
                         
+                        <!-- Hidden fields for tracking highlighted rate -->
+                        <input type="hidden" name="rate_type" id="rate_type" value="{{ old('rate_type', $employee->rate_type) }}">
+                        <input type="hidden" name="fixed_rate" id="fixed_rate" value="{{ old('fixed_rate', $employee->fixed_rate) }}">
+                        
                         <!-- Salary Calculation Summary -->
-                        <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                        {{-- <div class="mt-6 p-4 bg-gray-50 rounded-lg">
                             <h4 class="text-sm font-medium text-gray-900 mb-2">Salary Breakdown</h4>
                             <div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs text-gray-600">
                                 <div>Hourly: <span id="calc_hourly" class="font-medium text-gray-900">₱0.00</span></div>
@@ -380,7 +375,7 @@
                                 <div>Semi-Monthly: <span id="calc_semi" class="font-medium text-gray-900">₱0.00</span></div>
                                 <div>Monthly: <span id="calc_monthly" class="font-medium text-gray-900">₱0.00</span></div>
                             </div>
-                        </div>
+                        </div> --}}
                     </div>
                 </div>
 
@@ -505,7 +500,7 @@
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6">
                         <div class="flex items-center justify-end space-x-4">
-                            <a href="{{ route('employees.show', $employee->employee_number) }}" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                            <a href="{{ route('employees.index') }}" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
                                 Cancel
                             </a>
                             <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
@@ -613,18 +608,77 @@
                 });
             }
 
+            // Function to update fixed_rate when highlighted field value changes
+            function updateFixedRateIfHighlighted(changedInput) {
+                const rateTypeInput = document.getElementById('rate_type');
+                const fixedRateInput = document.getElementById('fixed_rate');
+                
+                if (rateTypeInput && fixedRateInput && rateTypeInput.value) {
+                    // Check if the changed input is the currently highlighted one
+                    let isHighlighted = false;
+                    switch(rateTypeInput.value) {
+                        case 'hourly':
+                            isHighlighted = changedInput.id === 'hourly_rate';
+                            break;
+                        case 'daily':
+                            isHighlighted = changedInput.id === 'daily_rate';
+                            break;
+                        case 'weekly':
+                            isHighlighted = changedInput.id === 'weekly_rate';
+                            break;
+                        case 'semi_monthly':
+                            isHighlighted = changedInput.id === 'semi_monthly_rate';
+                            break;
+                        case 'monthly':
+                            isHighlighted = changedInput.id === 'basic_salary';
+                            break;
+                    }
+                    
+                    if (isHighlighted) {
+                        const newValue = parsePeso(changedInput.value) || 0;
+                        fixedRateInput.value = newValue;
+                        console.log('Updated fixed_rate to:', newValue); // Debug
+                    }
+                }
+            }
+
+            // Enable all salary input fields
+            function enableAllSalaryInputs() {
+                [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
+                    if (input) {
+                        input.disabled = false;
+                        input.classList.remove('bg-gray-100', 'text-gray-500');
+                    }
+                });
+            }
+
+            // Disable other salary inputs except the active one
+            function disableOtherSalaryInputs(activeInput) {
+                [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
+                    if (input && input !== activeInput) {
+                        input.disabled = true;
+                        input.classList.add('bg-gray-100', 'text-gray-500');
+                    }
+                });
+            }
+
             // Calculate all rates from hourly rate
             function calculateFromHourly() {
                 if (isCalculating) return;
                 
                 const rawValue = parsePeso(hourlyRateInput.value);
                 
+                // If input is empty or zero, clear other fields and enable all inputs
                 if (!hourlyRateInput.value.trim() || rawValue === 0) {
                     clearOtherFields('hourly');
                     if (hourlyRateRaw) hourlyRateRaw.value = '';
+                    enableAllSalaryInputs();
                     updateCalculationDisplay({});
                     return;
                 }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(hourlyRateInput);
                 
                 isCalculating = true;
                 
@@ -652,6 +706,9 @@
                     updateCalculationDisplay(rates);
                 }
                 isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(hourlyRateInput);
             }
 
             // Calculate all rates from daily rate
@@ -660,12 +717,17 @@
                 
                 const rawValue = parsePeso(dailyRateInput.value);
                 
+                // If input is empty or zero, clear other fields and enable all inputs
                 if (!dailyRateInput.value.trim() || rawValue === 0) {
                     clearOtherFields('daily');
                     if (dailyRateRaw) dailyRateRaw.value = '';
+                    enableAllSalaryInputs();
                     updateCalculationDisplay({});
                     return;
                 }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(dailyRateInput);
                 
                 isCalculating = true;
                 
@@ -693,6 +755,9 @@
                     updateCalculationDisplay(rates);
                 }
                 isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(dailyRateInput);
             }
 
             // Calculate all rates from weekly rate
@@ -701,12 +766,17 @@
                 
                 const rawValue = parsePeso(weeklyRateInput.value);
                 
+                // If input is empty or zero, clear other fields and enable all inputs
                 if (!weeklyRateInput.value.trim() || rawValue === 0) {
                     clearOtherFields('weekly');
                     if (weeklyRateRaw) weeklyRateRaw.value = '';
+                    enableAllSalaryInputs();
                     updateCalculationDisplay({});
                     return;
                 }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(weeklyRateInput);
                 
                 isCalculating = true;
                 
@@ -734,6 +804,9 @@
                     updateCalculationDisplay(rates);
                 }
                 isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(weeklyRateInput);
             }
 
             // Calculate all rates from semi-monthly rate
@@ -742,12 +815,17 @@
                 
                 const rawValue = parsePeso(semiMonthlyRateInput.value);
                 
+                // If input is empty or zero, clear other fields and enable all inputs
                 if (!semiMonthlyRateInput.value.trim() || rawValue === 0) {
                     clearOtherFields('semi');
                     if (semiMonthlyRateRaw) semiMonthlyRateRaw.value = '';
+                    enableAllSalaryInputs();
                     updateCalculationDisplay({});
                     return;
                 }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(semiMonthlyRateInput);
                 
                 isCalculating = true;
                 
@@ -775,6 +853,9 @@
                     updateCalculationDisplay(rates);
                 }
                 isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(semiMonthlyRateInput);
             }
 
             // Calculate all rates from monthly salary
@@ -783,12 +864,17 @@
                 
                 const rawValue = parsePeso(basicSalaryInput.value);
                 
+                // If input is empty or zero, clear other fields and enable all inputs
                 if (!basicSalaryInput.value.trim() || rawValue === 0) {
                     clearOtherFields('basic');
                     if (basicSalaryRaw) basicSalaryRaw.value = '';
+                    enableAllSalaryInputs();
                     updateCalculationDisplay({});
                     return;
                 }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(basicSalaryInput);
                 
                 isCalculating = true;
                 
@@ -816,6 +902,9 @@
                     updateCalculationDisplay(rates);
                 }
                 isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(basicSalaryInput);
             }
 
             // Format input on blur
@@ -932,38 +1021,146 @@
                 basicSalaryInput.addEventListener('keydown', handleSalaryInput);
             }
 
-            // Benefits status and paid leaves handling
-            const benefitsStatusSelect = document.getElementById('benefits_status');
-            const paidLeavesInput = document.getElementById('paid_leaves');
+            // Salary rate input fields
+            const hourlyRateField = document.getElementById('hourly_rate').closest('div');
+            const dailyRateField = document.getElementById('daily_rate').closest('div');
+            const weeklyRateField = document.getElementById('weekly_rate').closest('div');
+            const semiMonthlyRateField = document.getElementById('semi_monthly_rate').closest('div');
+            const monthlyRateField = document.getElementById('basic_salary').closest('div');
             
-            // Function to update paid leaves input based on benefits status
-            function updatePaidLeavesStatus() {
-                const paidLeavesLabel = document.querySelector('label[for="paid_leaves"]');
+            // Function to highlight a specific rate field
+            function highlightRateField(targetField) {
+                // Reset all fields to default styling
+                [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
+                    const input = field.querySelector('input[type="text"]');
+                    const label = field.querySelector('label');
+                    
+                    if (input) {
+                        input.classList.remove('border-green-500', 'bg-green-50', 'focus:border-green-500', 'focus:ring-green-500');
+                        input.classList.add('border-gray-300', 'focus:border-indigo-500', 'focus:ring-indigo-500');
+                    }
+                    if (label) {
+                        label.classList.remove('text-green-700', 'font-semibold');
+                        label.classList.add('text-gray-700');
+                    }
+                });
                 
-                if (benefitsStatusSelect.value === 'without_benefits') {
-                    paidLeavesInput.disabled = true;
-                    paidLeavesInput.value = '';
-                    paidLeavesInput.classList.add('bg-gray-100', 'cursor-not-allowed');
-                    paidLeavesInput.removeAttribute('required');
-                    // Update label to remove required indicator
-                    paidLeavesLabel.innerHTML = 'Number of Paid Leaves';
+                // Highlight the target field
+                if (targetField) {
+                    const input = targetField.querySelector('input[type="text"]');
+                    const label = targetField.querySelector('label');
+                    
+                    if (input) {
+                        input.classList.remove('border-gray-300', 'focus:border-indigo-500', 'focus:ring-indigo-500');
+                        input.classList.add('border-green-500', 'bg-green-50', 'focus:border-green-500', 'focus:ring-green-500');
+                    }
+                    if (label) {
+                        label.classList.remove('text-gray-700');
+                        label.classList.add('text-green-700', 'font-semibold');
+                    }
+                    
+                    // Update hidden fields based on highlighted field
+                    const rateTypeInput = document.getElementById('rate_type');
+                    const fixedRateInput = document.getElementById('fixed_rate');
+                    
+                    if (rateTypeInput && fixedRateInput && input) {
+                        // Determine rate type based on input id
+                        let rateType = '';
+                        let rateValue = parsePeso(input.value) || 0;
+                        
+                        switch(input.id) {
+                            case 'hourly_rate':
+                                rateType = 'hourly';
+                                break;
+                            case 'daily_rate':
+                                rateType = 'daily';
+                                break;
+                            case 'weekly_rate':
+                                rateType = 'weekly';
+                                break;
+                            case 'semi_monthly_rate':
+                                rateType = 'semi_monthly';
+                                break;
+                            case 'basic_salary':
+                                rateType = 'monthly';
+                                break;
+                        }
+                        
+                        // Update hidden fields
+                        rateTypeInput.value = rateType;
+                        fixedRateInput.value = rateValue;
+                        
+                        console.log('Updated rate tracking:', { rateType, rateValue }); // Debug
+                    }
+                }
+            }
+
+            // Add click event listeners to all salary input fields
+            [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
+                const input = field.querySelector('input[type="text"]');
+                if (input) {
+                    input.addEventListener('click', () => {
+                        highlightRateField(field);
+                    });
+                    input.addEventListener('focus', () => {
+                        highlightRateField(field);
+                    });
+                }
+            });
+
+            // Initialize highlighting based on existing rate_type from database
+            function initializeHighlighting() {
+                const rateTypeInput = document.getElementById('rate_type');
+                const fixedRateInput = document.getElementById('fixed_rate');
+                
+                console.log('Initializing highlighting...'); // Debug
+                console.log('Rate type from DB:', rateTypeInput ? rateTypeInput.value : 'not found');
+                console.log('Fixed rate from DB:', fixedRateInput ? fixedRateInput.value : 'not found');
+                
+                if (rateTypeInput && rateTypeInput.value) {
+                    const rateType = rateTypeInput.value;
+                    let targetField = null;
+                    
+                    switch(rateType) {
+                        case 'hourly':
+                            targetField = hourlyRateField;
+                            break;
+                        case 'daily':
+                            targetField = dailyRateField;
+                            break;
+                        case 'weekly':
+                            targetField = weeklyRateField;
+                            break;
+                        case 'semi_monthly':
+                            targetField = semiMonthlyRateField;
+                            break;
+                        case 'monthly':
+                            targetField = monthlyRateField;
+                            break;
+                    }
+                    
+                    if (targetField) {
+                        console.log('Highlighting field for rate type:', rateType); // Debug
+                        highlightRateField(targetField);
+                        
+                        // Trigger calculation to populate other fields
+                        const input = targetField.querySelector('input[type="text"]');
+                        if (input && input.value) {
+                            const inputEvent = new Event('input', { bubbles: true });
+                            input.dispatchEvent(inputEvent);
+                        }
+                    } else {
+                        console.log('No target field found for rate type:', rateType); // Debug
+                    }
                 } else {
-                    paidLeavesInput.disabled = false;
-                    paidLeavesInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
-                    paidLeavesInput.setAttribute('required', 'required');
-                    // Update label to show required indicator
-                    paidLeavesLabel.innerHTML = 'Number of Paid Leaves <span class="text-red-500">*</span>';
+                    console.log('No rate type value found in hidden field'); // Debug
                 }
             }
             
-            // Event listener for benefits status changes
-            if (benefitsStatusSelect) {
-                benefitsStatusSelect.addEventListener('change', function() {
-                    updatePaidLeavesStatus();
-                });
-                // Initialize on page load
-                updatePaidLeavesStatus();
-            }
+            // Initialize highlighting on page load with a small delay to ensure DOM is ready
+            setTimeout(() => {
+                initializeHighlighting();
+            }, 100);
 
             // Form submission - use clean numeric values for actual form submission
             const form = document.querySelector('form');

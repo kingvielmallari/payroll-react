@@ -422,6 +422,130 @@ class Employee extends Model
     }
 
     /**
+     * Calculate Basic Pay for a specific payroll period based on rate type
+     * 
+     * @param \Carbon\Carbon $periodStart
+     * @param \Carbon\Carbon $periodEnd
+     * @return float
+     */
+    public function calculateBasicPayForPeriod(\Carbon\Carbon $periodStart, \Carbon\Carbon $periodEnd)
+    {
+        // If no fixed_rate or rate_type, return 0
+        if (!$this->fixed_rate || !$this->rate_type) {
+            return 0;
+        }
+
+        // Count working days in payroll period based on employee's day schedule
+        $workingDaysInPeriod = 0;
+        $currentDate = $periodStart->copy();
+
+        while ($currentDate->lte($periodEnd)) {
+            // Use employee's isWorkingDay method to respect their day schedule
+            if ($this->isWorkingDay($currentDate)) {
+                $workingDaysInPeriod++;
+            }
+            $currentDate->addDay();
+        }
+
+        // Get assigned total hours from employee's time schedule
+        $assignedTotalHours = 8.0; // Default fallback
+        if ($this->time_schedule_id && $this->timeSchedule && $this->timeSchedule->total_hours) {
+            $assignedTotalHours = $this->timeSchedule->total_hours;
+        }
+
+        // Calculate based on rate type using the formulas
+        switch ($this->rate_type) {
+            case 'hourly':
+                // hourly rate * assigned total hours * total workdays on payroll period
+                return $this->fixed_rate * $assignedTotalHours * $workingDaysInPeriod;
+
+            case 'daily':
+                // daily rate * total workdays on payroll period
+                return $this->fixed_rate * $workingDaysInPeriod;
+
+            case 'weekly':
+                // Calculate total working days in a standard week for this employee
+                $sampleWeekStart = $periodStart->copy()->startOfWeek(); // Monday
+                $sampleWeekEnd = $sampleWeekStart->copy()->addDays(6); // Sunday
+                $totalWorkdaysInWeeklyPeriod = 0;
+                $sampleDate = $sampleWeekStart->copy();
+
+                while ($sampleDate->lte($sampleWeekEnd)) {
+                    if ($this->isWorkingDay($sampleDate)) {
+                        $totalWorkdaysInWeeklyPeriod++;
+                    }
+                    $sampleDate->addDay();
+                }
+
+                // weekly rate / total workdays in a period * total workdays in a payroll period
+                return $totalWorkdaysInWeeklyPeriod > 0 ?
+                    ($this->fixed_rate / $totalWorkdaysInWeeklyPeriod) * $workingDaysInPeriod : 0;
+
+            case 'semi_monthly':
+            case 'semi-monthly':
+                // Get total working days in a semi-monthly period
+                // Calculate working days in a typical semi-monthly period (first 15 days)
+                $sampleSemiStart = $periodStart->copy()->startOfMonth();
+                $sampleSemiEnd = $sampleSemiStart->copy()->addDays(14); // First 15 days
+                $totalWorkdaysInSemiPeriod = 0;
+                $sampleDate = $sampleSemiStart->copy();
+
+                while ($sampleDate->lte($sampleSemiEnd)) {
+                    // Use employee's day schedule to determine working days
+                    if ($this->isWorkingDay($sampleDate)) {
+                        $totalWorkdaysInSemiPeriod++;
+                    }
+                    $sampleDate->addDay();
+                }
+
+                // fixed semi rate / total workdays in a period * total workdays in a payroll period
+                return $totalWorkdaysInSemiPeriod > 0 ?
+                    ($this->fixed_rate / $totalWorkdaysInSemiPeriod) * $workingDaysInPeriod : 0;
+
+            case 'monthly':
+                // Get total working days in the month (based on employee's day schedule)
+                $monthStart = $periodStart->copy()->startOfMonth();
+                $monthEnd = $periodStart->copy()->endOfMonth();
+                $totalWorkdaysInMonth = 0;
+                $monthDate = $monthStart->copy();
+
+                while ($monthDate->lte($monthEnd)) {
+                    // Use employee's day schedule to determine working days
+                    if ($this->isWorkingDay($monthDate)) {
+                        $totalWorkdaysInMonth++;
+                    }
+                    $monthDate->addDay();
+                }
+
+                // fixed monthly / total workdays in a period * total workdays in a period
+                return $totalWorkdaysInMonth > 0 ?
+                    ($this->fixed_rate / $totalWorkdaysInMonth) * $workingDaysInPeriod : 0;
+
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * Get working days for a specific period (always Monday-Friday for payroll calculations)
+     */
+    public function getStandardWorkingDaysForPeriod(\Carbon\Carbon $startDate, \Carbon\Carbon $endDate)
+    {
+        $workingDays = 0;
+        $current = $startDate->copy();
+
+        while ($current <= $endDate) {
+            // Always use Monday-Friday for standard payroll calculations
+            if ($current->dayOfWeek >= 1 && $current->dayOfWeek <= 5) {
+                $workingDays++;
+            }
+            $current->addDay();
+        }
+
+        return $workingDays;
+    }
+
+    /**
      * Get working days for a specific period
      */
     public function getWorkingDaysForPeriod(\Carbon\Carbon $startDate, \Carbon\Carbon $endDate)
@@ -527,8 +651,20 @@ class Employee extends Model
                 return $fixedRate * 2;
 
             case 'weekly':
-                // If fixed weekly = MBS/basic salary is fixed weekly rate * 52 weeks = yearly amount / 12 months
-                return ($fixedRate * 52) / 12;
+                // If fixed weekly = MBS/basic salary is weekly rate / emp days per week * total workdays in current payroll month
+                if ($periodStart && $periodEnd) {
+                    // Get the employee's days per week from their day schedule
+                    $daysPerWeek = $this->getDaysPerWeek();
+
+                    // Calculate actual working days in the current payroll month
+                    $workingDaysInMonth = $this->getWorkingDaysForPeriod($periodStart, $periodEnd);
+
+                    // Calculate: weekly rate / emp days per week * total workdays in current payroll month
+                    return ($fixedRate / $daysPerWeek) * $workingDaysInMonth;
+                } else {
+                    // Fallback: Use the old calculation if no period provided
+                    return ($fixedRate * 52) / 12;
+                }
 
             case 'daily':
                 // If fixed daily rate = MBS/basic salary is fixed daily rate amount * emp total work days in a FULL MONTH
@@ -590,5 +726,30 @@ class Employee extends Model
     public function getMonthlyBasicSalary(\Carbon\Carbon $periodStart = null, \Carbon\Carbon $periodEnd = null)
     {
         return $this->calculateMonthlyBasicSalary($periodStart, $periodEnd);
+    }
+
+    /**
+     * Get the number of working days per week for this employee based on their day schedule
+     * 
+     * @return int
+     */
+    public function getDaysPerWeek()
+    {
+        if ($this->daySchedule) {
+            // Count the enabled days in the day schedule
+            $enabledDays = 0;
+            $dayFields = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+            foreach ($dayFields as $day) {
+                if ($this->daySchedule->$day) {
+                    $enabledDays++;
+                }
+            }
+
+            return $enabledDays;
+        }
+
+        // Default fallback: 5 days per week (Monday to Friday)
+        return 5;
     }
 }

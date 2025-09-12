@@ -212,18 +212,11 @@
                                                 }
                                             }
                                             
-                                            // Auto-detect pay frequency from payroll period
-                                            $payFrequency = 'semi_monthly'; // default
-                                            $periodDays = $payroll->period_start->diffInDays($payroll->period_end) + 1;
-                                            if ($periodDays <= 1) {
-                                                $payFrequency = 'daily';
-                                            } elseif ($periodDays <= 7) {
-                                                $payFrequency = 'weekly';
-                                            } elseif ($periodDays <= 16) {
-                                                $payFrequency = 'semi_monthly';
-                                            } else {
-                                                $payFrequency = 'monthly';
-                                            }
+                                            // Auto-detect pay frequency from payroll period using dynamic pay schedule settings
+                                            $payFrequency = \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                                                $payroll->period_start,
+                                                $payroll->period_end
+                                            );
                                             
                                             $calculatedAmount = $setting->calculateDeduction(
                                                 $basicPay, 
@@ -283,8 +276,8 @@
                         </div>
                     </div>
 
-                    <div class="mt-6 grid grid-cols-1 md:grid-cols-5 gap-6">
-                        <div>
+                    <div class="mt-6 flex flex-row ">
+                        <div class="flex-1">
                             <h4 class="text-sm font-medium text-gray-900">Status</h4>
                             <div class="mt-1 flex items-center space-x-2">
                                 @if($payroll->is_paid)
@@ -323,7 +316,7 @@
                                 @endif
                             </div>
                         </div>
-                        <div>
+                        <div class="flex-1">
                             <h4 class="text-sm font-medium text-gray-900">Payroll Frequency</h4>
                             @php
                                 // Get the first employee's pay schedule to determine the frequency display
@@ -407,17 +400,36 @@
                             @endphp
                             <p class="mt-1 text-sm text-gray-600">{{ $payFrequencyDisplay }}</p>
                         </div>
-                        <div>
+                        <div class="flex-1">
                             <h4 class="text-sm font-medium text-gray-900">Type</h4>
                             <p class="mt-1 text-sm text-gray-600">{{ ucfirst(str_replace('_', ' ', $payroll->payroll_type)) }}</p>
                         </div>
-                        <div>
+                        <div class="flex-1">
                             <h4 class="text-sm font-medium text-gray-900">Payroll Period</h4>
                             <p class="mt-1 text-sm text-gray-600">{{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}</p>
                         </div>
-                        <div>
+                        <div class="flex-1">
                             <h4 class="text-sm font-medium text-gray-900">Pay Date</h4>
                             <p class="mt-1 text-sm text-gray-600">{{ $payroll->pay_date->format('M d, Y') }}</p>
+                        </div>
+                        <div class="flex-1">
+                            <h4 class="text-sm font-medium text-gray-900">Monthly Basic Pay</h4>
+                            @php
+                                // Calculate monthly basic pay for the current month using the Employee model method
+                                $firstEmployee = $payroll->payrollDetails->first()?->employee;
+                                $monthlyBasicPay = 0;
+                                
+                                if ($firstEmployee) {
+                                    // Get current month's start and end dates for MBS calculation
+                                    $currentMonth = \Carbon\Carbon::now();
+                                    $currentMonthStart = $currentMonth->copy()->startOfMonth();
+                                    $currentMonthEnd = $currentMonth->copy()->endOfMonth();
+                                    
+                                    // Use the Employee model's calculateMonthlyBasicSalary method with current month dates
+                                    $monthlyBasicPay = $firstEmployee->calculateMonthlyBasicSalary($currentMonthStart, $currentMonthEnd);
+                                }
+                            @endphp
+                            <p class="mt-1 text-sm text-gray-600">₱{{ number_format($monthlyBasicPay, 2) }}</p>
                         </div>
                     </div>
 
@@ -750,11 +762,19 @@
                                                     </span>
                                                 </div>
                                                 <div class="flex items-center gap-1">
+                                                    @php
+                                                        // Calculate Basic Pay for the specific payroll period using Employee model method
+                                                        $employee = $detail->employee;
+                                                        $periodStart = \Carbon\Carbon::parse($payroll->period_start);
+                                                        $periodEnd = \Carbon\Carbon::parse($payroll->period_end);
+                                                        
+                                                        $basicPayForPeriod = $employee->calculateBasicPayForPeriod($periodStart, $periodEnd);
+                                                    @endphp
                                                     <span class="text-sm font-small text-yellow-700">
-                                                        ₱{{ number_format($detail->employee->calculateMonthlyBasicSalary($payroll->period_start, $payroll->period_end), 2) }}
+                                                        ₱{{ number_format($basicPayForPeriod, 2) }}
                                                     </span>
                                                     <span class="inline-flex items-center p-1 text-xs font-small rounded-full bg-yellow-50 text-yellow-700">
-                                                        MBS
+                                                        Basic Pay
                                                     </span>
                                                 </div>
                                                 @endif
@@ -2083,18 +2103,11 @@
                                                             $allowances = $detail->allowances ?? 0;
                                                             $bonuses = $detail->bonuses ?? 0;
                                                             
-                                                            // Auto-detect pay frequency from payroll period
-                                                            $payFrequency = 'semi_monthly'; // default
-                                                            $periodDays = $payroll->period_start->diffInDays($payroll->period_end) + 1;
-                                                            if ($periodDays <= 1) {
-                                                                $payFrequency = 'daily';
-                                                            } elseif ($periodDays <= 7) {
-                                                                $payFrequency = 'weekly';
-                                                            } elseif ($periodDays <= 16) {
-                                                                $payFrequency = 'semi_monthly';
-                                                            } else {
-                                                                $payFrequency = 'monthly';
-                                                            }
+                                                            // Auto-detect pay frequency from payroll period using dynamic pay schedule settings
+                                                            $payFrequency = \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                                                                $payroll->period_start,
+                                                                $payroll->period_end
+                                                            );
                                                             
                                             // Use the calculated taxable income from the previous column
                                             $calculatedAmount = $setting->calculateDeduction(
@@ -2441,18 +2454,11 @@
                                                     $allowancesForDeduction = $detail->allowances ?? 0;
                                                     $bonuses = $detail->bonuses ?? 0;
                                                     
-                                                    // Auto-detect pay frequency from payroll period (same logic as deduction column)
-                                                    $payFrequency = 'semi_monthly'; // default
-                                                    $periodDays = $payroll->period_start->diffInDays($payroll->period_end) + 1;
-                                                    if ($periodDays <= 1) {
-                                                        $payFrequency = 'daily';
-                                                    } elseif ($periodDays <= 7) {
-                                                        $payFrequency = 'weekly';
-                                                    } elseif ($periodDays <= 16) {
-                                                        $payFrequency = 'semi_monthly';
-                                                    } else {
-                                                        $payFrequency = 'monthly';
-                                                    }
+                                                    // Auto-detect pay frequency from payroll period using dynamic pay schedule settings
+                                                    $payFrequency = \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                                                        $payroll->period_start,
+                                                        $payroll->period_end
+                                                    );
                                                     
                                                     $calculatedAmount = $setting->calculateDeduction(
                                                         $basicPayForDeduction, 

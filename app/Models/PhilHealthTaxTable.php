@@ -80,7 +80,8 @@ class PhilHealthTaxTable extends Model
         $erContribution = $monthlyBasicSalary * ($bracket->employer_share / 100);
 
         // Apply minimum and maximum limits if they exist
-        if ($bracket->min_contribution && $eeContribution < $bracket->min_contribution) {
+        // Only apply minimum if it's greater than 0 (allow 0 minimum contributions)
+        if ($bracket->min_contribution && $bracket->min_contribution > 0 && $eeContribution < $bracket->min_contribution) {
             $eeContribution = $bracket->min_contribution;
         }
 
@@ -89,7 +90,8 @@ class PhilHealthTaxTable extends Model
         }
 
         // For employer share, apply the same limits
-        if ($bracket->min_contribution && $erContribution < $bracket->min_contribution) {
+        // Only apply minimum if it's greater than 0 (allow 0 minimum contributions)
+        if ($bracket->min_contribution && $bracket->min_contribution > 0 && $erContribution < $bracket->min_contribution) {
             $erContribution = $bracket->min_contribution;
         }
 

@@ -133,17 +133,15 @@
 
                             <div>
                                 <label for="role" class="block text-sm font-medium text-gray-700">User Role <span class="text-red-500">*</span></label>
-                                <select name="role" id="role" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                    <option value="">Select Role</option>
-                                    @foreach($roles as $role)
-                                        <option value="{{ $role->name }}" {{ old('role') == $role->name ? 'selected' : '' }}>
-                                            {{ $role->name }}
-                                        </option>
-                                    @endforeach
+                                <select name="role" id="role" required disabled class="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm cursor-not-allowed">
+                                    <option value="employee" selected>Employee</option>
                                 </select>
+                                <!-- Hidden input to ensure role value is submitted -->
+                                <input type="hidden" name="role" value="employee">
                                 @error('role')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
+                                <p class="mt-1 text-xs text-gray-500">Role is automatically set to Employee for new employee registrations</p>
                             </div>
                         </div>
 
@@ -310,39 +308,18 @@
                                 @enderror
                                 <p class="mt-1 text-xs text-gray-500">Determines eligibility for health insurance, SSS, etc.</p>
                             </div>
-
-                            <div>
-                                <label for="paid_leaves" class="block text-sm font-medium text-gray-700">Number of Paid Leaves <span class="text-red-500">*</span></label>
-                                <input type="number" name="paid_leaves" id="paid_leaves" value="{{ old('paid_leaves') }}" required min="0" max="365"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                @error('paid_leaves')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Annual paid leave entitlement</p>
-                            </div>
-
-                            <div>
-                                <label for="employment_status" class="block text-sm font-medium text-gray-700">Employment Status <span class="text-red-500">*</span></label>
-                                <select name="employment_status" id="employment_status" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                    <option value="">Select Status</option>
-                                    <option value="active" {{ old('employment_status') == 'active' ? 'selected' : '' }}>Active</option>
-                                    <option value="inactive" {{ old('employment_status') == 'inactive' ? 'selected' : '' }}>Inactive</option>
-                                    <option value="terminated" {{ old('employment_status') == 'terminated' ? 'selected' : '' }}>Terminated</option>
-                                    <option value="resigned" {{ old('employment_status') == 'resigned' ? 'selected' : '' }}>Resigned</option>
-                                </select>
-                                @error('employment_status')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
                         </div>
                     </div>
                 </div>
+
+                <!-- Hidden input to automatically set employment status to active -->
+                <input type="hidden" name="employment_status" value="active">
 
                 <!-- Salary Information -->
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6">
                         <h3 class="text-lg font-medium text-gray-900 mb-4">Salary Information</h3>
-                        <p class="text-sm text-gray-600 mb-4">Enter any rate and others will calculate automatically. Based on 8 hours/day, 5 days/week, and 22 days/month.</p>
+     
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                             <div>
@@ -730,15 +707,44 @@
             // Salary calculation - all fields can calculate each other
             const hourlyRateInput = document.getElementById('hourly_rate');
             const dailyRateInput = document.getElementById('daily_rate');
+            const weeklyRateInput = document.getElementById('weekly_rate');
+            const semiMonthlyRateInput = document.getElementById('semi_monthly_rate');
             const basicSalaryInput = document.getElementById('basic_salary');
             
             const hourlyRateRaw = document.getElementById('hourly_rate_raw');
             const dailyRateRaw = document.getElementById('daily_rate_raw');
+            const weeklyRateRaw = document.getElementById('weekly_rate_raw');
+            const semiMonthlyRateRaw = document.getElementById('semi_monthly_rate_raw');
             const basicSalaryRaw = document.getElementById('basic_salary_raw');
             
             let isCalculating = false; // Prevent infinite loops
+            let currentActiveField = null; // Track which field is currently active
 
-            // Format number as Philippine peso
+            // Function to enable all salary input fields
+            function enableAllSalaryInputs() {
+                [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
+                    if (input) {
+                        input.disabled = false;
+                        input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                        input.classList.add('focus:border-indigo-500', 'focus:ring-indigo-500');
+                    }
+                });
+                currentActiveField = null;
+            }
+
+            // Function to disable all salary inputs except the active one
+            function disableOtherSalaryInputs(activeInput) {
+                [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
+                    if (input && input !== activeInput) {
+                        input.disabled = true;
+                        input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                        input.classList.remove('focus:border-indigo-500', 'focus:ring-indigo-500');
+                    }
+                });
+                currentActiveField = activeInput;
+            }
+
+            // Format number as Philippine peso with automatic formatting
             function formatPeso(value) {
                 if (!value || value === 0) return '';
                 const num = typeof value === 'string' ? parseFloat(value) : value;
@@ -758,25 +764,133 @@
                 return isNaN(num) ? 0 : num;
             }
 
+            // Format input in real-time as user types
+            function formatSalaryInput(input) {
+                let value = input.value;
+                
+                // Remove all non-numeric characters except decimal point
+                let numericValue = value.replace(/[^\d.]/g, '');
+                
+                // Handle multiple decimal points - keep only the first one
+                const decimalIndex = numericValue.indexOf('.');
+                if (decimalIndex !== -1) {
+                    numericValue = numericValue.substring(0, decimalIndex + 1) + 
+                                  numericValue.substring(decimalIndex + 1).replace(/\./g, '');
+                }
+                
+                // If there's a value, format it
+                if (numericValue && numericValue !== '.') {
+                    const num = parseFloat(numericValue);
+                    if (!isNaN(num)) {
+                        // Store cursor position relative to the end of numeric part
+                        const cursorPosition = input.selectionStart;
+                        const beforeCursor = value.substring(0, cursorPosition);
+                        const numericBeforeCursor = beforeCursor.replace(/[^\d.]/g, '');
+                        
+                        // Format with peso sign and thousands separator
+                        // Preserve user's decimal input exactly as they typed it
+                        let formattedNumber;
+                        if (numericValue.includes('.')) {
+                            // User has decimal point, preserve their exact decimal input
+                            const wholePart = Math.floor(num);
+                            const decimalPart = numericValue.split('.')[1] || '';
+                            formattedNumber = wholePart.toLocaleString('en-PH');
+                            if (decimalPart !== '') {
+                                formattedNumber += '.' + decimalPart;
+                            } else {
+                                formattedNumber += '.';
+                            }
+                        } else {
+                            // No decimal point, format as whole number
+                            formattedNumber = Math.floor(num).toLocaleString('en-PH');
+                        }
+                        
+                        const formatted = '₱' + formattedNumber;
+                        
+                        // Set the formatted value
+                        input.value = formatted;
+                        
+                        // Calculate new cursor position
+                        const formattedNumeric = formatted.substring(1); // Remove ₱
+                        const newNumericBeforeCursor = numericBeforeCursor;
+                        
+                        // Find where the cursor should be in the formatted string
+                        let newCursorPos = 1; // Start after ₱
+                        let digitCount = 0;
+                        
+                        for (let i = 0; i < formattedNumeric.length && digitCount < newNumericBeforeCursor.length; i++) {
+                            if (/\d/.test(formattedNumeric[i])) {
+                                digitCount++;
+                            }
+                            newCursorPos++;
+                        }
+                        
+                        // Set cursor position
+                        setTimeout(() => {
+                            input.setSelectionRange(newCursorPos, newCursorPos);
+                        }, 0);
+                    }
+                } else if (numericValue === '.') {
+                    // If user just typed decimal point, show ₱0.
+                    input.value = '₱0.';
+                    setTimeout(() => {
+                        input.setSelectionRange(3, 3);
+                    }, 0);
+                } else {
+                    // If empty, clear the field
+                    input.value = '';
+                }
+            }
+
             // Clear all other fields when current field is cleared
             function clearOtherFields(currentField) {
                 if (isCalculating) return;
                 
                 if (currentField === 'hourly') {
                     dailyRateInput.value = '';
+                    weeklyRateInput.value = '';
+                    semiMonthlyRateInput.value = '';
                     basicSalaryInput.value = '';
                     dailyRateRaw.value = '';
+                    weeklyRateRaw.value = '';
+                    semiMonthlyRateRaw.value = '';
                     basicSalaryRaw.value = '';
                 } else if (currentField === 'daily') {
                     hourlyRateInput.value = '';
+                    weeklyRateInput.value = '';
+                    semiMonthlyRateInput.value = '';
                     basicSalaryInput.value = '';
                     hourlyRateRaw.value = '';
+                    weeklyRateRaw.value = '';
+                    semiMonthlyRateRaw.value = '';
+                    basicSalaryRaw.value = '';
+                } else if (currentField === 'weekly') {
+                    hourlyRateInput.value = '';
+                    dailyRateInput.value = '';
+                    semiMonthlyRateInput.value = '';
+                    basicSalaryInput.value = '';
+                    hourlyRateRaw.value = '';
+                    dailyRateRaw.value = '';
+                    semiMonthlyRateRaw.value = '';
+                    basicSalaryRaw.value = '';
+                } else if (currentField === 'semi_monthly') {
+                    hourlyRateInput.value = '';
+                    dailyRateInput.value = '';
+                    weeklyRateInput.value = '';
+                    basicSalaryInput.value = '';
+                    hourlyRateRaw.value = '';
+                    dailyRateRaw.value = '';
+                    weeklyRateRaw.value = '';
                     basicSalaryRaw.value = '';
                 } else if (currentField === 'basic') {
                     hourlyRateInput.value = '';
                     dailyRateInput.value = '';
+                    weeklyRateInput.value = '';
+                    semiMonthlyRateInput.value = '';
                     hourlyRateRaw.value = '';
                     dailyRateRaw.value = '';
+                    weeklyRateRaw.value = '';
+                    semiMonthlyRateRaw.value = '';
                 }
             }
 
@@ -785,25 +899,35 @@
                 
                 const rawValue = parsePeso(hourlyRateInput.value);
                 
-                // If input is empty or zero, clear other fields
+                // If input is empty or zero, clear other fields and enable all inputs
                 if (!hourlyRateInput.value.trim() || rawValue === 0) {
                     clearOtherFields('hourly');
                     hourlyRateRaw.value = '';
+                    enableAllSalaryInputs();
                     return;
                 }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(hourlyRateInput);
                 
                 isCalculating = true;
                 
                 if (rawValue > 0) {
                     const dailyRate = rawValue * 8;
+                    const weeklyRate = dailyRate * 5;
+                    const semiMonthlyRate = rawValue * 8 * 22 / 2; // (hourly * 8 hours * 22 days) / 2
                     const monthlySalary = dailyRate * 22;
                     
                     dailyRateInput.value = formatPeso(dailyRate);
+                    weeklyRateInput.value = formatPeso(weeklyRate);
+                    semiMonthlyRateInput.value = formatPeso(semiMonthlyRate);
                     basicSalaryInput.value = formatPeso(monthlySalary);
                     
                     // Update raw values for form submission
                     hourlyRateRaw.value = rawValue;
                     dailyRateRaw.value = dailyRate;
+                    weeklyRateRaw.value = weeklyRate;
+                    semiMonthlyRateRaw.value = semiMonthlyRate;
                     basicSalaryRaw.value = monthlySalary;
                 }
                 isCalculating = false;
@@ -817,25 +941,35 @@
                 
                 const rawValue = parsePeso(dailyRateInput.value);
                 
-                // If input is empty or zero, clear other fields
+                // If input is empty or zero, clear other fields and enable all inputs
                 if (!dailyRateInput.value.trim() || rawValue === 0) {
                     clearOtherFields('daily');
                     dailyRateRaw.value = '';
+                    enableAllSalaryInputs();
                     return;
                 }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(dailyRateInput);
                 
                 isCalculating = true;
                 
                 if (rawValue > 0) {
                     const hourlyRate = rawValue / 8;
+                    const weeklyRate = rawValue * 5;
+                    const semiMonthlyRate = rawValue * 22 / 2; // (daily * 22 days) / 2
                     const monthlySalary = rawValue * 22;
                     
                     hourlyRateInput.value = formatPeso(hourlyRate);
+                    weeklyRateInput.value = formatPeso(weeklyRate);
+                    semiMonthlyRateInput.value = formatPeso(semiMonthlyRate);
                     basicSalaryInput.value = formatPeso(monthlySalary);
                     
                     // Update raw values for form submission
                     dailyRateRaw.value = rawValue;
                     hourlyRateRaw.value = hourlyRate;
+                    weeklyRateRaw.value = weeklyRate;
+                    semiMonthlyRateRaw.value = semiMonthlyRate;
                     basicSalaryRaw.value = monthlySalary;
                 }
                 isCalculating = false;
@@ -844,31 +978,125 @@
                 updateFixedRateIfHighlighted(dailyRateInput);
             }
 
+            function calculateFromWeekly() {
+                if (isCalculating) return;
+                
+                const rawValue = parsePeso(weeklyRateInput.value);
+                
+                // If input is empty or zero, clear other fields and enable all inputs
+                if (!weeklyRateInput.value.trim() || rawValue === 0) {
+                    clearOtherFields('weekly');
+                    weeklyRateRaw.value = '';
+                    enableAllSalaryInputs();
+                    return;
+                }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(weeklyRateInput);
+                
+                isCalculating = true;
+                
+                if (rawValue > 0) {
+                    const dailyRate = rawValue / 5;
+                    const hourlyRate = dailyRate / 8;
+                    const semiMonthlyRate = rawValue * 2.2; // ~4.4 weeks per month / 2
+                    const monthlySalary = rawValue * 4.33; // ~4.33 weeks per month
+                    
+                    hourlyRateInput.value = formatPeso(hourlyRate);
+                    dailyRateInput.value = formatPeso(dailyRate);
+                    semiMonthlyRateInput.value = formatPeso(semiMonthlyRate);
+                    basicSalaryInput.value = formatPeso(monthlySalary);
+                    
+                    // Update raw values for form submission
+                    weeklyRateRaw.value = rawValue;
+                    hourlyRateRaw.value = hourlyRate;
+                    dailyRateRaw.value = dailyRate;
+                    semiMonthlyRateRaw.value = semiMonthlyRate;
+                    basicSalaryRaw.value = monthlySalary;
+                }
+                isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(weeklyRateInput);
+            }
+
+            function calculateFromSemiMonthly() {
+                if (isCalculating) return;
+                
+                const rawValue = parsePeso(semiMonthlyRateInput.value);
+                
+                // If input is empty or zero, clear other fields and enable all inputs
+                if (!semiMonthlyRateInput.value.trim() || rawValue === 0) {
+                    clearOtherFields('semi_monthly');
+                    semiMonthlyRateRaw.value = '';
+                    enableAllSalaryInputs();
+                    return;
+                }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(semiMonthlyRateInput);
+                
+                isCalculating = true;
+                
+                if (rawValue > 0) {
+                    const monthlySalary = rawValue * 2;
+                    const dailyRate = monthlySalary / 22;
+                    const hourlyRate = dailyRate / 8;
+                    const weeklyRate = dailyRate * 5;
+                    
+                    hourlyRateInput.value = formatPeso(hourlyRate);
+                    dailyRateInput.value = formatPeso(dailyRate);
+                    weeklyRateInput.value = formatPeso(weeklyRate);
+                    basicSalaryInput.value = formatPeso(monthlySalary);
+                    
+                    // Update raw values for form submission
+                    semiMonthlyRateRaw.value = rawValue;
+                    hourlyRateRaw.value = hourlyRate;
+                    dailyRateRaw.value = dailyRate;
+                    weeklyRateRaw.value = weeklyRate;
+                    basicSalaryRaw.value = monthlySalary;
+                }
+                isCalculating = false;
+                
+                // Update fixed_rate if this field is highlighted
+                updateFixedRateIfHighlighted(semiMonthlyRateInput);
+            }
+
             function calculateFromBasic() {
                 if (isCalculating) return;
                 
                 const rawValue = parsePeso(basicSalaryInput.value);
                 
-                // If input is empty or zero, clear other fields
+                // If input is empty or zero, clear other fields and enable all inputs
                 if (!basicSalaryInput.value.trim() || rawValue === 0) {
                     clearOtherFields('basic');
                     basicSalaryRaw.value = '';
+                    enableAllSalaryInputs();
                     return;
                 }
+                
+                // Disable other inputs when this field has a value
+                disableOtherSalaryInputs(basicSalaryInput);
                 
                 isCalculating = true;
                 
                 if (rawValue > 0) {
                     const dailyRate = rawValue / 22;
                     const hourlyRate = dailyRate / 8;
+                    const weeklyRate = dailyRate * 5;
+                    const semiMonthlyRate = rawValue / 2;
                     
-                    dailyRateInput.value = formatPeso(dailyRate);
                     hourlyRateInput.value = formatPeso(hourlyRate);
+                    dailyRateInput.value = formatPeso(dailyRate);
+                    weeklyRateInput.value = formatPeso(weeklyRate);
+                    semiMonthlyRateInput.value = formatPeso(semiMonthlyRate);
                     
                     // Update raw values for form submission
                     basicSalaryRaw.value = rawValue;
                     dailyRateRaw.value = dailyRate;
                     hourlyRateRaw.value = hourlyRate;
+                    weeklyRateRaw.value = weeklyRate;
+                    semiMonthlyRateRaw.value = semiMonthlyRate;
                 }
                 isCalculating = false;
                 
@@ -910,51 +1138,136 @@
                 }
             }
 
-            // Format input on blur
-            function formatInput(input, rawInput) {
-                const rawValue = parsePeso(input.value);
-                if (rawValue > 0) {
-                    input.value = formatPeso(rawValue);
-                    rawInput.value = rawValue;
-                } else {
-                    input.value = '';
-                    rawInput.value = '';
-                }
-            }
-
             // Handle input formatting and allow only numbers, commas, periods, and peso sign
             function handleSalaryInput(e) {
                 const input = e.target;
-                let value = input.value;
                 
-                // Allow backspace, delete, tab, escape, enter
-                if (['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                // Allow navigation and editing keys
+                if (['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
                     return;
                 }
                 
-                // Allow numbers, decimal point, and peso sign
-                if (!/[0-9₱.,]/.test(e.key)) {
+                // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                if (e.ctrlKey && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) {
+                    return;
+                }
+                
+                // Only allow numbers and one decimal point
+                if (!/[0-9.]/.test(e.key)) {
                     e.preventDefault();
+                    return;
+                }
+                
+                // Prevent multiple decimal points
+                if (e.key === '.' && input.value.includes('.')) {
+                    e.preventDefault();
+                    return;
+                }
+                
+                // Prevent more than 2 decimal places
+                const currentValue = input.value;
+                const decimalIndex = currentValue.indexOf('.');
+                if (decimalIndex !== -1) {
+                    const afterDecimal = currentValue.substring(decimalIndex + 1);
+                    const cursorPosition = input.selectionStart;
+                    
+                    // If cursor is after decimal and we already have 2 digits, prevent input
+                    if (cursorPosition > decimalIndex && afterDecimal.replace(/[^\d]/g, '').length >= 2 && /[0-9]/.test(e.key)) {
+                        e.preventDefault();
+                        return;
+                    }
                 }
             }
 
-            // Add event listeners to all three fields
+            // Handle paste events for salary inputs
+            function handleSalaryPaste(e) {
+                e.preventDefault();
+                
+                // Get pasted data
+                const pastedData = (e.clipboardData || window.clipboardData).getData('text');
+                
+                // Extract numeric value from pasted data
+                const numericValue = pastedData.replace(/[^\d.]/g, '');
+                
+                if (numericValue && !isNaN(parseFloat(numericValue))) {
+                    // Set the numeric value and let the input event handler format it
+                    e.target.value = numericValue;
+                    
+                    // Trigger input event to format and calculate
+                    const inputEvent = new Event('input', { bubbles: true });
+                    e.target.dispatchEvent(inputEvent);
+                }
+            }
+
+            // Add event listeners to all salary fields
             if (hourlyRateInput) {
-                hourlyRateInput.addEventListener('input', calculateFromHourly);
-                hourlyRateInput.addEventListener('blur', () => formatInput(hourlyRateInput, hourlyRateRaw));
+                hourlyRateInput.addEventListener('input', function(e) {
+                    formatSalaryInput(this);
+                    calculateFromHourly();
+                });
                 hourlyRateInput.addEventListener('keydown', handleSalaryInput);
+                hourlyRateInput.addEventListener('paste', handleSalaryPaste);
+                // Update raw value on blur for form submission
+                hourlyRateInput.addEventListener('blur', function() {
+                    const rawValue = parsePeso(this.value);
+                    hourlyRateRaw.value = rawValue;
+                });
             }
             
             if (dailyRateInput) {
-                dailyRateInput.addEventListener('input', calculateFromDaily);
-                dailyRateInput.addEventListener('blur', () => formatInput(dailyRateInput, dailyRateRaw));
+                dailyRateInput.addEventListener('input', function(e) {
+                    formatSalaryInput(this);
+                    calculateFromDaily();
+                });
                 dailyRateInput.addEventListener('keydown', handleSalaryInput);
+                dailyRateInput.addEventListener('paste', handleSalaryPaste);
+                // Update raw value on blur for form submission
+                dailyRateInput.addEventListener('blur', function() {
+                    const rawValue = parsePeso(this.value);
+                    dailyRateRaw.value = rawValue;
+                });
+            }
+            
+            if (weeklyRateInput) {
+                weeklyRateInput.addEventListener('input', function(e) {
+                    formatSalaryInput(this);
+                    calculateFromWeekly();
+                });
+                weeklyRateInput.addEventListener('keydown', handleSalaryInput);
+                weeklyRateInput.addEventListener('paste', handleSalaryPaste);
+                // Update raw value on blur for form submission
+                weeklyRateInput.addEventListener('blur', function() {
+                    const rawValue = parsePeso(this.value);
+                    weeklyRateRaw.value = rawValue;
+                });
+            }
+            
+            if (semiMonthlyRateInput) {
+                semiMonthlyRateInput.addEventListener('input', function(e) {
+                    formatSalaryInput(this);
+                    calculateFromSemiMonthly();
+                });
+                semiMonthlyRateInput.addEventListener('keydown', handleSalaryInput);
+                semiMonthlyRateInput.addEventListener('paste', handleSalaryPaste);
+                // Update raw value on blur for form submission
+                semiMonthlyRateInput.addEventListener('blur', function() {
+                    const rawValue = parsePeso(this.value);
+                    semiMonthlyRateRaw.value = rawValue;
+                });
             }
             
             if (basicSalaryInput) {
-                basicSalaryInput.addEventListener('input', calculateFromBasic);
-                basicSalaryInput.addEventListener('blur', () => formatInput(basicSalaryInput, basicSalaryRaw));
+                basicSalaryInput.addEventListener('input', function(e) {
+                    formatSalaryInput(this);
+                    calculateFromBasic();
+                });
                 basicSalaryInput.addEventListener('keydown', handleSalaryInput);
+                basicSalaryInput.addEventListener('paste', handleSalaryPaste);
+                // Update raw value on blur for form submission
+                basicSalaryInput.addEventListener('blur', function() {
+                    const rawValue = parsePeso(this.value);
+                    basicSalaryRaw.value = rawValue;
+                });
             }
 
             // Form submission - use raw values for actual form submission
@@ -966,16 +1279,22 @@
                     // Parse and set clean numeric values for all salary fields
                     const hourlyValue = parsePeso(hourlyRateInput.value);
                     const dailyValue = parsePeso(dailyRateInput.value);
+                    const weeklyValue = parsePeso(weeklyRateInput.value);
+                    const semiMonthlyValue = parsePeso(semiMonthlyRateInput.value);
                     const basicValue = parsePeso(basicSalaryInput.value);
                     
                     // Set clean numeric values or empty strings
                     hourlyRateInput.value = hourlyValue > 0 ? hourlyValue.toString() : '';
                     dailyRateInput.value = dailyValue > 0 ? dailyValue.toString() : '';
+                    weeklyRateInput.value = weeklyValue > 0 ? weeklyValue.toString() : '';
+                    semiMonthlyRateInput.value = semiMonthlyValue > 0 ? semiMonthlyValue.toString() : '';
                     basicSalaryInput.value = basicValue > 0 ? basicValue.toString() : '0'; // Basic salary is required
                     
                     console.log('Final values being submitted:', {
                         hourly: hourlyRateInput.value,
                         daily: dailyRateInput.value,
+                        weekly: weeklyRateInput.value,
+                        semiMonthly: semiMonthlyRateInput.value,
                         basic: basicSalaryInput.value
                     });
                     
@@ -986,6 +1305,12 @@
                     if (dailyRateRaw && dailyRateRaw.parentNode) {
                         dailyRateRaw.remove();
                     }
+                    if (weeklyRateRaw && weeklyRateRaw.parentNode) {
+                        weeklyRateRaw.remove();
+                    }
+                    if (semiMonthlyRateRaw && semiMonthlyRateRaw.parentNode) {
+                        semiMonthlyRateRaw.remove();
+                    }
                     if (basicSalaryRaw && basicSalaryRaw.parentNode) {
                         basicSalaryRaw.remove();
                     }
@@ -995,7 +1320,6 @@
             // Benefits Status and Pay Schedule Dynamic Behavior
             const benefitsStatusSelect = document.getElementById('benefits_status');
             const payScheduleSelect = document.getElementById('pay_schedule');
-            const paidLeavesInput = document.getElementById('paid_leaves');
             const salaryBreakdownContainer = document.querySelector('.mt-6.p-4.bg-gray-50.rounded-lg');
             
             // Salary rate input fields
@@ -1004,26 +1328,6 @@
             const weeklyRateField = document.getElementById('weekly_rate').closest('div');
             const semiMonthlyRateField = document.getElementById('semi_monthly_rate').closest('div');
             const monthlyRateField = document.getElementById('basic_salary').closest('div');
-            
-            // Function to update paid leaves input based on benefits status
-            function updatePaidLeavesStatus() {
-                const paidLeavesLabel = document.querySelector('label[for="paid_leaves"]');
-                
-                if (benefitsStatusSelect.value === 'without_benefits') {
-                    paidLeavesInput.disabled = true;
-                    paidLeavesInput.value = '';
-                    paidLeavesInput.classList.add('bg-gray-100', 'cursor-not-allowed');
-                    paidLeavesInput.removeAttribute('required');
-                    // Update label to remove required indicator
-                    paidLeavesLabel.innerHTML = 'Number of Paid Leaves';
-                } else {
-                    paidLeavesInput.disabled = false;
-                    paidLeavesInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
-                    paidLeavesInput.setAttribute('required', 'required');
-                    // Update label to show required indicator
-                    paidLeavesLabel.innerHTML = 'Number of Paid Leaves <span class="text-red-500">*</span>';
-                }
-            }
             
             // Function to highlight a specific rate field when clicked
             function highlightRateField(targetField) {
@@ -1264,11 +1568,8 @@
             // Event listeners for benefits status and pay schedule changes
             if (benefitsStatusSelect) {
                 benefitsStatusSelect.addEventListener('change', function() {
-                    updatePaidLeavesStatus();
                     updateSalaryBreakdown();
                 });
-                // Initialize on page load
-                updatePaidLeavesStatus();
             }
             
             if (payScheduleSelect) {

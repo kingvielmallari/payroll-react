@@ -172,20 +172,17 @@ class EmployeeController extends Controller
         $this->authorize('create employees');
 
         // Create conditional validation rules for paid_leaves
-        $paidLeavesRule = $request->benefits_status === 'without_benefits'
-            ? 'nullable|integer|min:0|max:365'
-            : 'required|integer|min:0|max:365';
+        $paidLeavesRule = 'nullable|integer|min:0';
 
         $validated = $request->validate([
+            'department_id' => 'required|exists:departments,id',
+            'position_id' => 'required|exists:positions,id',
+            'employee_number' => 'required|string|unique:employees,employee_number',
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'last_name' => 'required|string|max:255',
-            'suffix' => 'nullable|string|max:10',
             'email' => 'required|email|unique:users,email',
-            'employee_number' => 'required|string|unique:employees,employee_number',
-            'department_id' => 'required|exists:departments,id',
-            'position_id' => 'required|exists:positions,id',
-            'birth_date' => 'required|date|before:today',
+            'birth_date' => 'required|date',
             'gender' => 'required|in:male,female',
             'civil_status' => 'required|in:single,married,divorced,widowed',
             'phone' => 'nullable|string|max:20',
@@ -196,11 +193,12 @@ class EmployeeController extends Controller
             'employment_type' => 'required|in:regular,probationary,contractual,part_time',
             'employment_status' => 'required|in:active,inactive,terminated,resigned',
             'pay_schedule' => 'required|in:monthly,semi_monthly,weekly',
-            'basic_salary' => 'required|numeric|min:0',
-            'hourly_rate' => 'nullable|numeric|min:0',
-            'daily_rate' => 'nullable|numeric|min:0',
-            'weekly_rate' => 'nullable|numeric|min:0',
-            'semi_monthly_rate' => 'nullable|numeric|min:0',
+            'basic_salary' => 'nullable|numeric|min:0',
+            'hourly_rate_raw' => 'nullable|numeric|min:0',
+            'daily_rate_raw' => 'nullable|numeric|min:0',
+            'weekly_rate_raw' => 'nullable|numeric|min:0',
+            'semi_monthly_rate_raw' => 'nullable|numeric|min:0',
+            'basic_salary_raw' => 'nullable|numeric|min:0',
             'sss_number' => 'nullable|string|max:20',
             'philhealth_number' => 'nullable|string|max:20',
             'pagibig_number' => 'nullable|string|max:20',
@@ -215,8 +213,11 @@ class EmployeeController extends Controller
             'time_schedule_id' => 'required|exists:time_schedules,id',
             'day_schedule_id' => 'required|exists:day_schedules,id',
             'rate_type' => 'nullable|in:hourly,daily,weekly,semi_monthly,monthly',
-            'fixed_rate' => 'nullable|numeric|min:0',
+            'fixed_rate' => 'required|numeric|min:0',
         ]);
+
+        // Add debug logging for validation success
+        Log::info('Employee validation passed', ['validated_data' => $validated]);
 
         try {
             // Map employment status to user status
@@ -245,6 +246,33 @@ class EmployeeController extends Controller
             // Create employee record
             $employeeData = collect($validated)->except(['email', 'role'])->toArray();
             $employeeData['user_id'] = $user->id;
+
+            // Map raw rate values to actual database fields
+            if (isset($employeeData['hourly_rate_raw'])) {
+                $employeeData['hourly_rate'] = $employeeData['hourly_rate_raw'];
+                unset($employeeData['hourly_rate_raw']);
+            }
+            if (isset($employeeData['daily_rate_raw'])) {
+                $employeeData['daily_rate'] = $employeeData['daily_rate_raw'];
+                unset($employeeData['daily_rate_raw']);
+            }
+            if (isset($employeeData['weekly_rate_raw'])) {
+                $employeeData['weekly_rate'] = $employeeData['weekly_rate_raw'];
+                unset($employeeData['weekly_rate_raw']);
+            }
+            if (isset($employeeData['semi_monthly_rate_raw'])) {
+                $employeeData['semi_monthly_rate'] = $employeeData['semi_monthly_rate_raw'];
+                unset($employeeData['semi_monthly_rate_raw']);
+            }
+            if (isset($employeeData['basic_salary_raw'])) {
+                $employeeData['basic_salary'] = $employeeData['basic_salary_raw'];
+                unset($employeeData['basic_salary_raw']);
+            }
+
+            // Map fixed_rate to basic_salary for backward compatibility
+            if (isset($employeeData['fixed_rate']) && !isset($employeeData['basic_salary'])) {
+                $employeeData['basic_salary'] = $employeeData['fixed_rate'];
+            }
 
             // Set paid_leaves to null if benefits_status is without_benefits and paid_leaves is empty
             if ($employeeData['benefits_status'] === 'without_benefits' && empty($employeeData['paid_leaves'])) {
@@ -310,11 +338,6 @@ class EmployeeController extends Controller
     {
         $this->authorize('edit employees');
 
-        // Create conditional validation rules for paid_leaves
-        $paidLeavesRule = $request->benefits_status === 'without_benefits'
-            ? 'nullable|integer|min:0|max:365'
-            : 'required|integer|min:0|max:365';
-
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
@@ -330,16 +353,16 @@ class EmployeeController extends Controller
             'phone' => 'nullable|string|max:20',
             'address' => 'required|string',
             'hire_date' => 'required|date',
-            'paid_leaves' => $paidLeavesRule,
             'benefits_status' => 'required|in:with_benefits,without_benefits',
             'employment_type' => 'required|in:regular,probationary,contractual,part_time',
             'employment_status' => 'required|in:active,inactive,terminated,resigned',
             'pay_schedule' => 'required|in:monthly,semi_monthly,weekly',
-            'basic_salary' => 'required|numeric|min:0',
-            'hourly_rate' => 'nullable|numeric|min:0',
-            'daily_rate' => 'nullable|numeric|min:0',
-            'weekly_rate' => 'nullable|numeric|min:0',
-            'semi_monthly_rate' => 'nullable|numeric|min:0',
+            'basic_salary' => 'nullable|numeric|min:0',
+            'hourly_rate_raw' => 'nullable|numeric|min:0',
+            'daily_rate_raw' => 'nullable|numeric|min:0',
+            'weekly_rate_raw' => 'nullable|numeric|min:0',
+            'semi_monthly_rate_raw' => 'nullable|numeric|min:0',
+            'basic_salary_raw' => 'nullable|numeric|min:0',
             'sss_number' => 'nullable|string|max:20',
             'philhealth_number' => 'nullable|string|max:20',
             'pagibig_number' => 'nullable|string|max:20',
@@ -350,9 +373,11 @@ class EmployeeController extends Controller
             'bank_name' => 'nullable|string|max:255',
             'bank_account_number' => 'nullable|string|max:50',
             'bank_account_name' => 'nullable|string|max:255',
-            'role' => 'required|exists:roles,name',
+            'role' => 'nullable|exists:roles,name',
             'time_schedule_id' => 'required|exists:time_schedules,id',
             'day_schedule_id' => 'required|exists:day_schedules,id',
+            'rate_type' => 'nullable|in:hourly,daily,weekly,semi_monthly,monthly',
+            'fixed_rate' => 'required|numeric|min:0',
         ]);
 
         try {
@@ -379,15 +404,37 @@ class EmployeeController extends Controller
                 'status' => $userStatus,
             ]);
 
-            // Update user role
-            $employee->user->syncRoles([$validated['role']]);
+            // Note: Role updates are disabled in edit form for security
+            // Role changes should be handled through separate admin interface
 
             // Update employee record
             $employeeData = collect($validated)->except(['email', 'role'])->toArray();
 
-            // Set paid_leaves to null if benefits_status is without_benefits and paid_leaves is empty
-            if ($employeeData['benefits_status'] === 'without_benefits' && empty($employeeData['paid_leaves'])) {
-                $employeeData['paid_leaves'] = null;
+            // Map raw rate values to actual database fields
+            if (isset($employeeData['hourly_rate_raw'])) {
+                $employeeData['hourly_rate'] = $employeeData['hourly_rate_raw'];
+                unset($employeeData['hourly_rate_raw']);
+            }
+            if (isset($employeeData['daily_rate_raw'])) {
+                $employeeData['daily_rate'] = $employeeData['daily_rate_raw'];
+                unset($employeeData['daily_rate_raw']);
+            }
+            if (isset($employeeData['weekly_rate_raw'])) {
+                $employeeData['weekly_rate'] = $employeeData['weekly_rate_raw'];
+                unset($employeeData['weekly_rate_raw']);
+            }
+            if (isset($employeeData['semi_monthly_rate_raw'])) {
+                $employeeData['semi_monthly_rate'] = $employeeData['semi_monthly_rate_raw'];
+                unset($employeeData['semi_monthly_rate_raw']);
+            }
+            if (isset($employeeData['basic_salary_raw'])) {
+                $employeeData['basic_salary'] = $employeeData['basic_salary_raw'];
+                unset($employeeData['basic_salary_raw']);
+            }
+
+            // Map fixed_rate to basic_salary for backward compatibility
+            if (isset($employeeData['fixed_rate']) && !isset($employeeData['basic_salary'])) {
+                $employeeData['basic_salary'] = $employeeData['fixed_rate'];
             }
 
             $employee->update($employeeData);
