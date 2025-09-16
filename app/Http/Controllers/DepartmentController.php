@@ -137,4 +137,13 @@ class DepartmentController extends Controller
 
         return redirect()->route('departments.index')->with('success', 'Department deleted successfully.');
     }
+
+    /**
+     * Get positions for a specific department
+     */
+    public function positions(Department $department)
+    {
+        $positions = $department->positions()->select('id', 'title')->get();
+        return response()->json($positions);
+    }
 }

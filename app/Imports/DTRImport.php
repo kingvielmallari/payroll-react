@@ -20,20 +20,14 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     use Importable, SkipsErrors, SkipsFailures;
 
     private $overwriteExisting;
-    private $previewMode;
-    private $importId;
     private $importedCount = 0;
     private $skippedCount = 0;
     private $errorCount = 0;
     private $customErrors = [];
-    private $previewData = [];
-    private $validRecordsCount = 0;
 
-    public function __construct($overwriteExisting = false, $previewMode = false, $importId = null)
+    public function __construct($overwriteExisting = false)
     {
         $this->overwriteExisting = $overwriteExisting;
-        $this->previewMode = $previewMode;
-        $this->importId = $importId ?? 'DTR_IMPORT_' . now()->format('Y_m_d_H_i_s');
     }
 
     /**
@@ -160,28 +154,9 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
                 'log_type' => $logType,
                 'is_holiday' => $holiday ? true : false,
                 'is_rest_day' => $isRestDay,
-                'creation_method' => $this->importId,
+                'creation_method' => 'imported',
                 'remarks' => 'Imported from Excel/CSV',
             ];
-
-            // If in preview mode, collect data for preview instead of creating records
-            if ($this->previewMode) {
-                $this->validRecordsCount++;
-                $this->previewData[] = [
-                    'employee_number' => $employee->employee_number,
-                    'employee_name' => $employee->first_name . ' ' . $employee->last_name,
-                    'log_date' => $logDate->format('Y-m-d'),
-                    'time_in' => $timeIn,
-                    'time_out' => $timeOut,
-                    'break_in' => $breakIn,
-                    'break_out' => $breakOut,
-                    'total_hours' => $calculatedHours['total_hours'],
-                    'log_type' => $logType,
-                    'action' => $existingLog ? 'Update' : 'Create',
-                    'existing_record' => $existingLog ? true : false
-                ];
-                return null;
-            }
 
             if ($existingLog) {
                 $existingLog->update($timeLogData);
@@ -513,22 +488,6 @@ class DTRImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
     public function getErrors()
     {
         return $this->customErrors;
-    }
-
-    /**
-     * Get preview data for confirmation
-     */
-    public function getPreviewData()
-    {
-        return $this->previewData;
-    }
-
-    /**
-     * Get the number of valid records that will be imported
-     */
-    public function getValidRecordsCount()
-    {
-        return $this->validRecordsCount;
     }
 
     /**

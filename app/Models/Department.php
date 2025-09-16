@@ -42,6 +42,14 @@ class Department extends Model
     }
 
     /**
+     * Get the positions for the department.
+     */
+    public function positions()
+    {
+        return $this->hasMany(Position::class);
+    }
+
+    /**
      * Scope to filter active departments.
      */
     public function scopeActive($query)

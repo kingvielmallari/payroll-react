@@ -215,6 +215,47 @@
                     </div>
                 </div> --}}
 
+                <!-- Employment Type Management -->
+                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                    <div class="p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-medium text-gray-900">Employment Type Management</h3>
+                            <button type="button" onclick="openCreateEmploymentType()" 
+                                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm">
+                                Add New Employment Type
+                            </button>
+                        </div>
+                        
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <p class="text-sm text-gray-600 mb-3">Manage available employment types with benefit settings for employee selection:</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                @forelse($employmentTypes as $employmentType)
+                                    <div class="employment-type-card bg-white rounded-lg p-4 border shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                                         data-id="{{ $employmentType->id }}" 
+                                         data-name="{{ $employmentType->name }}"
+                                         data-has-benefits="{{ $employmentType->has_benefits ? '1' : '0' }}"
+                                         data-is-active="{{ $employmentType->is_active ? '1' : '0' }}"
+                                         oncontextmenu="showContextMenu(event, 'employmentType', {{ $employmentType->id }}, '{{ $employmentType->name }}'); return false;">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex-1">
+                                                <h4 class="text-sm font-semibold text-gray-900">{{ $employmentType->name }}</h4>
+                                                <p class="text-xs text-gray-500 mt-1">
+                                                    {{ $employmentType->has_benefits ? 'With Benefits' : 'No Benefits' }}
+                                                </p>
+                                            </div>
+                                            <span class="text-xs px-2 py-1 rounded-full {{ $employmentType->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                                {{ $employmentType->is_active ? 'Active' : 'Inactive' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                @empty
+                                    <p class="text-sm text-gray-500 col-span-full">No employment types found. Add the first employment type to get started.</p>
+                                @endforelse
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Action Buttons -->
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6">
@@ -409,6 +450,46 @@
         </div>
     </div>
 
+    <!-- Employment Type Modal (Create/Edit) -->
+    <div id="employmentTypeModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium text-gray-900 mb-4" id="employmentTypeModalTitle">Add Employment Type</h3>
+                <form id="employmentTypeForm">
+                    <input type="hidden" id="employmentTypeId" name="id">
+                    <div class="space-y-4">
+                        <div>
+                            <label for="employmentTypeName" class="block text-sm font-medium text-gray-700">Employment Type Name *</label>
+                            <input type="text" id="employmentTypeName" name="name" required 
+                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                   placeholder="e.g., OJT, Intern, Consultant">
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="employmentTypeHasBenefits" name="has_benefits" value="1"
+                                   class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <label for="employmentTypeHasBenefits" class="ml-2 text-sm text-gray-700">Includes Benefits (SSS, PhilHealth, Pag-IBIG, etc.)</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="employmentTypeIsActive" name="is_active" value="1" checked
+                                   class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <label for="employmentTypeIsActive" class="ml-2 text-sm text-gray-700">Active</label>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" onclick="closeEmploymentTypeModal()" 
+                                class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                            Cancel
+                        </button>
+                        <button type="submit" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                            Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Context Menu -->
     <div id="contextMenu" class="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50 hidden">
         <div class="px-4 py-2 text-xs text-gray-500 border-b" id="contextMenuTitle"></div>
@@ -474,6 +555,8 @@
                 editDepartment(contextMenuData.id);
             } else if (contextMenuData.type === 'position') {
                 editPosition(contextMenuData.id);
+            } else if (contextMenuData.type === 'employmentType') {
+                editEmploymentType(contextMenuData.id);
             }
             document.getElementById('contextMenu').classList.add('hidden');
         });
@@ -484,6 +567,8 @@
                 deleteDepartment(contextMenuData.id, contextMenuData.name);
             } else if (contextMenuData.type === 'position') {
                 deletePosition(contextMenuData.id, contextMenuData.name);
+            } else if (contextMenuData.type === 'employmentType') {
+                deleteEmploymentType(contextMenuData.id, contextMenuData.name);
             }
             document.getElementById('contextMenu').classList.add('hidden');
         });
@@ -640,6 +725,35 @@
             }
         }
 
+        function deleteEmploymentType(id, name) {
+            if (confirm(`Are you sure you want to delete the employment type "${name}"?`)) {
+                fetch(`/employment-types/${id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        '_method': 'DELETE'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success || data.message) {
+                        location.reload();
+                    } else {
+                        alert(data.error || 'Error deleting employment type');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting employment type:', error);
+                    alert('Error deleting employment type');
+                });
+            }
+        }
+
         // Form Submissions
         document.getElementById('departmentForm').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -736,6 +850,97 @@
             .catch(error => {
                 console.error('Error saving position:', error);
                 alert('Error saving position');
+            });
+        });
+
+        // Employment Type Functions
+        function openCreateEmploymentType() {
+            document.getElementById('employmentTypeModalTitle').textContent = 'Add Employment Type';
+            document.getElementById('employmentTypeForm').reset();
+            document.getElementById('employmentTypeId').value = '';
+            document.getElementById('employmentTypeModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function editEmploymentType(id) {
+            // Fetch employment type data and populate form
+            fetch(`/employment-types/${id}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data) {
+                        document.getElementById('employmentTypeModalTitle').textContent = 'Edit Employment Type';
+                        document.getElementById('employmentTypeId').value = data.id;
+                        document.getElementById('employmentTypeName').value = data.name;
+                        document.getElementById('employmentTypeHasBenefits').checked = data.has_benefits;
+                        document.getElementById('employmentTypeIsActive').checked = data.is_active;
+                        document.getElementById('employmentTypeModal').classList.remove('hidden');
+                        document.body.style.overflow = 'hidden';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching employment type:', error);
+                    alert('Error loading employment type data');
+                });
+        }
+
+        function closeEmploymentTypeModal() {
+            document.getElementById('employmentTypeModal').classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+
+        // Employment Type Form Submit Handler
+        document.getElementById('employmentTypeForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const employmentTypeId = document.getElementById('employmentTypeId').value;
+            const isEdit = employmentTypeId !== '';
+            
+            const url = isEdit ? `/employment-types/${employmentTypeId}` : '/employment-types';
+            const method = isEdit ? 'PUT' : 'POST';
+            
+            // Convert FormData to regular object for JSON
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+            
+            // Handle checkboxes explicitly
+            data.has_benefits = document.getElementById('employmentTypeHasBenefits').checked ? 1 : 0;
+            data.is_active = document.getElementById('employmentTypeIsActive').checked ? 1 : 0;
+            
+            if (isEdit) {
+                data._method = 'PUT';
+            }
+            
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success || data.message) {
+                    closeEmploymentTypeModal();
+                    location.reload(); // Reload to show updated data
+                } else {
+                    alert('Error saving employment type');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving employment type:', error);
+                alert('Error saving employment type');
             });
         });
 

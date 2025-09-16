@@ -29,15 +29,11 @@ class Employee extends Model
         'paid_leaves',
         'benefits_status',
         'employment_type',
+        'employment_type_id',
         'employment_status',
         'pay_schedule',
         'time_schedule_id',
         'day_schedule_id',
-        'basic_salary',
-        'hourly_rate',
-        'daily_rate',
-        'weekly_rate',
-        'semi_monthly_rate',
         'sss_number',
         'philhealth_number',
         'pagibig_number',
@@ -56,11 +52,6 @@ class Employee extends Model
         'birth_date' => 'date',
         'hire_date' => 'date',
         'paid_leaves' => 'integer',
-        'basic_salary' => 'decimal:2',
-        'hourly_rate' => 'decimal:2',
-        'daily_rate' => 'decimal:2',
-        'weekly_rate' => 'decimal:2',
-        'semi_monthly_rate' => 'decimal:2',
         'fixed_rate' => 'decimal:2',
     ];
 
@@ -94,7 +85,7 @@ class Employee extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['first_name', 'last_name', 'employment_status', 'basic_salary'])
+            ->logOnly(['first_name', 'last_name', 'employment_status', 'fixed_rate'])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
     }
@@ -137,6 +128,14 @@ class Employee extends Model
     public function daySchedule()
     {
         return $this->belongsTo(DaySchedule::class);
+    }
+
+    /**
+     * Get the employment type of the employee.
+     */
+    public function employmentType()
+    {
+        return $this->belongsTo(EmploymentType::class);
     }
 
     /**

@@ -24,7 +24,7 @@
                             <div>
                                 <label for="first_name" class="block text-sm font-medium text-gray-700">First Name <span class="text-red-500">*</span></label>
                                 <input type="text" name="first_name" id="first_name" value="{{ old('first_name') }}" required
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm capitalize-input">
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                 @error('first_name')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
@@ -33,7 +33,7 @@
                             <div>
                                 <label for="middle_name" class="block text-sm font-medium text-gray-700">Middle Name</label>
                                 <input type="text" name="middle_name" id="middle_name" value="{{ old('middle_name') }}"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm capitalize-input">
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                 @error('middle_name')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
@@ -42,7 +42,7 @@
                             <div>
                                 <label for="last_name" class="block text-sm font-medium text-gray-700">Last Name <span class="text-red-500">*</span></label>
                                 <input type="text" name="last_name" id="last_name" value="{{ old('last_name') }}" required
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm capitalize-input">
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                 @error('last_name')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
@@ -51,7 +51,7 @@
                             <div>
                                 <label for="suffix" class="block text-sm font-medium text-gray-700">Suffix</label>
                                 <input type="text" name="suffix" id="suffix" value="{{ old('suffix') }}" placeholder="Jr., Sr., III"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm capitalize-input">
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                 @error('suffix')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
@@ -95,19 +95,17 @@
                             <div>
                                 <label for="phone" class="block text-sm font-medium text-gray-700">Phone Number</label>
                                 <input type="text" name="phone" id="phone" value="{{ old('phone') }}" placeholder="09XXXXXXXXX"
-                                       maxlength="11" minlength="11" pattern="[0-9]{11}"
                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                 @error('phone')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">Must be exactly 11 digits (e.g., 09123456789)</p>
                             </div>
                         </div>
 
-                        <div >
+                        <div class="mt-6">
                             <label for="address" class="block text-sm font-medium text-gray-700">Address <span class="text-red-500">*</span></label>
                             <input type="text" name="address" id="address" required
-                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm capitalize-input" 
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" 
                                    value="{{ old('address') }}">
                             @error('address')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -141,7 +139,7 @@
                                 @error('role')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">Role is automatically set to Employee for new employee registrations</p>
+                                {{-- <p class="mt-1 text-xs text-gray-500">Role is automatically set to Employee for new employee registrations</p> --}}
                             </div>
                         </div>
 
@@ -172,9 +170,9 @@
                                     @endif
                                 </div>
                                 @if($employeeSettings['auto_generate_employee_number'] ?? false)
-                                    <p class="mt-1 text-xs text-gray-500">Employee number will be automatically generated</p>
+                                    {{-- <p class="mt-1 text-xs text-gray-500">Employee number will be automatically generated</p> --}}
                                 @else
-                                    <p class="mt-1 text-xs text-gray-500">Enter employee number manually</p>
+                                    {{-- <p class="mt-1 text-xs text-gray-500">Enter employee number manually</p> --}}
                                 @endif
                                 @error('employee_number')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -210,13 +208,7 @@
                                 <label for="position_id" class="block text-sm font-medium text-gray-700">Position <span class="text-red-500">*</span></label>
                                 <select name="position_id" id="position_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                     <option value="">Select Position</option>
-                                    @foreach($positions as $position)
-                                        <option value="{{ $position->id }}" 
-                                                {{ old('position_id') == $position->id ? 'selected' : '' }}
-                                                data-department-id="{{ $position->department_id }}">
-                                            {{ $position->title }} ({{ $position->department->name ?? 'No Department' }})
-                                        </option>
-                                    @endforeach
+                                    {{-- JavaScript will populate this based on department selection --}}
                                 </select>
                                 @error('position_id')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -224,18 +216,50 @@
                             </div>
 
                             <div>
-                                <label for="employment_type" class="block text-sm font-medium text-gray-700">Employment Type <span class="text-red-500">*</span></label>
-                                <select name="employment_type" id="employment_type" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                <label for="employment_type_id" class="block text-sm font-medium text-gray-700">Employment Type <span class="text-red-500">*</span></label>
+                                <select name="employment_type_id" id="employment_type_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                     <option value="">Select Type</option>
-                                    <option value="regular" {{ old('employment_type') == 'regular' ? 'selected' : '' }}>Regular</option>
-                                    <option value="probationary" {{ old('employment_type') == 'probationary' ? 'selected' : '' }}>Probationary</option>
-                                    <option value="contractual" {{ old('employment_type') == 'contractual' ? 'selected' : '' }}>Contractual</option>
-                                    <option value="part_time" {{ old('employment_type') == 'part_time' ? 'selected' : '' }}>Part Time</option>
-                                    <option value="casual" {{ old('employment_type') == 'casual' ? 'selected' : '' }}>Casual</option>
+                                    @foreach($employmentTypes as $employmentType)
+                                        <option value="{{ $employmentType->id }}" 
+                                                data-has-benefits="{{ $employmentType->has_benefits ? '1' : '0' }}"
+                                                {{ old('employment_type_id') == $employmentType->id ? 'selected' : '' }}>
+                                            {{ $employmentType->name }}
+                                        </option>
+                                    @endforeach
                                 </select>
-                                @error('employment_type')
+                                @error('employment_type_id')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
+                            </div>
+
+                            <div>
+                                <label for="benefits_status" class="block text-sm font-medium text-gray-700">Benefits Status <span class="text-red-500">*</span></label>
+                                <select name="benefits_status" id="benefits_status" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <option value="">Select Benefits Status</option>
+                                    <option value="with_benefits" {{ old('benefits_status') == 'with_benefits' ? 'selected' : '' }}>With Benefits</option>
+                                    <option value="without_benefits" {{ old('benefits_status') == 'without_benefits' ? 'selected' : '' }}>Without Benefits</option>
+                                </select>
+                                @error('benefits_status')
+                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                                {{-- <p class="mt-1 text-xs text-gray-500">Determines eligibility for health insurance, SSS, etc.</p> --}}
+                            </div>
+
+                            <div>
+                                <label for="day_schedule_id" class="block text-sm font-medium text-gray-700">Day Schedule <span class="text-red-500">*</span></label>
+                                <select name="day_schedule_id" id="day_schedule_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <option value="">Select Day Schedule</option>
+                                    @foreach($daySchedules as $daySchedule)
+                                        <option value="{{ $daySchedule->id }}" 
+                                                {{ old('day_schedule_id') == $daySchedule->id ? 'selected' : '' }}>
+                                            {{ $daySchedule->name }} ({{ $daySchedule->days_display }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('day_schedule_id')
+                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                                {{-- <p class="mt-1 text-xs text-gray-500">Working days for accurate DTR calculation</p> --}}
                             </div>
 
                             <div>
@@ -255,24 +279,7 @@
                                 @error('time_schedule_id')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">Employee's shift timing (e.g., 8:00 AM - 5:00 PM)</p>
-                            </div>
-
-                            <div>
-                                <label for="day_schedule_id" class="block text-sm font-medium text-gray-700">Day Schedule <span class="text-red-500">*</span></label>
-                                <select name="day_schedule_id" id="day_schedule_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                    <option value="">Select Day Schedule</option>
-                                    @foreach($daySchedules as $daySchedule)
-                                        <option value="{{ $daySchedule->id }}" 
-                                                {{ old('day_schedule_id') == $daySchedule->id ? 'selected' : '' }}>
-                                            {{ $daySchedule->name }} ({{ $daySchedule->days_display }})
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('day_schedule_id')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Working days for accurate DTR calculation</p>
+                                {{-- <p class="mt-1 text-xs text-gray-500">Employee's shift timing (e.g., 8:00 AM - 5:00 PM)</p> --}}
                             </div>
 
                             <div>
@@ -293,21 +300,11 @@
                                 @error('pay_schedule')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">How often the employee gets paid</p>
+                                {{-- <p class="mt-1 text-xs text-gray-500">How often the employee gets paid</p> --}}
                             </div>
 
-                            <div>
-                                <label for="benefits_status" class="block text-sm font-medium text-gray-700">Benefits Status <span class="text-red-500">*</span></label>
-                                <select name="benefits_status" id="benefits_status" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                    <option value="">Select Benefits Status</option>
-                                    <option value="with_benefits" {{ old('benefits_status') == 'with_benefits' ? 'selected' : '' }}>With Benefits</option>
-                                    <option value="without_benefits" {{ old('benefits_status') == 'without_benefits' ? 'selected' : '' }}>Without Benefits</option>
-                                </select>
-                                @error('benefits_status')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Determines eligibility for health insurance, SSS, etc.</p>
-                            </div>
+                            <!-- Empty div to maintain grid balance -->
+                            <div></div>
                         </div>
                     </div>
                 </div>
@@ -319,68 +316,34 @@
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6">
                         <h3 class="text-lg font-medium text-gray-900 mb-4">Salary Information</h3>
-     
                         
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                        <!-- Rate Input Section -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label for="hourly_rate" class="block text-sm font-medium text-gray-700">Hourly Rate</label>
-                                <input type="text" name="hourly_rate" id="hourly_rate" value="{{ old('hourly_rate') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="hourly_rate_raw" id="hourly_rate_raw">
-                                @error('hourly_rate')
+                                <label for="rate_type" class="block text-sm font-medium text-gray-700">Rate Type <span class="text-red-500">*</span></label>
+                                <select id="rate_type" name="rate_type" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <option value="">Select Rate Type</option>
+                                    <option value="hourly" {{ old('rate_type') == 'hourly' ? 'selected' : '' }}>Hourly</option>
+                                    <option value="daily" {{ old('rate_type') == 'daily' ? 'selected' : '' }}>Daily</option>
+                                    <option value="weekly" {{ old('rate_type') == 'weekly' ? 'selected' : '' }}>Weekly</option>
+                                    <option value="semi_monthly" {{ old('rate_type') == 'semi_monthly' ? 'selected' : '' }}>Semi-Monthly</option>
+                                    <option value="monthly" {{ old('rate_type') == 'monthly' ? 'selected' : '' }}>Monthly</option>
+                                </select>
+                                @error('rate_type')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">Per hour rate</p>
                             </div>
-
+                            
                             <div>
-                                <label for="daily_rate" class="block text-sm font-medium text-gray-700">Daily Rate</label>
-                                <input type="text" name="daily_rate" id="daily_rate" value="{{ old('daily_rate') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="daily_rate_raw" id="daily_rate_raw">
-                                @error('daily_rate')
+                                <label for="fixed_rate" class="block text-sm font-medium text-gray-700">Rate Amount <span class="text-red-500">*</span></label>
+                                <input type="number" id="fixed_rate" name="fixed_rate" step="0.01" min="0" value="{{ old('fixed_rate') }}" placeholder="0.00" required
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                @error('fixed_rate')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">Per day rate</p>
-                            </div>
-
-                            <div>
-                                <label for="weekly_rate" class="block text-sm font-medium text-gray-700">Weekly Rate</label>
-                                <input type="text" name="weekly_rate" id="weekly_rate" value="{{ old('weekly_rate') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="weekly_rate_raw" id="weekly_rate_raw">
-                                @error('weekly_rate')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Per week rate</p>
-                            </div>
-
-                            <div>
-                                <label for="semi_monthly_rate" class="block text-sm font-medium text-gray-700">Semi-Monthly Rate</label>
-                                <input type="text" name="semi_monthly_rate" id="semi_monthly_rate" value="{{ old('semi_monthly_rate') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="semi_monthly_rate_raw" id="semi_monthly_rate_raw">
-                                @error('semi_monthly_rate')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Twice per month</p>
-                            </div>
-
-                            <div>
-                                <label for="basic_salary" class="block text-sm font-medium text-gray-700">Monthly Rate</label>
-                                <input type="text" name="basic_salary" id="basic_salary" value="{{ old('basic_salary') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="basic_salary_raw" id="basic_salary_raw">
-                                @error('basic_salary')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Per month rate</p>
+                                {{-- <p class="mt-1 text-xs text-gray-500">Enter the amount for the selected rate type</p> --}}
                             </div>
                         </div>
-                        
-                        <!-- Hidden fields for tracking highlighted rate -->
-                        <input type="hidden" name="rate_type" id="rate_type" value="">
-                        <input type="hidden" name="fixed_rate" id="fixed_rate" value="">
                         
                         <!-- Salary Calculation Summary -->
                         {{-- <div class="mt-6 p-4 bg-gray-50 rounded-lg">
@@ -530,17 +493,6 @@
         </div>
     </div>
 
-    <style>
-        .salary-input {
-            text-align: right;
-            font-weight: 500;
-        }
-        .salary-input::placeholder {
-            font-weight: normal;
-            opacity: 0.5;
-            text-align: right;
-        }
-    </style>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -704,884 +656,7 @@
                 });
             }
 
-            // Salary calculation - all fields can calculate each other
-            const hourlyRateInput = document.getElementById('hourly_rate');
-            const dailyRateInput = document.getElementById('daily_rate');
-            const weeklyRateInput = document.getElementById('weekly_rate');
-            const semiMonthlyRateInput = document.getElementById('semi_monthly_rate');
-            const basicSalaryInput = document.getElementById('basic_salary');
-            
-            const hourlyRateRaw = document.getElementById('hourly_rate_raw');
-            const dailyRateRaw = document.getElementById('daily_rate_raw');
-            const weeklyRateRaw = document.getElementById('weekly_rate_raw');
-            const semiMonthlyRateRaw = document.getElementById('semi_monthly_rate_raw');
-            const basicSalaryRaw = document.getElementById('basic_salary_raw');
-            
-            let isCalculating = false; // Prevent infinite loops
-            let currentActiveField = null; // Track which field is currently active
-
-            // Function to enable all salary input fields
-            function enableAllSalaryInputs() {
-                [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
-                    if (input) {
-                        input.disabled = false;
-                        input.classList.remove('bg-gray-100', 'cursor-not-allowed');
-                        input.classList.add('focus:border-indigo-500', 'focus:ring-indigo-500');
-                    }
-                });
-                currentActiveField = null;
-            }
-
-            // Function to disable all salary inputs except the active one
-            function disableOtherSalaryInputs(activeInput) {
-                [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
-                    if (input && input !== activeInput) {
-                        input.disabled = true;
-                        input.classList.add('bg-gray-100', 'cursor-not-allowed');
-                        input.classList.remove('focus:border-indigo-500', 'focus:ring-indigo-500');
-                    }
-                });
-                currentActiveField = activeInput;
-            }
-
-            // Format number as Philippine peso with automatic formatting
-            function formatPeso(value) {
-                if (!value || value === 0) return '';
-                const num = typeof value === 'string' ? parseFloat(value) : value;
-                if (isNaN(num)) return '';
-                return '₱' + num.toLocaleString('en-PH', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
-            }
-
-            // Parse peso formatted string to number
-            function parsePeso(value) {
-                if (!value) return 0;
-                // Remove peso sign, commas, and spaces
-                const cleaned = value.replace(/[₱,\s]/g, '');
-                const num = parseFloat(cleaned);
-                return isNaN(num) ? 0 : num;
-            }
-
-            // Format input in real-time as user types
-            function formatSalaryInput(input) {
-                let value = input.value;
-                
-                // Remove all non-numeric characters except decimal point
-                let numericValue = value.replace(/[^\d.]/g, '');
-                
-                // Handle multiple decimal points - keep only the first one
-                const decimalIndex = numericValue.indexOf('.');
-                if (decimalIndex !== -1) {
-                    numericValue = numericValue.substring(0, decimalIndex + 1) + 
-                                  numericValue.substring(decimalIndex + 1).replace(/\./g, '');
-                }
-                
-                // If there's a value, format it
-                if (numericValue && numericValue !== '.') {
-                    const num = parseFloat(numericValue);
-                    if (!isNaN(num)) {
-                        // Store cursor position relative to the end of numeric part
-                        const cursorPosition = input.selectionStart;
-                        const beforeCursor = value.substring(0, cursorPosition);
-                        const numericBeforeCursor = beforeCursor.replace(/[^\d.]/g, '');
-                        
-                        // Format with peso sign and thousands separator
-                        // Preserve user's decimal input exactly as they typed it
-                        let formattedNumber;
-                        if (numericValue.includes('.')) {
-                            // User has decimal point, preserve their exact decimal input
-                            const wholePart = Math.floor(num);
-                            const decimalPart = numericValue.split('.')[1] || '';
-                            formattedNumber = wholePart.toLocaleString('en-PH');
-                            if (decimalPart !== '') {
-                                formattedNumber += '.' + decimalPart;
-                            } else {
-                                formattedNumber += '.';
-                            }
-                        } else {
-                            // No decimal point, format as whole number
-                            formattedNumber = Math.floor(num).toLocaleString('en-PH');
-                        }
-                        
-                        const formatted = '₱' + formattedNumber;
-                        
-                        // Set the formatted value
-                        input.value = formatted;
-                        
-                        // Calculate new cursor position
-                        const formattedNumeric = formatted.substring(1); // Remove ₱
-                        const newNumericBeforeCursor = numericBeforeCursor;
-                        
-                        // Find where the cursor should be in the formatted string
-                        let newCursorPos = 1; // Start after ₱
-                        let digitCount = 0;
-                        
-                        for (let i = 0; i < formattedNumeric.length && digitCount < newNumericBeforeCursor.length; i++) {
-                            if (/\d/.test(formattedNumeric[i])) {
-                                digitCount++;
-                            }
-                            newCursorPos++;
-                        }
-                        
-                        // Set cursor position
-                        setTimeout(() => {
-                            input.setSelectionRange(newCursorPos, newCursorPos);
-                        }, 0);
-                    }
-                } else if (numericValue === '.') {
-                    // If user just typed decimal point, show ₱0.
-                    input.value = '₱0.';
-                    setTimeout(() => {
-                        input.setSelectionRange(3, 3);
-                    }, 0);
-                } else {
-                    // If empty, clear the field
-                    input.value = '';
-                }
-            }
-
-            // Clear all other fields when current field is cleared
-            function clearOtherFields(currentField) {
-                if (isCalculating) return;
-                
-                if (currentField === 'hourly') {
-                    dailyRateInput.value = '';
-                    weeklyRateInput.value = '';
-                    semiMonthlyRateInput.value = '';
-                    basicSalaryInput.value = '';
-                    dailyRateRaw.value = '';
-                    weeklyRateRaw.value = '';
-                    semiMonthlyRateRaw.value = '';
-                    basicSalaryRaw.value = '';
-                } else if (currentField === 'daily') {
-                    hourlyRateInput.value = '';
-                    weeklyRateInput.value = '';
-                    semiMonthlyRateInput.value = '';
-                    basicSalaryInput.value = '';
-                    hourlyRateRaw.value = '';
-                    weeklyRateRaw.value = '';
-                    semiMonthlyRateRaw.value = '';
-                    basicSalaryRaw.value = '';
-                } else if (currentField === 'weekly') {
-                    hourlyRateInput.value = '';
-                    dailyRateInput.value = '';
-                    semiMonthlyRateInput.value = '';
-                    basicSalaryInput.value = '';
-                    hourlyRateRaw.value = '';
-                    dailyRateRaw.value = '';
-                    semiMonthlyRateRaw.value = '';
-                    basicSalaryRaw.value = '';
-                } else if (currentField === 'semi_monthly') {
-                    hourlyRateInput.value = '';
-                    dailyRateInput.value = '';
-                    weeklyRateInput.value = '';
-                    basicSalaryInput.value = '';
-                    hourlyRateRaw.value = '';
-                    dailyRateRaw.value = '';
-                    weeklyRateRaw.value = '';
-                    basicSalaryRaw.value = '';
-                } else if (currentField === 'basic') {
-                    hourlyRateInput.value = '';
-                    dailyRateInput.value = '';
-                    weeklyRateInput.value = '';
-                    semiMonthlyRateInput.value = '';
-                    hourlyRateRaw.value = '';
-                    dailyRateRaw.value = '';
-                    weeklyRateRaw.value = '';
-                    semiMonthlyRateRaw.value = '';
-                }
-            }
-
-            function calculateFromHourly() {
-                if (isCalculating) return;
-                
-                const rawValue = parsePeso(hourlyRateInput.value);
-                
-                // If input is empty or zero, clear other fields and enable all inputs
-                if (!hourlyRateInput.value.trim() || rawValue === 0) {
-                    clearOtherFields('hourly');
-                    hourlyRateRaw.value = '';
-                    enableAllSalaryInputs();
-                    return;
-                }
-                
-                // Disable other inputs when this field has a value
-                disableOtherSalaryInputs(hourlyRateInput);
-                
-                isCalculating = true;
-                
-                if (rawValue > 0) {
-                    const dailyRate = rawValue * 8;
-                    const weeklyRate = dailyRate * 5;
-                    const semiMonthlyRate = rawValue * 8 * 22 / 2; // (hourly * 8 hours * 22 days) / 2
-                    const monthlySalary = dailyRate * 22;
-                    
-                    dailyRateInput.value = formatPeso(dailyRate);
-                    weeklyRateInput.value = formatPeso(weeklyRate);
-                    semiMonthlyRateInput.value = formatPeso(semiMonthlyRate);
-                    basicSalaryInput.value = formatPeso(monthlySalary);
-                    
-                    // Update raw values for form submission
-                    hourlyRateRaw.value = rawValue;
-                    dailyRateRaw.value = dailyRate;
-                    weeklyRateRaw.value = weeklyRate;
-                    semiMonthlyRateRaw.value = semiMonthlyRate;
-                    basicSalaryRaw.value = monthlySalary;
-                }
-                isCalculating = false;
-                
-                // Update fixed_rate if this field is highlighted
-                updateFixedRateIfHighlighted(hourlyRateInput);
-            }
-
-            function calculateFromDaily() {
-                if (isCalculating) return;
-                
-                const rawValue = parsePeso(dailyRateInput.value);
-                
-                // If input is empty or zero, clear other fields and enable all inputs
-                if (!dailyRateInput.value.trim() || rawValue === 0) {
-                    clearOtherFields('daily');
-                    dailyRateRaw.value = '';
-                    enableAllSalaryInputs();
-                    return;
-                }
-                
-                // Disable other inputs when this field has a value
-                disableOtherSalaryInputs(dailyRateInput);
-                
-                isCalculating = true;
-                
-                if (rawValue > 0) {
-                    const hourlyRate = rawValue / 8;
-                    const weeklyRate = rawValue * 5;
-                    const semiMonthlyRate = rawValue * 22 / 2; // (daily * 22 days) / 2
-                    const monthlySalary = rawValue * 22;
-                    
-                    hourlyRateInput.value = formatPeso(hourlyRate);
-                    weeklyRateInput.value = formatPeso(weeklyRate);
-                    semiMonthlyRateInput.value = formatPeso(semiMonthlyRate);
-                    basicSalaryInput.value = formatPeso(monthlySalary);
-                    
-                    // Update raw values for form submission
-                    dailyRateRaw.value = rawValue;
-                    hourlyRateRaw.value = hourlyRate;
-                    weeklyRateRaw.value = weeklyRate;
-                    semiMonthlyRateRaw.value = semiMonthlyRate;
-                    basicSalaryRaw.value = monthlySalary;
-                }
-                isCalculating = false;
-                
-                // Update fixed_rate if this field is highlighted
-                updateFixedRateIfHighlighted(dailyRateInput);
-            }
-
-            function calculateFromWeekly() {
-                if (isCalculating) return;
-                
-                const rawValue = parsePeso(weeklyRateInput.value);
-                
-                // If input is empty or zero, clear other fields and enable all inputs
-                if (!weeklyRateInput.value.trim() || rawValue === 0) {
-                    clearOtherFields('weekly');
-                    weeklyRateRaw.value = '';
-                    enableAllSalaryInputs();
-                    return;
-                }
-                
-                // Disable other inputs when this field has a value
-                disableOtherSalaryInputs(weeklyRateInput);
-                
-                isCalculating = true;
-                
-                if (rawValue > 0) {
-                    const dailyRate = rawValue / 5;
-                    const hourlyRate = dailyRate / 8;
-                    const semiMonthlyRate = rawValue * 2.2; // ~4.4 weeks per month / 2
-                    const monthlySalary = rawValue * 4.33; // ~4.33 weeks per month
-                    
-                    hourlyRateInput.value = formatPeso(hourlyRate);
-                    dailyRateInput.value = formatPeso(dailyRate);
-                    semiMonthlyRateInput.value = formatPeso(semiMonthlyRate);
-                    basicSalaryInput.value = formatPeso(monthlySalary);
-                    
-                    // Update raw values for form submission
-                    weeklyRateRaw.value = rawValue;
-                    hourlyRateRaw.value = hourlyRate;
-                    dailyRateRaw.value = dailyRate;
-                    semiMonthlyRateRaw.value = semiMonthlyRate;
-                    basicSalaryRaw.value = monthlySalary;
-                }
-                isCalculating = false;
-                
-                // Update fixed_rate if this field is highlighted
-                updateFixedRateIfHighlighted(weeklyRateInput);
-            }
-
-            function calculateFromSemiMonthly() {
-                if (isCalculating) return;
-                
-                const rawValue = parsePeso(semiMonthlyRateInput.value);
-                
-                // If input is empty or zero, clear other fields and enable all inputs
-                if (!semiMonthlyRateInput.value.trim() || rawValue === 0) {
-                    clearOtherFields('semi_monthly');
-                    semiMonthlyRateRaw.value = '';
-                    enableAllSalaryInputs();
-                    return;
-                }
-                
-                // Disable other inputs when this field has a value
-                disableOtherSalaryInputs(semiMonthlyRateInput);
-                
-                isCalculating = true;
-                
-                if (rawValue > 0) {
-                    const monthlySalary = rawValue * 2;
-                    const dailyRate = monthlySalary / 22;
-                    const hourlyRate = dailyRate / 8;
-                    const weeklyRate = dailyRate * 5;
-                    
-                    hourlyRateInput.value = formatPeso(hourlyRate);
-                    dailyRateInput.value = formatPeso(dailyRate);
-                    weeklyRateInput.value = formatPeso(weeklyRate);
-                    basicSalaryInput.value = formatPeso(monthlySalary);
-                    
-                    // Update raw values for form submission
-                    semiMonthlyRateRaw.value = rawValue;
-                    hourlyRateRaw.value = hourlyRate;
-                    dailyRateRaw.value = dailyRate;
-                    weeklyRateRaw.value = weeklyRate;
-                    basicSalaryRaw.value = monthlySalary;
-                }
-                isCalculating = false;
-                
-                // Update fixed_rate if this field is highlighted
-                updateFixedRateIfHighlighted(semiMonthlyRateInput);
-            }
-
-            function calculateFromBasic() {
-                if (isCalculating) return;
-                
-                const rawValue = parsePeso(basicSalaryInput.value);
-                
-                // If input is empty or zero, clear other fields and enable all inputs
-                if (!basicSalaryInput.value.trim() || rawValue === 0) {
-                    clearOtherFields('basic');
-                    basicSalaryRaw.value = '';
-                    enableAllSalaryInputs();
-                    return;
-                }
-                
-                // Disable other inputs when this field has a value
-                disableOtherSalaryInputs(basicSalaryInput);
-                
-                isCalculating = true;
-                
-                if (rawValue > 0) {
-                    const dailyRate = rawValue / 22;
-                    const hourlyRate = dailyRate / 8;
-                    const weeklyRate = dailyRate * 5;
-                    const semiMonthlyRate = rawValue / 2;
-                    
-                    hourlyRateInput.value = formatPeso(hourlyRate);
-                    dailyRateInput.value = formatPeso(dailyRate);
-                    weeklyRateInput.value = formatPeso(weeklyRate);
-                    semiMonthlyRateInput.value = formatPeso(semiMonthlyRate);
-                    
-                    // Update raw values for form submission
-                    basicSalaryRaw.value = rawValue;
-                    dailyRateRaw.value = dailyRate;
-                    hourlyRateRaw.value = hourlyRate;
-                    weeklyRateRaw.value = weeklyRate;
-                    semiMonthlyRateRaw.value = semiMonthlyRate;
-                }
-                isCalculating = false;
-                
-                // Update fixed_rate if this field is highlighted
-                updateFixedRateIfHighlighted(basicSalaryInput);
-            }
-
-            // Function to update fixed_rate when highlighted field value changes
-            function updateFixedRateIfHighlighted(changedInput) {
-                const rateTypeInput = document.getElementById('rate_type');
-                const fixedRateInput = document.getElementById('fixed_rate');
-                
-                if (rateTypeInput && fixedRateInput && rateTypeInput.value) {
-                    // Check if the changed input is the currently highlighted one
-                    let isHighlighted = false;
-                    switch(rateTypeInput.value) {
-                        case 'hourly':
-                            isHighlighted = changedInput.id === 'hourly_rate';
-                            break;
-                        case 'daily':
-                            isHighlighted = changedInput.id === 'daily_rate';
-                            break;
-                        case 'weekly':
-                            isHighlighted = changedInput.id === 'weekly_rate';
-                            break;
-                        case 'semi_monthly':
-                            isHighlighted = changedInput.id === 'semi_monthly_rate';
-                            break;
-                        case 'monthly':
-                            isHighlighted = changedInput.id === 'basic_salary';
-                            break;
-                    }
-                    
-                    if (isHighlighted) {
-                        const newValue = parsePeso(changedInput.value) || 0;
-                        fixedRateInput.value = newValue;
-                        console.log('Updated fixed_rate to:', newValue); // Debug
-                    }
-                }
-            }
-
-            // Handle input formatting and allow only numbers, commas, periods, and peso sign
-            function handleSalaryInput(e) {
-                const input = e.target;
-                
-                // Allow navigation and editing keys
-                if (['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
-                    return;
-                }
-                
-                // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
-                if (e.ctrlKey && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) {
-                    return;
-                }
-                
-                // Only allow numbers and one decimal point
-                if (!/[0-9.]/.test(e.key)) {
-                    e.preventDefault();
-                    return;
-                }
-                
-                // Prevent multiple decimal points
-                if (e.key === '.' && input.value.includes('.')) {
-                    e.preventDefault();
-                    return;
-                }
-                
-                // Prevent more than 2 decimal places
-                const currentValue = input.value;
-                const decimalIndex = currentValue.indexOf('.');
-                if (decimalIndex !== -1) {
-                    const afterDecimal = currentValue.substring(decimalIndex + 1);
-                    const cursorPosition = input.selectionStart;
-                    
-                    // If cursor is after decimal and we already have 2 digits, prevent input
-                    if (cursorPosition > decimalIndex && afterDecimal.replace(/[^\d]/g, '').length >= 2 && /[0-9]/.test(e.key)) {
-                        e.preventDefault();
-                        return;
-                    }
-                }
-            }
-
-            // Handle paste events for salary inputs
-            function handleSalaryPaste(e) {
-                e.preventDefault();
-                
-                // Get pasted data
-                const pastedData = (e.clipboardData || window.clipboardData).getData('text');
-                
-                // Extract numeric value from pasted data
-                const numericValue = pastedData.replace(/[^\d.]/g, '');
-                
-                if (numericValue && !isNaN(parseFloat(numericValue))) {
-                    // Set the numeric value and let the input event handler format it
-                    e.target.value = numericValue;
-                    
-                    // Trigger input event to format and calculate
-                    const inputEvent = new Event('input', { bubbles: true });
-                    e.target.dispatchEvent(inputEvent);
-                }
-            }
-
-            // Add event listeners to all salary fields
-            if (hourlyRateInput) {
-                hourlyRateInput.addEventListener('input', function(e) {
-                    formatSalaryInput(this);
-                    calculateFromHourly();
-                });
-                hourlyRateInput.addEventListener('keydown', handleSalaryInput);
-                hourlyRateInput.addEventListener('paste', handleSalaryPaste);
-                // Update raw value on blur for form submission
-                hourlyRateInput.addEventListener('blur', function() {
-                    const rawValue = parsePeso(this.value);
-                    hourlyRateRaw.value = rawValue;
-                });
-            }
-            
-            if (dailyRateInput) {
-                dailyRateInput.addEventListener('input', function(e) {
-                    formatSalaryInput(this);
-                    calculateFromDaily();
-                });
-                dailyRateInput.addEventListener('keydown', handleSalaryInput);
-                dailyRateInput.addEventListener('paste', handleSalaryPaste);
-                // Update raw value on blur for form submission
-                dailyRateInput.addEventListener('blur', function() {
-                    const rawValue = parsePeso(this.value);
-                    dailyRateRaw.value = rawValue;
-                });
-            }
-            
-            if (weeklyRateInput) {
-                weeklyRateInput.addEventListener('input', function(e) {
-                    formatSalaryInput(this);
-                    calculateFromWeekly();
-                });
-                weeklyRateInput.addEventListener('keydown', handleSalaryInput);
-                weeklyRateInput.addEventListener('paste', handleSalaryPaste);
-                // Update raw value on blur for form submission
-                weeklyRateInput.addEventListener('blur', function() {
-                    const rawValue = parsePeso(this.value);
-                    weeklyRateRaw.value = rawValue;
-                });
-            }
-            
-            if (semiMonthlyRateInput) {
-                semiMonthlyRateInput.addEventListener('input', function(e) {
-                    formatSalaryInput(this);
-                    calculateFromSemiMonthly();
-                });
-                semiMonthlyRateInput.addEventListener('keydown', handleSalaryInput);
-                semiMonthlyRateInput.addEventListener('paste', handleSalaryPaste);
-                // Update raw value on blur for form submission
-                semiMonthlyRateInput.addEventListener('blur', function() {
-                    const rawValue = parsePeso(this.value);
-                    semiMonthlyRateRaw.value = rawValue;
-                });
-            }
-            
-            if (basicSalaryInput) {
-                basicSalaryInput.addEventListener('input', function(e) {
-                    formatSalaryInput(this);
-                    calculateFromBasic();
-                });
-                basicSalaryInput.addEventListener('keydown', handleSalaryInput);
-                basicSalaryInput.addEventListener('paste', handleSalaryPaste);
-                // Update raw value on blur for form submission
-                basicSalaryInput.addEventListener('blur', function() {
-                    const rawValue = parsePeso(this.value);
-                    basicSalaryRaw.value = rawValue;
-                });
-            }
-
-            // Form submission - use raw values for actual form submission
-            const form = document.querySelector('form');
-            if (form) {
-                form.addEventListener('submit', function(e) {
-                    console.log('Form submitting...'); // Debug log
-                    
-                    // Parse and set clean numeric values for all salary fields
-                    const hourlyValue = parsePeso(hourlyRateInput.value);
-                    const dailyValue = parsePeso(dailyRateInput.value);
-                    const weeklyValue = parsePeso(weeklyRateInput.value);
-                    const semiMonthlyValue = parsePeso(semiMonthlyRateInput.value);
-                    const basicValue = parsePeso(basicSalaryInput.value);
-                    
-                    // Set clean numeric values or empty strings
-                    hourlyRateInput.value = hourlyValue > 0 ? hourlyValue.toString() : '';
-                    dailyRateInput.value = dailyValue > 0 ? dailyValue.toString() : '';
-                    weeklyRateInput.value = weeklyValue > 0 ? weeklyValue.toString() : '';
-                    semiMonthlyRateInput.value = semiMonthlyValue > 0 ? semiMonthlyValue.toString() : '';
-                    basicSalaryInput.value = basicValue > 0 ? basicValue.toString() : '0'; // Basic salary is required
-                    
-                    console.log('Final values being submitted:', {
-                        hourly: hourlyRateInput.value,
-                        daily: dailyRateInput.value,
-                        weekly: weeklyRateInput.value,
-                        semiMonthly: semiMonthlyRateInput.value,
-                        basic: basicSalaryInput.value
-                    });
-                    
-                    // Remove the hidden fields from form submission since we're using the main inputs
-                    if (hourlyRateRaw && hourlyRateRaw.parentNode) {
-                        hourlyRateRaw.remove();
-                    }
-                    if (dailyRateRaw && dailyRateRaw.parentNode) {
-                        dailyRateRaw.remove();
-                    }
-                    if (weeklyRateRaw && weeklyRateRaw.parentNode) {
-                        weeklyRateRaw.remove();
-                    }
-                    if (semiMonthlyRateRaw && semiMonthlyRateRaw.parentNode) {
-                        semiMonthlyRateRaw.remove();
-                    }
-                    if (basicSalaryRaw && basicSalaryRaw.parentNode) {
-                        basicSalaryRaw.remove();
-                    }
-                });
-            }
-            
-            // Benefits Status and Pay Schedule Dynamic Behavior
-            const benefitsStatusSelect = document.getElementById('benefits_status');
-            const payScheduleSelect = document.getElementById('pay_schedule');
-            const salaryBreakdownContainer = document.querySelector('.mt-6.p-4.bg-gray-50.rounded-lg');
-            
-            // Salary rate input fields
-            const hourlyRateField = document.getElementById('hourly_rate').closest('div');
-            const dailyRateField = document.getElementById('daily_rate').closest('div');
-            const weeklyRateField = document.getElementById('weekly_rate').closest('div');
-            const semiMonthlyRateField = document.getElementById('semi_monthly_rate').closest('div');
-            const monthlyRateField = document.getElementById('basic_salary').closest('div');
-            
-            // Function to highlight a specific rate field when clicked
-            function highlightRateField(targetField) {
-                // Reset all fields to default styling
-                [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
-                    const input = field.querySelector('input[type="text"]');
-                    const label = field.querySelector('label');
-                    
-                    if (input) {
-                        input.classList.remove('border-green-500', 'bg-green-50', 'focus:border-green-500', 'focus:ring-green-500');
-                        input.classList.add('border-gray-300', 'focus:border-indigo-500', 'focus:ring-indigo-500');
-                    }
-                    if (label) {
-                        label.classList.remove('text-green-700', 'font-semibold');
-                        label.classList.add('text-gray-700');
-                    }
-                });
-                
-                // Highlight the clicked field
-                if (targetField) {
-                    const input = targetField.querySelector('input[type="text"]');
-                    const label = targetField.querySelector('label');
-                    
-                    if (input) {
-                        input.classList.remove('border-gray-300', 'focus:border-indigo-500', 'focus:ring-indigo-500');
-                        input.classList.add('border-green-500', 'bg-green-50', 'focus:border-green-500', 'focus:ring-green-500');
-                    }
-                    if (label) {
-                        label.classList.remove('text-gray-700');
-                        label.classList.add('text-green-700', 'font-semibold');
-                    }
-                    
-                    // Update hidden fields based on highlighted field
-                    const rateTypeInput = document.getElementById('rate_type');
-                    const fixedRateInput = document.getElementById('fixed_rate');
-                    
-                    if (rateTypeInput && fixedRateInput && input) {
-                        // Determine rate type based on input id
-                        let rateType = '';
-                        let rateValue = parsePeso(input.value) || 0;
-                        
-                        switch(input.id) {
-                            case 'hourly_rate':
-                                rateType = 'hourly';
-                                break;
-                            case 'daily_rate':
-                                rateType = 'daily';
-                                break;
-                            case 'weekly_rate':
-                                rateType = 'weekly';
-                                break;
-                            case 'semi_monthly_rate':
-                                rateType = 'semi_monthly';
-                                break;
-                            case 'basic_salary':
-                                rateType = 'monthly';
-                                break;
-                        }
-                        
-                        // Update hidden fields
-                        rateTypeInput.value = rateType;
-                        fixedRateInput.value = rateValue;
-                        
-                        console.log('Updated rate tracking:', { rateType, rateValue }); // Debug
-                    }
-                }
-            }
-
-            // Add click event listeners to all salary input fields
-            [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
-                const input = field.querySelector('input[type="text"]');
-                if (input) {
-                    input.addEventListener('click', () => {
-                        highlightRateField(field);
-                    });
-                    input.addEventListener('focus', () => {
-                        highlightRateField(field);
-                    });
-                }
-            });
-            
-            // Function to update salary breakdown content with real deductions
-            async function updateSalaryBreakdown() {
-                if (!salaryBreakdownContainer) return;
-                
-                const breakdownContent = salaryBreakdownContainer.querySelector('.grid');
-                if (!breakdownContent) return;
-                
-                if (benefitsStatusSelect.value === 'with_benefits' && payScheduleSelect.value) {
-                    // Show detailed breakdown for employees with benefits
-                    let selectedRateLabel = '';
-                    let selectedRateSpanId = '';
-                    let salaryFieldId = '';
-                    
-                    switch (payScheduleSelect.value) {
-                        case 'weekly':
-                            selectedRateLabel = 'Weekly Rate';
-                            selectedRateSpanId = 'calc_weekly';
-                            salaryFieldId = 'weekly_rate';
-                            break;
-                        case 'semi_monthly':
-                            selectedRateLabel = 'Semi-Monthly Rate';
-                            selectedRateSpanId = 'calc_semi';
-                            salaryFieldId = 'semi_monthly_rate';
-                            break;
-                        case 'monthly':
-                            selectedRateLabel = 'Monthly Rate';
-                            selectedRateSpanId = 'calc_monthly';
-                            salaryFieldId = 'basic_salary';
-                            break;
-                    }
-                    
-                    if (selectedRateLabel) {
-                        // Show loading state
-                        breakdownContent.innerHTML = `
-                            <div class="col-span-2 md:col-span-5">
-                                <div class="p-4 bg-green-50 border border-green-200 rounded-md">
-                                    <div class="flex items-center justify-between mb-3">
-                                        <h5 class="text-sm font-semibold text-green-800">Estimated Salary Breakdown</h5>
-                                        <div class="text-xs text-green-600">Loading...</div>
-                                    </div>
-                                    <div id="deduction-details">
-                                        <div class="animate-pulse">
-                                            <div class="h-4 bg-green-200 rounded w-3/4 mb-2"></div>
-                                            <div class="h-4 bg-green-200 rounded w-1/2"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        
-                        // Function to fetch and display deductions
-                        const updateDeductionCalculation = async () => {
-                            const salaryField = document.getElementById(salaryFieldId);
-                            if (!salaryField) return;
-                            
-                            const salaryValue = parsePeso(salaryField.value);
-                            if (salaryValue <= 0) {
-                                updateDeductionDisplay([], 0, 0, salaryValue);
-                                return;
-                            }
-                            
-                            try {
-                                const response = await fetch('{{ route("employees.calculate-deductions") }}', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                                    },
-                                    body: JSON.stringify({
-                                        salary: salaryValue,
-                                        benefits_status: benefitsStatusSelect.value,
-                                        pay_schedule: payScheduleSelect.value
-                                    })
-                                });
-                                
-                                if (response.ok) {
-                                    const data = await response.json();
-                                    updateDeductionDisplay(data.deductions, data.total_deductions, data.net_pay, salaryValue);
-                                } else {
-                                    console.error('Error fetching deductions:', response.statusText);
-                                    updateDeductionDisplay([], 0, salaryValue, salaryValue);
-                                }
-                            } catch (error) {
-                                console.error('Error calculating deductions:', error);
-                                updateDeductionDisplay([], 0, salaryValue, salaryValue);
-                            }
-                        };
-                        
-                        // Function to update the display with deduction data
-                        const updateDeductionDisplay = (deductions, totalDeductions, netPay, grossSalary) => {
-                            const detailsContainer = document.getElementById('deduction-details');
-                            if (!detailsContainer) return;
-                            
-                            let deductionItems = '';
-                            if (deductions.length > 0) {
-                                deductionItems = deductions.map(deduction => 
-                                    `<div class="flex justify-between text-xs text-green-700 mb-1">
-                                        <span>${deduction.name}</span>
-                                        <span>-${deduction.formatted_amount}</span>
-                                    </div>`
-                                ).join('');
-                            } else {
-                                deductionItems = '<div class="text-xs text-green-600 text-center py-2">No deductions applicable</div>';
-                            }
-                            
-                            detailsContainer.innerHTML = `
-                                <div class="space-y-1">
-                                    <div class="flex justify-between text-sm font-medium text-green-800 border-b border-green-200 pb-2 mb-2">
-                                        <span>${selectedRateLabel}</span>
-                                        <span>₱${grossSalary.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                                    </div>
-                                    ${deductionItems}
-                                    ${deductions.length > 0 ? `
-                                        <div class="flex justify-between text-xs text-green-700 border-t border-green-200 pt-2 mt-2">
-                                            <span class="font-medium">Total Deductions</span>
-                                            <span class="font-medium">-₱${totalDeductions.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                                        </div>
-                                    ` : ''}
-                                    <div class="flex justify-between text-sm font-bold text-green-900 border-t-2 border-green-300 pt-2 mt-2">
-                                        <span>Estimated Net Pay</span>
-                                        <span>₱${netPay.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                                    </div>
-                                </div>
-                            `;
-                        };
-                        
-                        // Initial calculation
-                        updateDeductionCalculation();
-                        
-                        // Watch for salary changes
-                        const salaryField = document.getElementById(salaryFieldId);
-                        if (salaryField) {
-                            // Debounce function to avoid too many API calls
-                            let debounceTimer;
-                            const debouncedUpdate = () => {
-                                clearTimeout(debounceTimer);
-                                debounceTimer = setTimeout(updateDeductionCalculation, 500);
-                            };
-                            
-                            salaryField.removeEventListener('input', salaryField.deductionListener);
-                            salaryField.deductionListener = debouncedUpdate;
-                            salaryField.addEventListener('input', salaryField.deductionListener);
-                        }
-                    }
-                } else {
-                    // Show default breakdown for employees without benefits or no pay schedule selected
-                    breakdownContent.innerHTML = `
-                        <div>Hourly: <span id="calc_hourly" class="font-medium text-gray-900">₱0.00</span></div>
-                        <div>Daily: <span id="calc_daily" class="font-medium text-gray-900">₱0.00</span></div>
-                        <div>Weekly: <span id="calc_weekly" class="font-medium text-gray-900">₱0.00</span></div>
-                        <div>Semi-Monthly: <span id="calc_semi" class="font-medium text-gray-900">₱0.00</span></div>
-                        <div>Monthly: <span id="calc_monthly" class="font-medium text-gray-900">₱0.00</span></div>
-                    `;
-                }
-            }
-            
-            // Event listeners for benefits status and pay schedule changes
-            if (benefitsStatusSelect) {
-                benefitsStatusSelect.addEventListener('change', function() {
-                    updateSalaryBreakdown();
-                });
-            }
-            
-            if (payScheduleSelect) {
-                // Remove automatic highlighting on pay schedule change
-                payScheduleSelect.addEventListener('change', function() {
-                    updateSalaryBreakdown();
-                });
-                // Don't initialize highlighting on page load
-            }
-            
-            // Initialize salary breakdown on page load
-            updateSalaryBreakdown();
+          
             
             // Department and Position Dynamic Filtering
             const departmentSelect = document.getElementById('department_id');
@@ -1762,6 +837,197 @@
                 dayScheduleSelect.addEventListener('focus', function() {
                     this.dataset.previousValue = this.value;
                 });
+            }
+        });
+    </script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // ===== INPUT FORMATTING FUNCTIONS =====
+            
+            // Auto Capitalize after spaces
+            function autoCapitalize(input) {
+                input.addEventListener('input', function() {
+                    let value = this.value;
+                    // Capitalize first letter and letters after spaces
+                    value = value.replace(/\b\w/g, function(char) {
+                        return char.toUpperCase();
+                    });
+                    this.value = value;
+                });
+            }
+            
+            // Phone number: 11 digits max/min, numbers only
+            function formatPhoneNumber(input) {
+                input.addEventListener('input', function() {
+                    // Remove all non-numeric characters
+                    let value = this.value.replace(/\D/g, '');
+                    // Limit to 11 digits
+                    if (value.length > 11) {
+                        value = value.substring(0, 11);
+                    }
+                    this.value = value;
+                });
+                
+                input.addEventListener('blur', function() {
+                    // Validate on blur - must be exactly 11 digits
+                    if (this.value && this.value.length !== 11) {
+                        this.setCustomValidity('Phone number must be exactly 11 digits');
+                    } else {
+                        this.setCustomValidity('');
+                    }
+                });
+            }
+            
+            // Numbers only (for account numbers, SSS, PhilHealth, Pag-IBIG, TIN)
+            function numbersOnly(input) {
+                input.addEventListener('input', function() {
+                    // Remove all non-numeric characters
+                    this.value = this.value.replace(/\D/g, '');
+                });
+            }
+            
+            // Email to lowercase
+            function emailLowercase(input) {
+                input.addEventListener('input', function() {
+                    this.value = this.value.toLowerCase();
+                });
+            }
+            
+            // Department-Position filtering
+            function setupDepartmentPositionFilter() {
+                const departmentSelect = document.getElementById('department_id');
+                const positionSelect = document.getElementById('position_id');
+                
+                if (departmentSelect && positionSelect) {
+                    function filterPositions() {
+                        const selectedDeptId = departmentSelect.value;
+                        
+                        // Clear current position options
+                        positionSelect.innerHTML = '<option value="">Select Position</option>';
+                        
+                        if (selectedDeptId) {
+                            // Fetch positions for the selected department
+                            fetch(`/departments/${selectedDeptId}/positions`)
+                                .then(response => response.json())
+                                .then(positions => {
+                                    positions.forEach(position => {
+                                        const option = document.createElement('option');
+                                        option.value = position.id;
+                                        option.textContent = position.title;
+                                        positionSelect.appendChild(option);
+                                    });
+                                    
+                                    // Auto-select if there's an old value
+                                    const oldPositionId = '{{ old("position_id") }}';
+                                    if (oldPositionId) {
+                                        positionSelect.value = oldPositionId;
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error fetching positions:', error);
+                                });
+                        }
+                    }
+                    
+                    departmentSelect.addEventListener('change', filterPositions);
+                    
+                    // Handle form validation errors - restore selected values if any
+                    const oldDepartmentId = '{{ old("department_id") }}';
+                    if (oldDepartmentId) {
+                        departmentSelect.value = oldDepartmentId;
+                        filterPositions();
+                    }
+                }
+            }
+            
+            // ===== APPLY FORMATTING TO INPUTS =====
+            
+            // Auto Capitalize fields
+            const capitalizeFields = [
+                'first_name', 'middle_name', 'last_name', 'suffix', 'address',
+                'emergency_contact_name', 'emergency_contact_relationship', 
+                'bank_name', 'bank_account_name'
+            ];
+            
+            capitalizeFields.forEach(fieldId => {
+                const input = document.getElementById(fieldId);
+                if (input) {
+                    autoCapitalize(input);
+                }
+            });
+            
+            // Phone number field
+            const phoneInput = document.getElementById('phone');
+            if (phoneInput) {
+                formatPhoneNumber(phoneInput);
+            }
+            
+            // Emergency contact phone field
+            const emergencyPhoneInput = document.getElementById('emergency_contact_phone');
+            if (emergencyPhoneInput) {
+                formatPhoneNumber(emergencyPhoneInput);
+            }
+            
+            // Numbers only fields
+            const numberFields = [
+                'bank_account_number', 'sss_number', 'philhealth_number', 
+                'pagibig_number', 'tin_number'
+            ];
+            
+            numberFields.forEach(fieldId => {
+                const input = document.getElementById(fieldId);
+                if (input) {
+                    numbersOnly(input);
+                }
+            });
+            
+            // Email field
+            const emailInput = document.getElementById('email');
+            if (emailInput) {
+                emailLowercase(emailInput);
+            }
+            
+            // Setup department-position filtering
+            setupDepartmentPositionFilter();
+            
+            // ===== EMPLOYMENT TYPE AUTO-SELECTION =====
+            // Auto-select benefits status based on employment type
+            const employmentTypeSelect = document.getElementById('employment_type_id');
+            const benefitsStatusSelect = document.getElementById('benefits_status');
+            
+            if (employmentTypeSelect && benefitsStatusSelect) {
+                employmentTypeSelect.addEventListener('change', function() {
+                    const selectedOption = this.options[this.selectedIndex];
+                    
+                    console.log('Employment type changed:', {
+                        selectedValue: this.value,
+                        selectedText: selectedOption ? selectedOption.text : 'none',
+                        hasBenefitsData: selectedOption ? selectedOption.getAttribute('data-has-benefits') : 'none'
+                    });
+                    
+                    if (selectedOption && selectedOption.value) {
+                        const hasBenefits = selectedOption.getAttribute('data-has-benefits') === '1';
+                        
+                        console.log('Setting benefits status to:', hasBenefits ? 'with_benefits' : 'without_benefits');
+                        
+                        if (hasBenefits) {
+                            benefitsStatusSelect.value = 'with_benefits';
+                        } else {
+                            benefitsStatusSelect.value = 'without_benefits';
+                        }
+                        
+                        // Trigger change event for any other listeners
+                        benefitsStatusSelect.dispatchEvent(new Event('change'));
+                        
+                        console.log('Benefits status now set to:', benefitsStatusSelect.value);
+                    }
+                });
+                
+                // Also trigger on page load if there's a selected employment type
+                if (employmentTypeSelect.value) {
+                    employmentTypeSelect.dispatchEvent(new Event('change'));
+                }
             }
         });
     </script>

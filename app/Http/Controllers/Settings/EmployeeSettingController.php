@@ -8,6 +8,7 @@ use App\Models\Position;
 use App\Models\PayScheduleSetting;
 use App\Models\TimeSchedule;
 use App\Models\DaySchedule;
+use App\Models\EmploymentType;
 use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -24,14 +25,16 @@ class EmployeeSettingController extends Controller
         $timeSchedules = TimeSchedule::all();
         $daySchedules = DaySchedule::all();
         $paySchedules = PayScheduleSetting::all();
-        
+        $employmentTypes = EmploymentType::all();
+
         return view('settings.employee-settings.index', compact(
-            'settings', 
-            'departments', 
-            'positions', 
+            'settings',
+            'departments',
+            'positions',
             'timeSchedules',
             'daySchedules',
-            'paySchedules'
+            'paySchedules',
+            'employmentTypes'
         ));
     }
 
@@ -58,7 +61,7 @@ class EmployeeSettingController extends Controller
         // Store settings in cache and database
         foreach ($validated as $key => $value) {
             Cache::put("employee_setting_{$key}", $value, now()->addDays(30));
-            
+
             // Also store in settings table if you have one
             DB::table('settings')->updateOrInsert(
                 ['key' => "employee_{$key}"],
@@ -93,25 +96,25 @@ class EmployeeSettingController extends Controller
     {
         $prefix = Cache::get('employee_setting_employee_number_prefix', 'EMP');
         $startNumber = Cache::get('employee_setting_employee_number_start', 1);
-        
+
         // Get the current year
         $currentYear = date('Y');
-        
+
         // Find the last employee number with the same prefix and year pattern
         $pattern = $prefix . '-' . $currentYear . '-';
         $lastEmployee = \App\Models\Employee::where('employee_number', 'LIKE', $pattern . '%')
             ->orderBy('employee_number', 'desc')
             ->first();
-        
+
         if ($lastEmployee && preg_match('/-(\d+)$/', $lastEmployee->employee_number, $matches)) {
             $nextNumber = intval($matches[1]) + 1;
         } else {
             $nextNumber = $startNumber;
         }
-        
+
         // Format: PREFIX-YEAR-NUMBER (e.g., EMP-2025-0001)
         $employeeNumber = $prefix . '-' . $currentYear . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
-        
+
         return response()->json(['employee_number' => $employeeNumber]);
     }
 
@@ -147,7 +150,7 @@ class EmployeeSettingController extends Controller
 
             // Clear cache and update settings
             Cache::forget('employee_settings');
-            
+
             foreach ($defaultSettings as $key => $value) {
                 Setting::updateOrCreate(
                     ['key' => $key],
@@ -156,7 +159,6 @@ class EmployeeSettingController extends Controller
             }
 
             return redirect()->back()->with('success', 'Employee settings have been reset to default values.');
-            
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to reset employee settings: ' . $e->getMessage());
         }

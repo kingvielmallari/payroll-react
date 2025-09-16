@@ -103,7 +103,7 @@
                             </div>
                         </div>
 
-                        <div class="mt-6>
+                        <div class="mt-6">
                             <label for="address" class="block text-sm font-medium text-gray-700">Address <span class="text-red-500">*</span></label>
                             <input type="text" name="address" id="address" required
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" 
@@ -143,7 +143,7 @@
                                 @error('role')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">Role cannot be changed from this form. Contact administrator if role change is needed.</p>
+                                {{-- <p class="mt-1 text-xs text-gray-500">Role cannot be changed from this form. Contact administrator if role change is needed.</p> --}}
                             </div>
                         </div>
 
@@ -158,7 +158,7 @@
                     <div class="p-6">
                         <h3 class="text-lg font-medium text-gray-900 mb-4">Employment Information</h3>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label for="employee_number" class="block text-sm font-medium text-gray-700">Employee Number <span class="text-red-500">*</span></label>
                                 <input type="text" name="employee_number" id="employee_number" value="{{ old('employee_number', $employee->employee_number) }}" required
@@ -193,31 +193,58 @@
                                 @enderror
                             </div>
 
-                            <div>
-                                <label for="position_id" class="block text-sm font-medium text-gray-700">Position <span class="text-red-500">*</span></label>
-                                <select name="position_id" id="position_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                    <option value="">Select Position</option>
-                                    @foreach($positions as $position)
-                                        <option value="{{ $position->id }}" {{ old('position_id', $employee->position_id) == $position->id ? 'selected' : '' }}>
-                                            {{ $position->title }}
+            <div>
+                <label for="position_id" class="block text-sm font-medium text-gray-700">Position <span class="text-red-500">*</span></label>
+                <select name="position_id" id="position_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    <option value="">Select Position</option>
+                    @if($employee->position)
+                        <option value="{{ $employee->position->id }}" selected>{{ $employee->position->title }}</option>
+                    @endif
+                    {{-- JavaScript will populate this based on department selection --}}
+                </select>
+                @error('position_id')
+                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                @enderror
+            </div>                            <div>
+                                <label for="employment_type_id" class="block text-sm font-medium text-gray-700">Employment Type <span class="text-red-500">*</span></label>
+                                <select name="employment_type_id" id="employment_type_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <option value="">Select Type</option>
+                                    @foreach($employmentTypes as $employmentType)
+                                        <option value="{{ $employmentType->id }}" 
+                                                {{ old('employment_type_id', $employee->employment_type_id) == $employmentType->id ? 'selected' : '' }}
+                                                data-has-benefits="{{ $employmentType->has_benefits ? '1' : '0' }}">
+                                            {{ $employmentType->name }}
                                         </option>
                                     @endforeach
                                 </select>
-                                @error('position_id')
+                                @error('employment_type_id')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
 
                             <div>
-                                <label for="employment_type" class="block text-sm font-medium text-gray-700">Employment Type <span class="text-red-500">*</span></label>
-                                <select name="employment_type" id="employment_type" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                    <option value="">Select Type</option>
-                                    <option value="regular" {{ old('employment_type', $employee->employment_type) == 'regular' ? 'selected' : '' }}>Regular</option>
-                                    <option value="probationary" {{ old('employment_type', $employee->employment_type) == 'probationary' ? 'selected' : '' }}>Probationary</option>
-                                    <option value="contractual" {{ old('employment_type', $employee->employment_type) == 'contractual' ? 'selected' : '' }}>Contractual</option>
-                                    <option value="part_time" {{ old('employment_type', $employee->employment_type) == 'part_time' ? 'selected' : '' }}>Part Time</option>
+                                <label for="benefits_status" class="block text-sm font-medium text-gray-700">Benefits Status <span class="text-red-500">*</span></label>
+                                <select name="benefits_status" id="benefits_status" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <option value="">Select Benefits Status</option>
+                                    <option value="with_benefits" {{ old('benefits_status', $employee->benefits_status) == 'with_benefits' ? 'selected' : '' }}>With Benefits</option>
+                                    <option value="without_benefits" {{ old('benefits_status', $employee->benefits_status) == 'without_benefits' ? 'selected' : '' }}>Without Benefits</option>
                                 </select>
-                                @error('employment_type')
+                                @error('benefits_status')
+                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div>
+                                <label for="day_schedule_id" class="block text-sm font-medium text-gray-700">Day Schedule <span class="text-red-500">*</span></label>
+                                <select name="day_schedule_id" id="day_schedule_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <option value="">Select Day Schedule</option>
+                                    @foreach($daySchedules as $schedule)
+                                        <option value="{{ $schedule->id }}" {{ old('day_schedule_id', $employee->daySchedule?->id) == $schedule->id ? 'selected' : '' }}>
+                                            {{ $schedule->name }} ({{ $schedule->days_display }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('day_schedule_id')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
@@ -235,23 +262,6 @@
                                 @error('time_schedule_id')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">Employee's shift timing (e.g., 8:00 AM - 5:00 PM)</p>
-                            </div>
-
-                            <div>
-                                <label for="day_schedule_id" class="block text-sm font-medium text-gray-700">Day Schedule <span class="text-red-500">*</span></label>
-                                <select name="day_schedule_id" id="day_schedule_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                    <option value="">Select Day Schedule</option>
-                                    @foreach($daySchedules as $schedule)
-                                        <option value="{{ $schedule->id }}" {{ old('day_schedule_id', $employee->daySchedule?->id) == $schedule->id ? 'selected' : '' }}>
-                                            {{ $schedule->name }} ({{ $schedule->days_display }})
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('day_schedule_id')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Working days for accurate DTR calculation</p>
                             </div>
 
                             <div>
@@ -265,20 +275,6 @@
                                 @error('pay_schedule')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">How often the employee gets paid</p>
-                            </div>
-
-                            <div>
-                                <label for="benefits_status" class="block text-sm font-medium text-gray-700">Benefits Status <span class="text-red-500">*</span></label>
-                                <select name="benefits_status" id="benefits_status" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                    <option value="">Select Benefits Status</option>
-                                    <option value="with_benefits" {{ old('benefits_status', $employee->benefits_status) == 'with_benefits' ? 'selected' : '' }}>With Benefits</option>
-                                    <option value="without_benefits" {{ old('benefits_status', $employee->benefits_status) == 'without_benefits' ? 'selected' : '' }}>Without Benefits</option>
-                                </select>
-                                @error('benefits_status')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Determines eligibility for health insurance, SSS, etc.</p>
                             </div>
 
                             <div>
@@ -302,80 +298,33 @@
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6">
                         <h3 class="text-lg font-medium text-gray-900 mb-4">Salary Information</h3>
-     
                         
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label for="hourly_rate" class="block text-sm font-medium text-gray-700">Hourly Rate</label>
-                                <input type="text" name="hourly_rate" id="hourly_rate" value="{{ old('hourly_rate', ($employee->rate_type === 'hourly' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="hourly_rate_raw" id="hourly_rate_raw">
-                                @error('hourly_rate')
+                                <label for="rate_type" class="block text-sm font-medium text-gray-700">Rate Type <span class="text-red-500">*</span></label>
+                                <select name="rate_type" id="rate_type" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <option value="">Select Rate Type</option>
+                                    <option value="hourly" {{ old('rate_type', $employee->rate_type) == 'hourly' ? 'selected' : '' }}>Hourly</option>
+                                    <option value="daily" {{ old('rate_type', $employee->rate_type) == 'daily' ? 'selected' : '' }}>Daily</option>
+                                    <option value="weekly" {{ old('rate_type', $employee->rate_type) == 'weekly' ? 'selected' : '' }}>Weekly</option>
+                                    <option value="semi_monthly" {{ old('rate_type', $employee->rate_type) == 'semi_monthly' ? 'selected' : '' }}>Semi-Monthly</option>
+                                    <option value="monthly" {{ old('rate_type', $employee->rate_type) == 'monthly' ? 'selected' : '' }}>Monthly</option>
+                                </select>
+                                @error('rate_type')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">Per hour rate</p>
                             </div>
-
+                            
                             <div>
-                                <label for="daily_rate" class="block text-sm font-medium text-gray-700">Daily Rate</label>
-                                <input type="text" name="daily_rate" id="daily_rate" value="{{ old('daily_rate', ($employee->rate_type === 'daily' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="daily_rate_raw" id="daily_rate_raw">
-                                @error('daily_rate')
+                                <label for="fixed_rate" class="block text-sm font-medium text-gray-700">Rate Amount <span class="text-red-500">*</span></label>
+                                <input type="number" name="fixed_rate" id="fixed_rate" step="0.01" min="0" value="{{ old('fixed_rate', $employee->fixed_rate) }}" placeholder="0.00" required
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                @error('fixed_rate')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-xs text-gray-500">Per day rate</p>
-                            </div>
-
-                            <div>
-                                <label for="weekly_rate" class="block text-sm font-medium text-gray-700">Weekly Rate</label>
-                                <input type="text" name="weekly_rate" id="weekly_rate" value="{{ old('weekly_rate', ($employee->rate_type === 'weekly' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="weekly_rate_raw" id="weekly_rate_raw">
-                                @error('weekly_rate')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Per week rate</p>
-                            </div>
-
-                            <div>
-                                <label for="semi_monthly_rate" class="block text-sm font-medium text-gray-700">Semi-Monthly Rate</label>
-                                <input type="text" name="semi_monthly_rate" id="semi_monthly_rate" value="{{ old('semi_monthly_rate', ($employee->rate_type === 'semi_monthly' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="semi_monthly_rate_raw" id="semi_monthly_rate_raw">
-                                @error('semi_monthly_rate')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Twice per month</p>
-                            </div>
-
-                            <div>
-                                <label for="basic_salary" class="block text-sm font-medium text-gray-700">Monthly Rate</label>
-                                <input type="text" name="basic_salary" id="basic_salary" value="{{ old('basic_salary', ($employee->rate_type === 'monthly' && $employee->fixed_rate) ? number_format($employee->fixed_rate, 2, '.', '') : '') }}" placeholder="₱0.00"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm salary-input">
-                                <input type="hidden" name="basic_salary_raw" id="basic_salary_raw">
-                                @error('basic_salary')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-xs text-gray-500">Per month rate</p>
+                                <p class="mt-1 text-xs text-gray-500">Enter the amount for the selected rate type</p>
                             </div>
                         </div>
-                        
-                        <!-- Hidden fields for tracking highlighted rate -->
-                        <input type="hidden" name="rate_type" id="rate_type" value="{{ old('rate_type', $employee->rate_type) }}">
-                        <input type="hidden" name="fixed_rate" id="fixed_rate" value="{{ old('fixed_rate', $employee->fixed_rate) }}">
-                        
-                        <!-- Salary Calculation Summary -->
-                        {{-- <div class="mt-6 p-4 bg-gray-50 rounded-lg">
-                            <h4 class="text-sm font-medium text-gray-900 mb-2">Salary Breakdown</h4>
-                            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs text-gray-600">
-                                <div>Hourly: <span id="calc_hourly" class="font-medium text-gray-900">₱0.00</span></div>
-                                <div>Daily: <span id="calc_daily" class="font-medium text-gray-900">₱0.00</span></div>
-                                <div>Weekly: <span id="calc_weekly" class="font-medium text-gray-900">₱0.00</span></div>
-                                <div>Semi-Monthly: <span id="calc_semi" class="font-medium text-gray-900">₱0.00</span></div>
-                                <div>Monthly: <span id="calc_monthly" class="font-medium text-gray-900">₱0.00</span></div>
-                            </div>
-                        </div> --}}
                     </div>
                 </div>
 
@@ -513,268 +462,249 @@
         </div>
     </div>
 
-    <style>
-        .salary-input {
-            text-align: right;
-            font-weight: 500;
-        }
-        .salary-input::placeholder {
-            font-weight: normal;
-            opacity: 0.5;
-            text-align: left;
-        }
-    </style>
-
     @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Salary input elements
-            const hourlyRateInput = document.getElementById('hourly_rate');
-            const dailyRateInput = document.getElementById('daily_rate');
-            const weeklyRateInput = document.getElementById('weekly_rate');
-            const semiMonthlyRateInput = document.getElementById('semi_monthly_rate');
-            const basicSalaryInput = document.getElementById('basic_salary');
+            console.log('✅ Edit form loaded - rate fields are now direct form inputs');
 
-            // Parse peso formatted string to number
-            function parsePeso(value) {
-                if (!value) return 0;
-                // Remove peso sign, commas, and spaces
-                const cleaned = value.replace(/[₱,\s]/g, '');
-                const num = parseFloat(cleaned);
-                return isNaN(num) ? 0 : num;
-            }
-
-            // Salary rate input field containers for highlighting
-            const hourlyRateField = hourlyRateInput ? hourlyRateInput.closest('div') : null;
-            const dailyRateField = dailyRateInput ? dailyRateInput.closest('div') : null;
-            const weeklyRateField = weeklyRateInput ? weeklyRateInput.closest('div') : null;
-            const semiMonthlyRateField = semiMonthlyRateInput ? semiMonthlyRateInput.closest('div') : null;
-            const monthlyRateField = basicSalaryInput ? basicSalaryInput.closest('div') : null;
-
-            // Function to highlight a specific rate field when clicked
-            function highlightRateField(targetField) {
-                console.log('highlightRateField called for:', targetField ? targetField.querySelector('input')?.id : 'null');
-                
-                // Reset all fields to default styling
-                [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
-                    if (!field) return;
-                    const input = field.querySelector('input[type="text"]');
-                    const label = field.querySelector('label');
-                    
-                    if (input) {
-                        // Remove all highlighting classes first
-                        input.classList.remove('border-green-500', 'bg-green-50', 'focus:border-green-500', 'focus:ring-green-500');
-                        input.classList.add('border-gray-300', 'focus:border-indigo-500', 'focus:ring-indigo-500');
-                        
-                        // Disable and dim non-highlighted fields
-                        if (field !== targetField) {
-                            input.classList.add('bg-gray-100', 'text-gray-400');
-                            input.setAttribute('readonly', true);
-                            input.setAttribute('tabindex', '-1'); // Prevent tab navigation
-                            input.style.pointerEvents = 'none'; // Prevent clicking
-                            console.log('Disabling field:', input.id);
-                        } else {
-                            input.classList.remove('bg-gray-100', 'text-gray-400');
-                            input.removeAttribute('readonly');
-                            input.removeAttribute('tabindex');
-                            input.style.pointerEvents = 'auto'; // Allow clicking
-                            console.log('Enabling field:', input.id);
-                        }
-                    }
-                    if (label) {
-                        label.classList.remove('text-green-700', 'font-semibold');
-                        label.classList.add('text-gray-700');
-                        
-                        // Dim labels of non-highlighted fields
-                        if (field !== targetField) {
-                            label.classList.add('text-gray-400');
-                        } else {
-                            label.classList.remove('text-gray-400');
-                        }
-                    }
-                });
-                
-                // Highlight the target field
-                if (targetField) {
-                    const input = targetField.querySelector('input[type="text"]');
-                    const label = targetField.querySelector('label');
-                    
-                    if (input) {
-                        input.classList.remove('border-gray-300', 'focus:border-indigo-500', 'focus:ring-indigo-500', 'bg-gray-100', 'text-gray-400');
-                        input.classList.add('border-green-500', 'bg-green-50', 'focus:border-green-500', 'focus:ring-green-500');
-                        input.removeAttribute('readonly');
-                        input.removeAttribute('tabindex');
-                        input.style.pointerEvents = 'auto';
-                        console.log('Highlighted field:', input.id);
-                    }
-                    if (label) {
-                        label.classList.remove('text-gray-700', 'text-gray-400');
-                        label.classList.add('text-green-700', 'font-semibold');
-                    }
-                    
-                    // Update hidden fields based on highlighted field
-                    const rateTypeInput = document.getElementById('rate_type');
-                    const fixedRateInput = document.getElementById('fixed_rate');
-                    
-                    if (rateTypeInput && fixedRateInput && input) {
-                        // Determine rate type based on input id
-                        let rateType = '';
-                        let rateValue = parsePeso(input.value) || 0;
-                        
-                        switch(input.id) {
-                            case 'hourly_rate':
-                                rateType = 'hourly';
-                                break;
-                            case 'daily_rate':
-                                rateType = 'daily';
-                                break;
-                            case 'weekly_rate':
-                                rateType = 'weekly';
-                                break;
-                            case 'semi_monthly_rate':
-                                rateType = 'semi_monthly';
-                                break;
-                            case 'basic_salary':
-                                rateType = 'monthly';
-                                break;
-                        }
-                        
-                        // Update hidden fields
-                        rateTypeInput.value = rateType;
-                        fixedRateInput.value = rateValue;
-                        
-                        console.log('Updated rate tracking:', { rateType, rateValue }); // Debug
-                    }
-                }
-            }
-
-            // Add click event listeners to all salary input fields
-            [hourlyRateField, dailyRateField, weeklyRateField, semiMonthlyRateField, monthlyRateField].forEach(field => {
-                if (!field) return;
-                const input = field.querySelector('input[type="text"]');
-                if (input) {
-                    // Click handler
-                    input.addEventListener('click', (e) => {
-                        // Prevent interaction if field is disabled
-                        if (input.hasAttribute('readonly')) {
-                            e.preventDefault();
-                            console.log('Blocked click on disabled field:', input.id);
-                            return false;
-                        }
-                        highlightRateField(field);
-                    });
-                    
-                    // Focus handler
-                    input.addEventListener('focus', (e) => {
-                        // Prevent interaction if field is disabled
-                        if (input.hasAttribute('readonly')) {
-                            e.preventDefault();
-                            input.blur(); // Remove focus
-                            console.log('Blocked focus on disabled field:', input.id);
-                            return false;
-                        }
-                        highlightRateField(field);
-                    });
-                    
-                    // Input handler to block typing in disabled fields
-                    input.addEventListener('input', (e) => {
-                        if (input.hasAttribute('readonly')) {
-                            e.preventDefault();
-                            console.log('Blocked input on disabled field:', input.id);
-                            return false;
-                        }
-                    });
-                    
-                    // Keydown handler to block all keyboard input on disabled fields
-                    input.addEventListener('keydown', (e) => {
-                        if (input.hasAttribute('readonly')) {
-                            e.preventDefault();
-                            console.log('Blocked keydown on disabled field:', input.id);
-                            return false;
-                        }
-                    });
-                }
-            });
-
-            // Initialize highlighting based on existing rate_type from database
-            function initializeHighlighting() {
-                const rateTypeInput = document.getElementById('rate_type');
-                const fixedRateInput = document.getElementById('fixed_rate');
-                
-                console.log('Initializing highlighting...'); // Debug
-                console.log('Rate type from DB:', rateTypeInput ? rateTypeInput.value : 'not found');
-                console.log('Fixed rate from DB:', fixedRateInput ? fixedRateInput.value : 'not found');
-                
-                if (rateTypeInput && rateTypeInput.value) {
-                    const rateType = rateTypeInput.value;
-                    let targetField = null;
-                    
-                    switch(rateType) {
-                        case 'hourly':
-                            targetField = hourlyRateField;
-                            break;
-                        case 'daily':
-                            targetField = dailyRateField;
-                            break;
-                        case 'weekly':
-                            targetField = weeklyRateField;
-                            break;
-                        case 'semi_monthly':
-                            targetField = semiMonthlyRateField;
-                            break;
-                        case 'monthly':
-                            targetField = monthlyRateField;
-                            break;
-                    }
-                    
-                    if (targetField) {
-                        console.log('Highlighting field for rate type:', rateType);
-                        highlightRateField(targetField);
-                    }
-                }
-            }
-
-            // Initialize highlighting after a short delay to ensure DOM is ready
-            setTimeout(() => {
-                initializeHighlighting();
-            }, 100);
-
-            // Add input listeners to update fixed_rate when typing in highlighted field
-            [hourlyRateInput, dailyRateInput, weeklyRateInput, semiMonthlyRateInput, basicSalaryInput].forEach(input => {
-                if (!input) return;
+            // ===== INPUT FORMATTING FUNCTIONS =====
+            
+            // Auto Capitalize after spaces
+            function autoCapitalize(input) {
                 input.addEventListener('input', function() {
-                    // Check if this input is currently highlighted
-                    if (input.classList.contains('border-green-500')) {
-                        const rateTypeInput = document.getElementById('rate_type');
-                        const fixedRateInput = document.getElementById('fixed_rate');
-                        
-                        if (rateTypeInput && fixedRateInput) {
-                            const newValue = parsePeso(input.value) || 0;
-                            fixedRateInput.value = newValue;
-                            console.log('Updated fixed_rate to:', newValue);
-                        }
+                    let value = this.value;
+                    // Capitalize first letter and letters after spaces
+                    value = value.replace(/\b\w/g, function(char) {
+                        return char.toUpperCase();
+                    });
+                    this.value = value;
+                });
+            }
+            
+            // Phone number: 11 digits max/min, numbers only
+            function formatPhoneNumber(input) {
+                input.addEventListener('input', function() {
+                    // Remove all non-numeric characters
+                    let value = this.value.replace(/\D/g, '');
+                    // Limit to 11 digits
+                    if (value.length > 11) {
+                        value = value.substring(0, 11);
+                    }
+                    this.value = value;
+                });
+                
+                input.addEventListener('blur', function() {
+                    // Validate on blur - must be exactly 11 digits
+                    if (this.value && this.value.length !== 11) {
+                        this.setCustomValidity('Phone number must be exactly 11 digits');
+                    } else {
+                        this.setCustomValidity('');
                     }
                 });
-            });
-
-            // Form submission
-            const form = document.querySelector('form');
-            if (form) {
-                form.addEventListener('submit', function(e) {
-                    console.log('Form submitting...'); // Debug log
-                    
-                    const rateTypeInput = document.getElementById('rate_type');
-                    const fixedRateInput = document.getElementById('fixed_rate');
-                    
-                    console.log('Final values being submitted:', {
-                        rate_type: rateTypeInput ? rateTypeInput.value : '',
-                        fixed_rate: fixedRateInput ? fixedRateInput.value : ''
-                    });
+            }
+            
+            // Numbers only (for account numbers, SSS, PhilHealth, Pag-IBIG, TIN)
+            function numbersOnly(input) {
+                input.addEventListener('input', function() {
+                    // Remove all non-numeric characters
+                    this.value = this.value.replace(/\D/g, '');
                 });
+            }
+            
+            // Email to lowercase
+            function emailLowercase(input) {
+                input.addEventListener('input', function() {
+                    this.value = this.value.toLowerCase();
+                });
+            }
+            
+            // ===== APPLY FORMATTING TO INPUTS =====
+            
+            // Auto Capitalize fields
+            const capitalizeFields = [
+                'first_name', 'middle_name', 'last_name', 'suffix', 'address',
+                'emergency_contact_name', 'emergency_contact_relationship', 
+                'bank_name', 'bank_account_name'
+            ];
+            
+            capitalizeFields.forEach(fieldId => {
+                const input = document.getElementById(fieldId);
+                if (input) {
+                    autoCapitalize(input);
+                }
+            });
+            
+            // Phone number field
+            const phoneInput = document.getElementById('phone');
+            if (phoneInput) {
+                formatPhoneNumber(phoneInput);
+            }
+            
+            // Emergency contact phone field
+            const emergencyPhoneInput = document.getElementById('emergency_contact_phone');
+            if (emergencyPhoneInput) {
+                formatPhoneNumber(emergencyPhoneInput);
+            }
+            
+            // Numbers only fields
+            const numberFields = [
+                'bank_account_number', 'sss_number', 'philhealth_number', 
+                'pagibig_number', 'tin_number'
+            ];
+            
+            numberFields.forEach(fieldId => {
+                const input = document.getElementById(fieldId);
+                if (input) {
+                    numbersOnly(input);
+                }
+            });
+            
+            // Email field
+            const emailInput = document.getElementById('email');
+            if (emailInput) {
+                emailLowercase(emailInput);
+            }
+
+            // Department and Position Dynamic Filtering
+            function setupDepartmentPositionFilter() {
+                const departmentSelect = document.getElementById('department_id');
+                const positionSelect = document.getElementById('position_id');
+                
+                if (departmentSelect && positionSelect) {
+                    // Store current position value for restoration
+                    const currentPositionId = '{{ old("position_id", $employee->position_id ?? "") }}';
+                    
+                    function filterPositions() {
+                        const selectedDeptId = departmentSelect.value;
+                        
+                        // Store the current selected position before clearing
+                        const currentSelection = positionSelect.value;
+                        
+                        // Clear current position options
+                        positionSelect.innerHTML = '<option value="">Select Position</option>';
+                        
+                        if (selectedDeptId) {
+                            // Fetch positions for the selected department
+                            fetch(`/departments/${selectedDeptId}/positions`)
+                                .then(response => response.json())
+                                .then(positions => {
+                                    positions.forEach(position => {
+                                        const option = document.createElement('option');
+                                        option.value = position.id;
+                                        option.textContent = position.title;
+                                        
+                                        // Check if this is the current employee's position
+                                        if (position.id == currentPositionId) {
+                                            option.selected = true;
+                                        }
+                                        
+                                        positionSelect.appendChild(option);
+                                    });
+                                    
+                                    // Also try to restore the previously selected value
+                                    if (currentSelection && positionSelect.querySelector(`option[value="${currentSelection}"]`)) {
+                                        positionSelect.value = currentSelection;
+                                    }
+                                    
+                                    console.log('Positions loaded, current position ID:', currentPositionId, 'Selected:', positionSelect.value);
+                                })
+                                .catch(error => {
+                                    console.error('Error fetching positions:', error);
+                                });
+                        }
+                    }
+                    
+                    departmentSelect.addEventListener('change', filterPositions);
+                    
+                    // Initial load if department is already selected - this is crucial for edit view
+                    if (departmentSelect.value) {
+                        filterPositions();
+                    }
+                }
+            }
+            
+            // Setup department-position filtering
+            setupDepartmentPositionFilter();
+            
+            // ===== EMPLOYMENT TYPE AUTO-SELECTION =====
+            // Auto-select benefits status based on employment type
+            const employmentTypeSelect = document.getElementById('employment_type_id');
+            const benefitsStatusSelect = document.getElementById('benefits_status');
+            
+            if (employmentTypeSelect && benefitsStatusSelect) {
+                employmentTypeSelect.addEventListener('change', function() {
+                    const selectedOption = this.options[this.selectedIndex];
+                    
+                    console.log('Employment type changed:', {
+                        selectedValue: this.value,
+                        selectedText: selectedOption ? selectedOption.text : 'none',
+                        hasBenefitsData: selectedOption ? selectedOption.getAttribute('data-has-benefits') : 'none'
+                    });
+                    
+                    if (selectedOption && selectedOption.value) {
+                        const hasBenefits = selectedOption.getAttribute('data-has-benefits') === '1';
+                        
+                        console.log('Setting benefits status to:', hasBenefits ? 'with_benefits' : 'without_benefits');
+                        
+                        if (hasBenefits) {
+                            benefitsStatusSelect.value = 'with_benefits';
+                        } else {
+                            benefitsStatusSelect.value = 'without_benefits';
+                        }
+                        
+                        // Trigger change event for any other listeners
+                        benefitsStatusSelect.dispatchEvent(new Event('change'));
+                        
+                        console.log('Benefits status now set to:', benefitsStatusSelect.value);
+                    }
+                });
+                
+                // Also trigger on page load if there's a selected employment type
+                if (employmentTypeSelect.value) {
+                    employmentTypeSelect.dispatchEvent(new Event('change'));
+                }
             }
         });
+
+        // Employment type auto-selection for benefits status
+        function setupEmploymentTypeBenefitsAutoSelection() {
+            const employmentTypeSelect = document.getElementById('employment_type_id');
+            const benefitsStatusSelect = document.getElementById('benefits_status');
+            
+            if (employmentTypeSelect && benefitsStatusSelect) {
+                employmentTypeSelect.addEventListener('change', function() {
+                    const selectedOption = this.options[this.selectedIndex];
+                    
+                    console.log('Employment type changed (Edit view):', {
+                        selectedValue: this.value,
+                        selectedText: selectedOption ? selectedOption.text : 'none',
+                        hasBenefitsData: selectedOption ? selectedOption.getAttribute('data-has-benefits') : 'none'
+                    });
+                    
+                    if (selectedOption && selectedOption.value) {
+                        const hasBenefits = selectedOption.getAttribute('data-has-benefits') === '1';
+                        
+                        console.log('Setting benefits status to (Edit view):', hasBenefits ? 'with_benefits' : 'without_benefits');
+                        
+                        if (hasBenefits) {
+                            benefitsStatusSelect.value = 'with_benefits';
+                        } else {
+                            benefitsStatusSelect.value = 'without_benefits';
+                        }
+                        
+                        // Trigger change event for any other listeners
+                        benefitsStatusSelect.dispatchEvent(new Event('change'));
+                        
+                        console.log('Benefits status now set to (Edit view):', benefitsStatusSelect.value);
+                    }
+                });
+                
+                // Also trigger on page load if there's a selected employment type
+                if (employmentTypeSelect.value) {
+                    employmentTypeSelect.dispatchEvent(new Event('change'));
+                }
+            }
+        }
     </script>
-    
-    <script src="{{ asset('js/salary-calculator.js') }}"></script>
     @endpush
 </x-app-layout>

@@ -661,43 +661,6 @@ class DTRController extends Controller
     }
 
     /**
-     * Preview DTR import data to show confirmation before actual import.
-     */
-    public function previewImport(Request $request)
-    {
-        $this->authorize('import time logs');
-
-        $request->validate([
-            'dtr_file' => 'required|file|mimes:xlsx,xls,csv|max:2048',
-        ]);
-
-        try {
-            $import = new \App\Imports\DTRImport(false, true); // Set preview mode
-            \Maatwebsite\Excel\Facades\Excel::import($import, $request->file('dtr_file'));
-
-            $previewData = $import->getPreviewData();
-            $validRecordsCount = $import->getValidRecordsCount();
-            $skippedCount = $import->getSkippedCount();
-            $errorCount = $import->getErrorCount();
-
-            return response()->json([
-                'success' => true,
-                'preview_data' => $previewData,
-                'valid_records_count' => $validRecordsCount,
-                'skipped_count' => $skippedCount,
-                'error_count' => $errorCount,
-                'errors' => $import->getErrors()
-            ]);
-        } catch (\Exception $e) {
-            Log::error('DTR Preview Error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to preview DTR file: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
      * Import DTR from Excel/CSV file.
      */
     public function import(Request $request)
@@ -712,10 +675,7 @@ class DTRController extends Controller
         try {
             DB::beginTransaction();
 
-            // Generate unique import ID for tracking
-            $importId = 'DTR_IMPORT_' . now()->format('Y_m_d_H_i_s') . '_' . Auth::id();
-
-            $import = new \App\Imports\DTRImport($request->boolean('overwrite_existing'), false, $importId);
+            $import = new \App\Imports\DTRImport($request->boolean('overwrite_existing'));
             \Maatwebsite\Excel\Facades\Excel::import($import, $request->file('dtr_file'));
 
             DB::commit();
@@ -724,83 +684,22 @@ class DTRController extends Controller
             $skippedCount = $import->getSkippedCount();
             $errorCount = $import->getErrorCount();
 
-            $message = "DTR import completed successfully! Imported: {$importedCount} records";
-            if ($skippedCount > 0) {
-                $message .= ", Skipped: {$skippedCount} records";
-            }
-            if ($errorCount > 0) {
-                $message .= ", Errors: {$errorCount} records";
-            }
-
-            $response = [
-                'success' => true,
-                'message' => $message,
-                'imported_count' => $importedCount,
-                'skipped_count' => $skippedCount,
-                'error_count' => $errorCount,
-                'import_id' => $importId
-            ];
+            $message = "DTR import completed! Imported: {$importedCount}, Skipped: {$skippedCount}, Errors: {$errorCount}";
 
             if ($errorCount > 0) {
-                $response['errors'] = $import->getErrors();
+                $errors = $import->getErrors();
+                return redirect()->route('dtr.index')
+                    ->with('warning', $message)
+                    ->with('import_errors', $errors);
             }
 
-            return response()->json($response);
+            return redirect()->route('dtr.index')
+                ->with('success', $message);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('DTR Import Error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to import DTR: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Delete all records from the latest import.
-     */
-    public function deleteLatestImport(Request $request)
-    {
-        $this->authorize('import time logs');
-
-        $request->validate([
-            'import_id' => 'required|string',
-        ]);
-
-        try {
-            DB::beginTransaction();
-
-            $importId = $request->input('import_id');
-
-            // Find all time logs with this import ID
-            $timeLogsToDelete = TimeLog::where('creation_method', $importId)->get();
-
-            if ($timeLogsToDelete->isEmpty()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No records found for this import ID.'
-                ], 404);
-            }
-
-            $deletedCount = $timeLogsToDelete->count();
-
-            // Delete the records
-            TimeLog::where('creation_method', $importId)->delete();
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => "Successfully deleted {$deletedCount} records from the latest import.",
-                'deleted_count' => $deletedCount
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Delete Latest Import Error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete import records: ' . $e->getMessage()
-            ], 500);
+            return back()->withErrors(['error' => 'Failed to import DTR: ' . $e->getMessage()])
+                ->withInput();
         }
     }
 

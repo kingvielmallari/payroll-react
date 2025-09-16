@@ -13,6 +13,7 @@ use App\Http\Controllers\CashAdvanceController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\PositionController;
+use App\Http\Controllers\EmploymentTypeController;
 use App\Http\Controllers\TimeScheduleController;
 use App\Http\Controllers\DayScheduleController;
 use App\Http\Controllers\ReportsController;
@@ -46,11 +47,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Department Management
     Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('departments', DepartmentController::class);
+        Route::get('departments/{department}/positions', [DepartmentController::class, 'positions'])->name('departments.positions');
     });
 
     // Position Management
     Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('positions', PositionController::class);
+    });
+
+    // Employment Type Management
+    Route::middleware(['auth', 'verified'])->group(function () {
+        Route::resource('employment-types', EmploymentTypeController::class);
     });
 
     // Time Schedule Management
@@ -239,14 +246,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/import/form', [DTRController::class, 'importForm'])
                 ->name('import-form')
                 ->middleware('can:import time logs');
-            Route::post('/import/preview', [DTRController::class, 'previewImport'])
-                ->name('import-preview')
-                ->middleware('can:import time logs');
             Route::post('/import', [DTRController::class, 'import'])
                 ->name('import')
-                ->middleware('can:import time logs');
-            Route::delete('/import/delete-latest', [DTRController::class, 'deleteLatestImport'])
-                ->name('delete-latest-import')
                 ->middleware('can:import time logs');
             Route::get('/export/template', [DTRController::class, 'exportTemplate'])
                 ->name('export-template')
