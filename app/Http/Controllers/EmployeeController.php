@@ -114,7 +114,70 @@ class EmployeeController extends Controller
         // Least 5 performers (lowest calculated salary but still have some hours)
         $leastPerformers = $performanceData->sortBy('calculated_salary')->take(5);
 
-        return view('employees.index', compact('employees', 'departments', 'topPerformers', 'leastPerformers', 'currentMonth'));
+        // Calculate summary statistics for employees
+        $summaryQuery = Employee::query();
+
+        // Apply same filters for summary
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $summaryQuery->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('employee_number', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('email', 'like', "%{$search}%");
+                    });
+            });
+        }
+        if ($request->filled('department')) {
+            $summaryQuery->where('department_id', $request->department);
+        }
+        if ($request->filled('employment_status')) {
+            $summaryQuery->where('employment_status', $request->employment_status);
+        }
+        if ($request->filled('employment_type')) {
+            $summaryQuery->where('employment_type', $request->employment_type);
+        }
+
+        // Employment Type Statistics
+        $employmentTypeStats = $summaryQuery->clone()
+            ->selectRaw('employment_type, COUNT(*) as count')
+            ->groupBy('employment_type')
+            ->pluck('count', 'employment_type')
+            ->toArray();
+
+        // Benefits Status Statistics
+        $benefitsStatusStats = $summaryQuery->clone()
+            ->selectRaw('benefits_status, COUNT(*) as count')
+            ->whereNotNull('benefits_status')
+            ->groupBy('benefits_status')
+            ->pluck('count', 'benefits_status')
+            ->toArray();
+
+        // Pay Frequency Statistics
+        $payFrequencyStats = $summaryQuery->clone()
+            ->selectRaw('pay_schedule, COUNT(*) as count')
+            ->whereNotNull('pay_schedule')
+            ->groupBy('pay_schedule')
+            ->pluck('count', 'pay_schedule')
+            ->toArray();
+
+        // Rate Type Statistics
+        $rateTypeStats = $summaryQuery->clone()
+            ->selectRaw('rate_type, COUNT(*) as count')
+            ->whereNotNull('rate_type')
+            ->groupBy('rate_type')
+            ->pluck('count', 'rate_type')
+            ->toArray();
+
+        $summaryStats = [
+            'employment_types' => $employmentTypeStats,
+            'benefits_status' => $benefitsStatusStats,
+            'pay_frequency' => $payFrequencyStats,
+            'rate_types' => $rateTypeStats,
+        ];
+
+        return view('employees.index', compact('employees', 'departments', 'topPerformers', 'leastPerformers', 'currentMonth', 'summaryStats'));
     }
 
     /**
@@ -146,8 +209,7 @@ class EmployeeController extends Controller
             'default_paid_leaves' => Cache::get('employee_setting_default_paid_leaves', 15),
         ];
 
-        // Get active deduction settings for salary calculation preview
-        $deductionSettings = \App\Models\DeductionSetting::active()->get();
+
 
         // Generate next employee number for auto-generate mode
         $nextEmployeeNumber = '';
@@ -170,7 +232,7 @@ class EmployeeController extends Controller
             $nextEmployeeNumber = $prefix . '-' . $currentYear . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
         }
 
-        return view('employees.create', compact('departments', 'positions', 'timeSchedules', 'daySchedules', 'employmentTypes', 'roles', 'deductionSettings', 'paySchedules', 'employeeSettings', 'nextEmployeeNumber'));
+        return view('employees.create', compact('departments', 'positions', 'timeSchedules', 'daySchedules', 'employmentTypes', 'roles', 'paySchedules', 'employeeSettings', 'nextEmployeeNumber'));
     }
 
     /**
@@ -594,5 +656,231 @@ class EmployeeController extends Controller
         $exists = Employee::where('employee_number', $request->employee_number)->exists();
 
         return response()->json(['exists' => $exists]);
+    }
+
+    /**
+     * Generate employee summary
+     */
+    public function generateSummary(Request $request)
+    {
+        $this->authorize('view employees');
+
+        $format = $request->input('export', 'pdf');
+
+        // Build query based on filters
+        $query = Employee::with(['user', 'department', 'position']);
+
+        // Apply filters
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('employee_number', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('email', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        if ($request->filled('department')) {
+            $query->where('department_id', $request->department);
+        }
+
+        if ($request->filled('employment_status')) {
+            $query->where('employment_status', $request->employment_status);
+        }
+
+        // Apply sorting
+        if ($request->filled('sort_name')) {
+            if ($request->sort_name === 'asc') {
+                $query->orderBy('first_name', 'asc')->orderBy('last_name', 'asc');
+            } elseif ($request->sort_name === 'desc') {
+                $query->orderBy('first_name', 'desc')->orderBy('last_name', 'desc');
+            }
+        } elseif ($request->filled('sort_hire_date')) {
+            $query->orderBy('hire_date', $request->sort_hire_date);
+        } else {
+            $query->latest();
+        }
+
+        $employees = $query->get();
+
+        if ($format === 'excel') {
+            return $this->exportEmployeeSummaryExcel($employees);
+        } else {
+            return $this->exportEmployeeSummaryPDF($employees);
+        }
+    }
+
+    /**
+     * Export employee summary as PDF
+     */
+    private function exportEmployeeSummaryPDF($employees)
+    {
+        $fileName = 'employee_summary_' . date('Y-m-d_H-i-s') . '.pdf';
+
+        // Calculate totals and statistics
+        $totalEmployees = $employees->count();
+        $activeEmployees = $employees->where('employment_status', 'active')->count();
+        $inactiveEmployees = $employees->where('employment_status', 'inactive')->count();
+        $avgBasicSalary = $employees->avg('basic_salary');
+
+        // Create HTML content for PDF
+        $html = '
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+            <title>Employee Summary</title>
+            <style>
+                body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 10px; margin: 20px; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .header h1 { margin: 0; color: #333; font-size: 18px; }
+                .header p { margin: 5px 0; color: #666; font-size: 12px; }
+                .stats { margin-bottom: 20px; }
+                .stats table { width: 100%; border-collapse: collapse; }
+                .stats td { padding: 8px; border: 1px solid #ddd; text-align: center; }
+                .stats .label { background-color: #f8f9fa; font-weight: bold; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 9px; }
+                th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+                th { background-color: #f8f9fa; font-weight: bold; }
+                .text-right { text-align: right; }
+                .currency { text-align: right; }
+                .status-active { color: green; font-weight: bold; }
+                .status-inactive { color: orange; font-weight: bold; }
+                .status-terminated { color: red; font-weight: bold; }
+                .status-resigned { color: gray; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Employee Summary Report</h1>
+                <p>Generated on: ' . date('F j, Y g:i A') . '</p>
+            </div>
+            
+            <div class="stats">
+                <table>
+                    <tr>
+                        <td class="label">Total Employees</td>
+                        <td class="label">Active Employees</td>
+                        <td class="label">Inactive Employees</td>
+                        <td class="label">Average Basic Salary</td>
+                    </tr>
+                    <tr>
+                        <td>' . $totalEmployees . '</td>
+                        <td>' . $activeEmployees . '</td>
+                        <td>' . $inactiveEmployees . '</td>
+                        <td>₱' . number_format($avgBasicSalary, 2) . '</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Employee #</th>
+                        <th>Full Name</th>
+                        <th>Department</th>
+                        <th>Position</th>
+                        <th>Status</th>
+                        <th>Hire Date</th>
+                        <th class="currency">Basic Salary</th>
+                        <th>Pay Schedule</th>
+                    </tr>
+                </thead>
+                <tbody>';
+
+        foreach ($employees as $employee) {
+            $statusClass = 'status-' . $employee->employment_status;
+            $html .= '
+                    <tr>
+                        <td>' . $employee->employee_number . '</td>
+                        <td>' . $employee->full_name . '</td>
+                        <td>' . $employee->department->name . '</td>
+                        <td>' . $employee->position->title . '</td>
+                        <td class="' . $statusClass . '">' . ucfirst($employee->employment_status) . '</td>
+                        <td>' . $employee->hire_date->format('M d, Y') . '</td>
+                        <td class="currency">₱' . number_format($employee->basic_salary, 2) . '</td>
+                        <td>' . ucwords(str_replace('_', ' ', $employee->pay_schedule)) . '</td>
+                    </tr>';
+        }
+
+        $html .= '
+                </tbody>
+            </table>
+        </body>
+        </html>';
+
+        // Use DomPDF to generate proper PDF
+        try {
+            $pdf = app('dompdf.wrapper');
+            $pdf->loadHTML($html);
+            $pdf->setPaper('A4', 'landscape');
+
+            return $pdf->download($fileName);
+        } catch (\Exception $e) {
+            // Fallback to simple HTML if DomPDF is not available
+            return response($html, 200, [
+                'Content-Type' => 'text/html',
+                'Content-Disposition' => 'attachment; filename="' . str_replace('.pdf', '_report.html', $fileName) . '"',
+            ]);
+        }
+    }
+
+    /**
+     * Export employee summary as Excel
+     */
+    private function exportEmployeeSummaryExcel($employees)
+    {
+        $fileName = 'employee_summary_' . date('Y-m-d_H-i-s') . '.csv';
+
+        // Create CSV content with proper headers
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control' => 'max-age=0',
+        ];
+
+        return response()->streamDownload(function () use ($employees) {
+            $output = fopen('php://output', 'w');
+
+            // Write header row
+            fputcsv($output, [
+                'Employee Number',
+                'Full Name',
+                'Email',
+                'Department',
+                'Position',
+                'Employment Status',
+                'Employment Type',
+                'Hire Date',
+                'Basic Salary',
+                'Pay Schedule',
+                'Birth Date',
+                'Address'
+            ]);
+
+            // Write data rows
+            foreach ($employees as $employee) {
+                fputcsv($output, [
+                    $employee->employee_number,
+                    $employee->full_name,
+                    $employee->user->email ?? '',
+                    $employee->department->name ?? '',
+                    $employee->position->title ?? '',
+                    ucfirst($employee->employment_status),
+                    ucfirst($employee->employment_type),
+                    $employee->hire_date->format('M d, Y'),
+                    number_format($employee->basic_salary, 2),
+                    ucwords(str_replace('_', ' ', $employee->pay_schedule)),
+                    $employee->birth_date ? $employee->birth_date->format('M d, Y') : '',
+                    $employee->address ?? ''
+                ]);
+            }
+
+            fclose($output);
+        }, $fileName, $headers);
     }
 }

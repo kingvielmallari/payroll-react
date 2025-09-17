@@ -191,4 +191,258 @@ class ReportsController extends Controller
             'availableYears'
         ));
     }
+
+    /**
+     * Generate employer shares summary
+     */
+    public function generateEmployerSharesSummary(Request $request)
+    {
+        $format = $request->input('export', 'pdf');
+        $year = $request->input('year', date('Y'));
+        $month = $request->input('month', null);
+
+        // Get the same data as the main report
+        $query = \App\Models\PayrollSnapshot::join('payrolls', 'payroll_snapshots.payroll_id', '=', 'payrolls.id')
+            ->whereYear('payrolls.period_start', $year)
+            ->where('payrolls.is_paid', true)
+            ->whereNotNull('payroll_snapshots.employer_deductions_breakdown');
+
+        if ($month) {
+            $query->whereMonth('payrolls.period_start', $month);
+        }
+
+        $allDeductions = \App\Models\DeductionTaxSetting::whereIn('name', ['SSS', 'PhilHealth', 'Pag-IBIG', 'BIR', 'Withholding Tax'])
+            ->get();
+
+        // Calculate share data for export
+        $shareData = collect();
+        foreach ($allDeductions as $deduction) {
+            $eeShare = 0;
+            $erShare = 0;
+            $snapshots = $query->clone()
+                ->select('payroll_snapshots.deductions_breakdown', 'payroll_snapshots.employer_deductions_breakdown')
+                ->get();
+
+            foreach ($snapshots as $snapshot) {
+                // Calculate employee share
+                if ($snapshot->deductions_breakdown) {
+                    $deductionsBreakdown = is_string($snapshot->deductions_breakdown)
+                        ? json_decode($snapshot->deductions_breakdown, true)
+                        : $snapshot->deductions_breakdown;
+
+                    if (is_array($deductionsBreakdown)) {
+                        foreach ($deductionsBreakdown as $breakdown) {
+                            if (strcasecmp($breakdown['name'] ?? '', $deduction->name) === 0) {
+                                $eeShare += $breakdown['amount'] ?? 0;
+                            }
+                        }
+                    }
+                }
+
+                // Calculate employer share
+                if ($snapshot->employer_deductions_breakdown && $deduction->share_with_employer) {
+                    $employerBreakdown = is_string($snapshot->employer_deductions_breakdown)
+                        ? json_decode($snapshot->employer_deductions_breakdown, true)
+                        : $snapshot->employer_deductions_breakdown;
+
+                    if (is_array($employerBreakdown)) {
+                        foreach ($employerBreakdown as $breakdown) {
+                            if (strcasecmp($breakdown['name'] ?? '', $deduction->name) === 0) {
+                                $erShare += $breakdown['amount'] ?? 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $shareData->push((object)[
+                'name' => $deduction->name,
+                'total_ee_share' => round($eeShare, 2),
+                'total_er_share' => round($erShare, 2),
+                'total_combined' => round($eeShare + $erShare, 2),
+                'is_shared' => $deduction->share_with_employer ?? false,
+            ]);
+        }
+
+        if ($format === 'excel') {
+            return $this->exportEmployerSharesExcel($shareData, $year, $month);
+        } else {
+            return $this->exportEmployerSharesPDF($shareData, $year, $month);
+        }
+    }
+
+    /**
+     * Export employer shares as PDF
+     */
+    private function exportEmployerSharesPDF($shareData, $year, $month)
+    {
+        $fileName = 'employer_shares_summary_' . $year . ($month ? '_' . str_pad($month, 2, '0', STR_PAD_LEFT) : '') . '_' . date('Y-m-d_H-i-s') . '.pdf';
+        $periodLabel = $year . ($month ? ' - ' . date('F', mktime(0, 0, 0, $month, 1)) : ' (All Months)');
+
+        // Calculate totals
+        $totalEEShare = $shareData->sum('total_ee_share');
+        $totalERShare = $shareData->sum('total_er_share');
+        $totalCombined = $shareData->sum('total_combined');
+
+        // Create HTML content for PDF
+        $html = '
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+            <title>Employer Shares Summary</title>
+            <style>
+                body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 10px; margin: 20px; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .header h1 { margin: 0; color: #333; font-size: 18px; }
+                .header p { margin: 5px 0; color: #666; font-size: 12px; }
+                .summary { margin-bottom: 20px; }
+                .summary table { width: 100%; border-collapse: collapse; }
+                .summary td { padding: 8px; border: 1px solid #ddd; text-align: center; }
+                .summary .label { background-color: #f8f9fa; font-weight: bold; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 10px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f8f9fa; font-weight: bold; }
+                .currency { text-align: right; }
+                .total-row { background-color: #f8f9fa; font-weight: bold; }
+                .shared-yes { color: green; font-weight: bold; }
+                .shared-no { color: red; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Employer Shares Summary Report</h1>
+                <p>Period: ' . $periodLabel . '</p>
+                <p>Generated on: ' . date('F j, Y g:i A') . '</p>
+            </div>
+            
+            <div class="summary">
+                <table>
+                    <tr>
+                        <td class="label">Total Employee Share</td>
+                        <td class="label">Total Employer Share</td>
+                        <td class="label">Grand Total</td>
+                    </tr>
+                    <tr>
+                        <td>₱' . number_format($totalEEShare, 2) . '</td>
+                        <td>₱' . number_format($totalERShare, 2) . '</td>
+                        <td>₱' . number_format($totalCombined, 2) . '</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Deduction Type</th>
+                        <th class="currency">Employee Share</th>
+                        <th class="currency">Employer Share</th>
+                        <th class="currency">Total Amount</th>
+                        <th>Shared with Employer</th>
+                    </tr>
+                </thead>
+                <tbody>';
+
+        foreach ($shareData as $data) {
+            $sharedClass = $data->is_shared ? 'shared-yes' : 'shared-no';
+            $sharedText = $data->is_shared ? 'Yes' : 'No';
+
+            $html .= '
+                    <tr>
+                        <td>' . $data->name . '</td>
+                        <td class="currency">₱' . number_format($data->total_ee_share, 2) . '</td>
+                        <td class="currency">₱' . number_format($data->total_er_share, 2) . '</td>
+                        <td class="currency">₱' . number_format($data->total_combined, 2) . '</td>
+                        <td class="' . $sharedClass . '">' . $sharedText . '</td>
+                    </tr>';
+        }
+
+        $html .= '
+                    <tr class="total-row">
+                        <td><strong>TOTALS</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalEEShare, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalERShare, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalCombined, 2) . '</strong></td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </body>
+        </html>';
+
+        // Use DomPDF to generate proper PDF
+        try {
+            $pdf = app('dompdf.wrapper');
+            $pdf->loadHTML($html);
+            $pdf->setPaper('A4', 'landscape');
+
+            return $pdf->download($fileName);
+        } catch (\Exception $e) {
+            // Fallback to simple HTML if DomPDF is not available
+            return response($html, 200, [
+                'Content-Type' => 'text/html',
+                'Content-Disposition' => 'attachment; filename="' . str_replace('.pdf', '_report.html', $fileName) . '"',
+            ]);
+        }
+    }
+
+    /**
+     * Export employer shares as Excel
+     */
+    private function exportEmployerSharesExcel($shareData, $year, $month)
+    {
+        $fileName = 'employer_shares_summary_' . $year . ($month ? '_' . str_pad($month, 2, '0', STR_PAD_LEFT) : '') . '_' . date('Y-m-d_H-i-s') . '.csv';
+
+        // Create CSV content with proper headers
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control' => 'max-age=0',
+        ];
+
+        return response()->streamDownload(function () use ($shareData) {
+            $output = fopen('php://output', 'w');
+
+            // Initialize totals
+            $totalEEShare = 0;
+            $totalERShare = 0;
+            $totalCombined = 0;
+
+            // Write header row
+            fputcsv($output, [
+                'Deduction Type',
+                'Employee Share',
+                'Employer Share',
+                'Total Amount',
+                'Shared with Employer'
+            ]);
+
+            // Write data rows
+            foreach ($shareData as $data) {
+                $totalEEShare += $data->total_ee_share;
+                $totalERShare += $data->total_er_share;
+                $totalCombined += $data->total_combined;
+
+                fputcsv($output, [
+                    $data->name,
+                    number_format($data->total_ee_share, 2),
+                    number_format($data->total_er_share, 2),
+                    number_format($data->total_combined, 2),
+                    $data->is_shared ? 'Yes' : 'No'
+                ]);
+            }
+
+            // Write totals row
+            fputcsv($output, [
+                'TOTALS',
+                number_format($totalEEShare, 2),
+                number_format($totalERShare, 2),
+                number_format($totalCombined, 2),
+                ''
+            ]);
+
+            fclose($output);
+        }, $fileName, $headers);
+    }
 }

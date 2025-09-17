@@ -53,7 +53,7 @@ class PayrollController extends Controller
             $query->whereBetween('period_start', [$request->date_from, $request->date_to]);
         }
 
-        $payrolls = $query->paginate(15)->withQueryString();
+        $payrolls = $query->paginate(10)->withQueryString();
 
         // Get available schedule settings for filter options
         $scheduleSettings = \App\Models\PayScheduleSetting::systemDefaults()
@@ -122,9 +122,51 @@ class PayrollController extends Controller
             }
         }
 
-        $payrolls = $query->paginate(15)->withQueryString();
+        // Paginate with configurable records per page (default 10)
+        $perPage = $request->get('per_page', 10);
+        $payrolls = $query->paginate($perPage)->withQueryString();
 
-        return view('payrolls.index', compact('payrolls'));
+        // Calculate summary statistics for paid and approved payrolls
+        $summaryQuery = Payroll::whereIn('status', ['approved'])->orWhere('is_paid', true);
+
+        // Apply same filters for summary
+        if ($request->filled('pay_schedule')) {
+            $summaryQuery->where('pay_schedule', $request->pay_schedule);
+        }
+        if ($request->filled('status')) {
+            $status = $request->status;
+            if ($status === 'paid') {
+                $summaryQuery = Payroll::where('is_paid', true);
+            } elseif (in_array($status, ['processing', 'approved'])) {
+                $summaryQuery = Payroll::where('status', $status);
+                if ($status === 'approved') {
+                    $summaryQuery->where('is_paid', false);
+                }
+            }
+        }
+        if ($request->filled('type')) {
+            $type = $request->type;
+            if (in_array($type, ['automated', 'manual'])) {
+                $summaryQuery->where('payroll_type', $type);
+            }
+        }
+        if ($request->filled('pay_period')) {
+            $periodDates = explode('|', $request->pay_period);
+            if (count($periodDates) === 2) {
+                $startDate = Carbon::parse($periodDates[0]);
+                $endDate = Carbon::parse($periodDates[1]);
+                $summaryQuery->where('period_start', $startDate)
+                    ->where('period_end', $endDate);
+            }
+        }
+
+        $summaryStats = [
+            'total_net_pay' => $summaryQuery->clone()->sum('total_net'),
+            'total_deductions' => $summaryQuery->clone()->sum('total_deductions'),
+            'total_gross_pay' => $summaryQuery->clone()->sum('total_gross'),
+        ];
+
+        return view('payrolls.index', compact('payrolls', 'summaryStats'));
     }
 
     /**
@@ -900,14 +942,16 @@ class PayrollController extends Controller
             ->toArray();
 
         // Get active employees for this schedule, excluding those who already have payrolls
-        $employees = Employee::with(['user', 'department', 'position'])
+        $employeesQuery = Employee::with(['user', 'department', 'position'])
             ->where('pay_schedule', $schedule)
             ->where('employment_status', 'active')
             ->whereNotIn('id', $employeesWithPayrolls)
-            ->orderBy('first_name')
-            ->get();
+            ->orderBy('first_name');
 
-        if ($employees->isEmpty()) {
+        // Get all employees count for calculations
+        $allEmployees = $employeesQuery->get();
+
+        if ($allEmployees->isEmpty()) {
             // If no employees are available for draft payrolls, show the automation page with a message
             // This could mean all employees already have payrolls or no active employees exist
             $allActiveEmployees = Employee::where('pay_schedule', $schedule)
@@ -954,7 +998,7 @@ class PayrollController extends Controller
         $totalDeductions = 0;
         $totalNet = 0;
 
-        foreach ($employees as $employee) {
+        foreach ($allEmployees as $employee) {
             $payrollCalculation = $this->calculateEmployeePayrollForPeriod($employee, $currentPeriod['start'], $currentPeriod['end']);
 
             // Create a temporary Payroll model instance (not saved to DB)
@@ -995,14 +1039,24 @@ class PayrollController extends Controller
             $totalNet += $payrollCalculation['net_pay'] ?? 0;
         }
 
+        // Get pagination parameters
+        $perPage = request()->get('per_page', 10);
+        $currentPage = request()->get('page', 1);
+
         // Create paginator for mock data
         $mockPaginator = new \Illuminate\Pagination\LengthAwarePaginator(
-            $payrollPreviews,
+            $payrollPreviews->forPage($currentPage, $perPage),
             $payrollPreviews->count(),
-            15,
-            1,
-            ['path' => request()->url()]
+            $perPage,
+            $currentPage,
+            [
+                'path' => request()->url(),
+                'pageName' => 'page',
+            ]
         );
+
+        // Add query parameters to pagination links
+        $mockPaginator->withQueryString();
 
         // Return draft payrolls that work with existing view
         return view('payrolls.automation.list', compact(
@@ -8752,5 +8806,48 @@ class PayrollController extends Controller
             default:
                 return 1; // For daily or hourly, return 1
         }
+    }
+
+    /**
+     * Display employee's own payslips
+     */
+    public function myPayslips(Request $request)
+    {
+        $user = Auth::user();
+        $employee = $user->employee;
+
+        if (!$employee) {
+            return redirect()->route('dashboard')->with('error', 'Employee profile not found.');
+        }
+
+        // Get approved payrolls for this employee
+        $query = Payroll::with(['payrollDetails' => function ($q) use ($employee) {
+            $q->where('employee_id', $employee->id);
+        }])
+            ->where('status', 'approved') // Only show approved payrolls
+            ->whereHas('payrollDetails', function ($q) use ($employee) {
+                $q->where('employee_id', $employee->id);
+            })
+            ->orderBy('period_start', 'desc');
+
+        // Filter by year
+        if ($request->filled('year')) {
+            $query->whereYear('period_start', $request->year);
+        }
+
+        $payrolls = $query->paginate(10);
+
+        // Get available years for filter
+        $years = Payroll::whereHas('payrollDetails', function ($q) use ($employee) {
+            $q->where('employee_id', $employee->id);
+        })
+            ->where('status', 'approved')
+            ->selectRaw('YEAR(period_start) as year')
+            ->distinct()
+            ->pluck('year')
+            ->sort()
+            ->values();
+
+        return view('payrolls.my-payslips', compact('payrolls', 'years', 'employee'));
     }
 }

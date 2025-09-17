@@ -26,6 +26,7 @@ class User extends Authenticatable
         'password',
         'employee_id',
         'status',
+        'role',
     ];
 
     /**
@@ -57,9 +58,44 @@ class User extends Authenticatable
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'email', 'employee_id', 'status'])
+            ->logOnly(['name', 'email', 'employee_id', 'status', 'role'])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
+    }
+
+    /**
+     * Assign role and permissions based on role field
+     */
+    public function assignRoleAndPermissions()
+    {
+        // Remove all current roles
+        $this->syncRoles([]);
+
+        // Map role field to Spatie role names
+        $roleMapping = [
+            'system_admin' => 'System Administrator',
+            'hr_head' => 'HR Head',
+            'hr_staff' => 'HR Staff',
+            'employee' => 'Employee',
+        ];
+
+        if (isset($roleMapping[$this->role])) {
+            $this->assignRole($roleMapping[$this->role]);
+        }
+    }
+
+    /**
+     * Boot method to automatically assign roles when role is changed
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::saved(function ($user) {
+            if ($user->wasChanged('role')) {
+                $user->assignRoleAndPermissions();
+            }
+        });
     }
 
     /**

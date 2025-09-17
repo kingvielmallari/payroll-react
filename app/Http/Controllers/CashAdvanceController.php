@@ -47,18 +47,48 @@ class CashAdvanceController extends Controller
         }
 
         // If employee user, only show their own cash advances
-        if (Auth::user()->hasRole('employee')) {
+        if (Auth::user()->hasRole('Employee')) {
             $employee = Auth::user()->employee;
             if ($employee) {
                 $query->where('employee_id', $employee->id);
             }
         }
 
-        $cashAdvances = $query->orderByDesc('created_at')->paginate(20);
+        $cashAdvances = $query->orderByDesc('created_at')->paginate(10);
 
         $employees = Employee::active()->orderBy('last_name')->get();
 
-        return view('cash-advances.index', compact('cashAdvances', 'employees'));
+        // Calculate summary statistics
+        $summaryQuery = CashAdvance::query();
+
+        // Apply same filters for summary
+        if ($request->filled('status')) {
+            $summaryQuery->where('status', $request->status);
+        }
+        if ($request->filled('employee_id')) {
+            $summaryQuery->where('employee_id', $request->employee_id);
+        }
+        if ($request->filled('date_from')) {
+            $summaryQuery->whereDate('requested_date', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $summaryQuery->whereDate('requested_date', '<=', $request->date_to);
+        }
+        if (Auth::user()->hasRole('Employee')) {
+            $employee = Auth::user()->employee;
+            if ($employee) {
+                $summaryQuery->where('employee_id', $employee->id);
+            }
+        }
+
+        $summaryStats = [
+            'total_approved_amount' => $summaryQuery->clone()->where('status', 'approved')->sum('approved_amount'),
+            'total_interest_amount' => $summaryQuery->clone()->where('status', 'approved')->sum('interest_amount'),
+            'total_paid_amount' => $summaryQuery->clone()->where('status', 'approved')->sum(DB::raw('approved_amount - outstanding_balance')),
+            'total_unpaid_amount' => $summaryQuery->clone()->where('status', 'approved')->sum('outstanding_balance'),
+        ];
+
+        return view('cash-advances.index', compact('cashAdvances', 'employees', 'summaryStats'));
     }
 
     /**
@@ -71,7 +101,7 @@ class CashAdvanceController extends Controller
         $employee = null;
 
         // If employee user, get their employee record
-        if (Auth::user()->hasRole('employee')) {
+        if (Auth::user()->hasRole('Employee')) {
             $employee = Auth::user()->employee;
             if (!$employee) {
                 return redirect()->back()->with('error', 'Employee profile not found.');
@@ -369,7 +399,7 @@ class CashAdvanceController extends Controller
         }
 
         // Additional validation for employee users
-        if (Auth::user()->hasRole('employee')) {
+        if (Auth::user()->hasRole('Employee')) {
             $employee = Auth::user()->employee;
             if (!$employee || $employee->id != $validated['employee_id']) {
                 return redirect()->back()->with('error', 'You can only request cash advances for yourself.');
@@ -442,7 +472,7 @@ class CashAdvanceController extends Controller
     public function show(CashAdvance $cashAdvance)
     {
         // Check if user can view cash advances or their own cash advances
-        if (Auth::user()->hasRole('employee')) {
+        if (Auth::user()->hasRole('Employee')) {
             $employee = Auth::user()->employee;
             if (!$employee || $employee->id !== $cashAdvance->employee_id) {
                 $this->authorize('view cash advances'); // This will fail for employees viewing others'
@@ -623,5 +653,213 @@ class CashAdvanceController extends Controller
         }
 
         return response()->json(['has_active_advance' => false]);
+    }
+
+    /**
+     * Generate cash advance summary
+     */
+    public function generateSummary(Request $request)
+    {
+        $this->authorize('view cash advances');
+
+        $format = $request->input('export', 'pdf');
+
+        // Build query based on filters
+        $query = CashAdvance::with(['employee', 'requestedBy', 'approvedBy']);
+
+        // Apply filters
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', $request->employee_id);
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('requested_date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('requested_date', '<=', $request->date_to);
+        }
+
+        $cashAdvances = $query->orderBy('created_at', 'desc')->get();
+
+        if ($format === 'excel') {
+            return $this->exportCashAdvanceSummaryExcel($cashAdvances);
+        } else {
+            return $this->exportCashAdvanceSummaryPDF($cashAdvances);
+        }
+    }
+
+    /**
+     * Export cash advance summary as PDF
+     */
+    private function exportCashAdvanceSummaryPDF($cashAdvances)
+    {
+        $fileName = 'cash_advance_summary_' . date('Y-m-d_H-i-s') . '.pdf';
+
+        // Calculate totals
+        $totalRequested = $cashAdvances->sum('requested_amount');
+        $totalApproved = $cashAdvances->sum('approved_amount');
+        $totalPaid = $cashAdvances->sum('total_paid');
+        $totalOutstanding = $cashAdvances->sum('outstanding_balance');
+
+        // Create HTML content for PDF
+        $html = '
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+            <title>Cash Advance Summary</title>
+            <style>
+                body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 10px; margin: 20px; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .header h1 { margin: 0; color: #333; font-size: 18px; }
+                .header p { margin: 5px 0; color: #666; font-size: 12px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 9px; }
+                th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+                th { background-color: #f8f9fa; font-weight: bold; }
+                .text-right { text-align: right; }
+                .total-row { background-color: #f8f9fa; font-weight: bold; }
+                .currency { text-align: right; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Cash Advance Summary Report</h1>
+                <p>Generated on: ' . date('F j, Y g:i A') . '</p>
+                <p>Total Cash Advances: ' . $cashAdvances->count() . '</p>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Reference #</th>
+                        <th>Employee</th>
+                        <th>Request Date</th>
+                        <th class="currency">Requested Amount</th>
+                        <th class="currency">Approved Amount</th>
+                        <th class="currency">Total Paid</th>
+                        <th class="currency">Outstanding</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>';
+
+        foreach ($cashAdvances as $cashAdvance) {
+            $html .= '
+                    <tr>
+                        <td>' . $cashAdvance->reference_number . '</td>
+                        <td>' . $cashAdvance->employee->full_name . '</td>
+                        <td>' . $cashAdvance->requested_date->format('M d, Y') . '</td>
+                        <td class="currency">₱' . number_format($cashAdvance->requested_amount, 2) . '</td>
+                        <td class="currency">₱' . number_format($cashAdvance->approved_amount ?: 0, 2) . '</td>
+                        <td class="currency">₱' . number_format($cashAdvance->total_paid, 2) . '</td>
+                        <td class="currency">₱' . number_format($cashAdvance->outstanding_balance, 2) . '</td>
+                        <td>' . ucfirst($cashAdvance->status) . '</td>
+                    </tr>';
+        }
+
+        $html .= '
+                    <tr class="total-row">
+                        <td colspan="3"><strong>TOTALS</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalRequested, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalApproved, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalPaid, 2) . '</strong></td>
+                        <td class="currency"><strong>₱' . number_format($totalOutstanding, 2) . '</strong></td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </body>
+        </html>';
+
+        // Use DomPDF to generate proper PDF
+        try {
+            $pdf = app('dompdf.wrapper');
+            $pdf->loadHTML($html);
+            $pdf->setPaper('A4', 'landscape');
+
+            return $pdf->download($fileName);
+        } catch (\Exception $e) {
+            // Fallback to simple HTML if DomPDF is not available
+            return response($html, 200, [
+                'Content-Type' => 'text/html',
+                'Content-Disposition' => 'attachment; filename="' . str_replace('.pdf', '_report.html', $fileName) . '"',
+            ]);
+        }
+    }
+
+    /**
+     * Export cash advance summary as Excel
+     */
+    private function exportCashAdvanceSummaryExcel($cashAdvances)
+    {
+        $fileName = 'cash_advance_summary_' . date('Y-m-d_H-i-s') . '.csv';
+
+        // Create CSV content with proper headers
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control' => 'max-age=0',
+        ];
+
+        return response()->streamDownload(function () use ($cashAdvances) {
+            $output = fopen('php://output', 'w');
+
+            // Initialize totals
+            $totalRequested = 0;
+            $totalApproved = 0;
+            $totalPaid = 0;
+            $totalOutstanding = 0;
+
+            // Write header row
+            fputcsv($output, [
+                'Reference Number',
+                'Employee',
+                'Request Date',
+                'Requested Amount',
+                'Approved Amount',
+                'Total Paid',
+                'Outstanding Balance',
+                'Status'
+            ]);
+
+            // Write data rows
+            foreach ($cashAdvances as $cashAdvance) {
+                $totalRequested += $cashAdvance->requested_amount;
+                $totalApproved += $cashAdvance->approved_amount ?: 0;
+                $totalPaid += $cashAdvance->total_paid;
+                $totalOutstanding += $cashAdvance->outstanding_balance;
+
+                fputcsv($output, [
+                    $cashAdvance->reference_number,
+                    $cashAdvance->employee->full_name,
+                    $cashAdvance->requested_date->format('M d, Y'),
+                    number_format($cashAdvance->requested_amount, 2),
+                    number_format($cashAdvance->approved_amount ?: 0, 2),
+                    number_format($cashAdvance->total_paid, 2),
+                    number_format($cashAdvance->outstanding_balance, 2),
+                    ucfirst($cashAdvance->status)
+                ]);
+            }
+
+            // Write totals row
+            fputcsv($output, [
+                'TOTALS',
+                '',
+                '',
+                number_format($totalRequested, 2),
+                number_format($totalApproved, 2),
+                number_format($totalPaid, 2),
+                number_format($totalOutstanding, 2),
+                ''
+            ]);
+
+            fclose($output);
+        }, $fileName, $headers);
     }
 }

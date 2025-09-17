@@ -54,6 +54,26 @@
                     </div>
 
                     @if($payrolls->count() > 0)
+                        <!-- Pagination Controls -->
+                        <div class="flex justify-between items-center mb-4 px-6 py-3 bg-gray-50 border-b">
+                            <div class="flex items-center space-x-4">
+                                <div class="flex items-center space-x-2">
+                                    <label for="per_page" class="text-sm font-medium text-gray-700">Records per page:</label>
+                                    <select name="per_page" id="per_page" onchange="updatePerPage(this.value)" 
+                                            class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                        <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
+                                        <option value="15" {{ request('per_page') == 15 ? 'selected' : '' }}>15</option>
+                                        <option value="25" {{ request('per_page') == 25 ? 'selected' : '' }}>25</option>
+                                        <option value="50" {{ request('per_page') == 50 ? 'selected' : '' }}>50</option>
+                                        <option value="100" {{ request('per_page') == 100 ? 'selected' : '' }}>100</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="text-sm text-gray-700">
+                                Showing {{ $payrolls->firstItem() ?? 0 }} to {{ $payrolls->lastItem() ?? 0 }} of {{ $payrolls->total() }} results
+                            </div>
+                        </div>
+
                         <div class="overflow-x-auto">
                             <table class="min-w-full divide-y divide-gray-200">
                                 <thead class="bg-gray-50">
@@ -185,41 +205,7 @@
                 </div>
             </div>
 
-            <!-- Schedule Information -->
-            <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div class="flex">
-                    <div class="flex-shrink-0">
-                        <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
-                        </svg>
-                    </div>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-blue-800">{{ $selectedSchedule->name }} Schedule - Current Period</h3>
-                        <div class="mt-2 text-sm text-blue-700">
-                            <p>This page shows automated payrolls for the current {{ $selectedSchedule->name }} period only. Each payroll represents an individual employee and is generated based on the schedule settings and DTR data.</p>
-                            {{-- @isset($currentPeriod)
-                            <p class="mt-1">
-                                <strong>Current Period:</strong> 
-                                {{ \Carbon\Carbon::parse($currentPeriod['start'])->format('M d') }} - 
-                                {{ \Carbon\Carbon::parse($currentPeriod['end'])->format('M d, Y') }}
-                            </p>
-                            @endisset --}}
-                            <div class="mt-2">
-                                <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
-                                    {{ ucfirst(str_replace('_', ' ', $selectedSchedule->code)) }}
-                                </span>
-                                @isset($currentPeriod)
-                                <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium ml-1">
-                                    Current Period Only
-                                </span>
-                                @endisset
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+  
 
     <!-- Context Menu -->
     <div id="contextMenu" class="fixed bg-white rounded-md shadow-xl border border-gray-200 py-1 z-50 hidden min-w-52 backdrop-blur-sm transition-all duration-150 transform opacity-0 scale-95">
@@ -370,5 +356,13 @@
                 form.submit();
             }
         });
+
+        // Update per page records
+        function updatePerPage(value) {
+            const url = new URL(window.location);
+            url.searchParams.set('per_page', value);
+            url.searchParams.set('page', 1); // Reset to first page
+            window.location.href = url.toString();
+        }
     </script>
 </x-app-layout>

@@ -267,7 +267,6 @@ class RoleAndPermissionSeeder extends Seeder
             'view own leave requests',
             'create own leave requests',
             'view own cash advances',
-            'create own cash advances',
             'view own profile',
             'edit own profile',
             'view own payslips',

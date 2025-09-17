@@ -52,10 +52,11 @@
             <!-- Filters -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg mb-6">
                 <div class="p-6">
-                    <form method="GET" action="{{ route('cash-advances.index') }}" class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                        <div>
+                    <!-- Filter Inputs in 1 Row -->
+                    <div class="flex flex-wrap items-end gap-4 mb-4 w-full">
+                        <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Status</label>
-                            <select name="status" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <select name="status" id="status" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All Statuses</option>
                                 <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
                                 <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
@@ -66,9 +67,9 @@
                         </div>
                         
                         @can('view cash advances')
-                        <div>
+                        <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Employee</label>
-                            <select name="employee_id" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <select name="employee_id" id="employee_id" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All Employees</option>
                                 @foreach($employees as $employee)
                                 <option value="{{ $employee->id }}" {{ request('employee_id') == $employee->id ? 'selected' : '' }}>
@@ -79,33 +80,122 @@
                         </div>
                         @endcan
 
-                        <div>
+                        <div class="flex-1 min-w-[160px]">
                             <label class="block text-sm font-medium text-gray-700">Date From</label>
-                            <input type="date" name="date_from" value="{{ request('date_from') }}" 
-                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <input type="date" name="date_from" id="date_from" value="{{ request('date_from') }}" 
+                                   class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
 
-                        <div>
+                        <div class="flex-1 min-w-[160px]">
                             <label class="block text-sm font-medium text-gray-700">Date To</label>
-                            <input type="date" name="date_to" value="{{ request('date_to') }}" 
-                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                            <input type="date" name="date_to" id="date_to" value="{{ request('date_to') }}" 
+                                   class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
 
-                        <div class="flex items-end space-x-2">
-                            <button type="submit" 
-                                    class="inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
-                                Filter
+                        <div class="flex items-end gap-2">
+                            <button type="button" id="reset_filters" class="inline-flex items-center px-4 h-10 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Reset Filters
                             </button>
-                            <a href="{{ route('cash-advances.index') }}" 
-                               class="inline-flex items-center px-4 py-2 bg-gray-300 border border-transparent rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest hover:bg-gray-400 focus:bg-gray-400 active:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150">
-                                Clear
-                            </a>
+                            <button type="button" id="generate_summary" class="inline-flex items-center px-4 h-10 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                Generate Cash Advance Summary
+                            </button>
                         </div>
-                    </form>
+                    </div>
                 </div>
             </div>
 
-            <!-- Cash Advances List -->
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-4 mb-6">
+                <!-- Total Approved Amount -->
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Approved Amount</dt>
+                                    <dd class="text-lg font-medium text-gray-900">₱{{ number_format($summaryStats['total_approved_amount'] ?? 0, 2) }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Interest Amount -->
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Interest Amount</dt>
+                                    <dd class="text-lg font-medium text-gray-900">₱{{ number_format($summaryStats['total_interest_amount'] ?? 0, 2) }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Paid Amount -->
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Paid Amount</dt>
+                                    <dd class="text-lg font-medium text-gray-900">₱{{ number_format($summaryStats['total_paid_amount'] ?? 0, 2) }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Unpaid Amount -->
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-8 h-8 bg-orange-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Unpaid Amount</dt>
+                                    <dd class="text-lg font-medium text-gray-900">₱{{ number_format($summaryStats['total_unpaid_amount'] ?? 0, 2) }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>            <!-- Cash Advances List -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
                     <div class="flex justify-between items-center mb-4">
@@ -452,7 +542,152 @@
                 form.submit();
             }
         });
+
+        // Live filtering functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const filterSelects = document.querySelectorAll('.cash-advance-filter');
+
+            // Function to apply filters immediately
+            function applyFilters() {
+                const params = new URLSearchParams();
+                const currentParams = new URLSearchParams(window.location.search);
+
+                // Get filter values
+                const status = document.getElementById('status').value;
+                const employeeId = document.getElementById('employee_id')?.value || '';
+                const dateFrom = document.getElementById('date_from').value;
+                const dateTo = document.getElementById('date_to').value;
+
+                // Add filter parameters
+                if (status) params.set('status', status);
+                if (employeeId) params.set('employee_id', employeeId);
+                if (dateFrom) params.set('date_from', dateFrom);
+                if (dateTo) params.set('date_to', dateTo);
+
+                // Copy over existing parameters that aren't filters
+                for (const [key, value] of currentParams) {
+                    if (!['status', 'employee_id', 'date_from', 'date_to', 'page'].includes(key)) {
+                        params.set(key, value);
+                    }
+                }
+
+                // Reload page with new filters
+                window.location.href = `{{ route('cash-advances.index') }}?${params.toString()}`;
+            }
+
+            // Add event listeners for live filtering
+            filterSelects.forEach(select => {
+                select.addEventListener('change', applyFilters);
+            });
+
+            // Reset filters functionality
+            document.getElementById('reset_filters').addEventListener('click', function() {
+                window.location.href = '{{ route("cash-advances.index") }}';
+            });
+
+            // Generate Cash Advance Summary functionality
+            document.getElementById('generate_summary').addEventListener('click', function() {
+                // Show the export modal
+                document.getElementById('exportModal').classList.remove('hidden');
+            });
+
+            // Modal functionality
+            document.getElementById('closeModal').addEventListener('click', function() {
+                document.getElementById('exportModal').classList.add('hidden');
+            });
+
+            // Close modal when clicking outside
+            document.getElementById('exportModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.classList.add('hidden');
+                }
+            });
+
+            // PDF Export
+            document.getElementById('exportPDF').addEventListener('click', function() {
+                generateSummary('pdf');
+                document.getElementById('exportModal').classList.add('hidden');
+            });
+
+            // Excel Export
+            document.getElementById('exportExcel').addEventListener('click', function() {
+                generateSummary('excel');
+                document.getElementById('exportModal').classList.add('hidden');
+            });
+
+            // Function to generate summary
+            function generateSummary(format) {
+                const currentFilters = new URLSearchParams(window.location.search);
+                
+                // Add export format to parameters
+                currentFilters.set('export', format);
+                currentFilters.set('action', 'generate_summary');
+
+                // Create form and submit for file download
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{{ route("cash-advances.generate-summary") }}';
+                
+                // Add CSRF token
+                const csrfToken = document.createElement('input');
+                csrfToken.type = 'hidden';
+                csrfToken.name = '_token';
+                csrfToken.value = '{{ csrf_token() }}';
+                form.appendChild(csrfToken);
+
+                // Add all current filter parameters
+                for (const [key, value] of currentFilters) {
+                    if (key !== 'page') { // Exclude pagination
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = key;
+                        input.value = value;
+                        form.appendChild(input);
+                    }
+                }
+
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+            }
+        });
         @endcan
     </script>
+
+    <!-- Export Format Modal -->
+    <div id="exportModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                    <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mt-4">Choose Export Format</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p class="text-sm text-gray-500">
+                        Select the format for your cash advance summary export:
+                    </p>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="exportPDF" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 mb-3">
+                        <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"></path>
+                        </svg>
+                        Export as PDF
+                    </button>
+                    <button id="exportExcel" class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 mb-3">
+                        <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm4 2a1 1 0 000 2h4a1 1 0 100-2H8zm0 3a1 1 0 000 2h4a1 1 0 100-2H8zm0 3a1 1 0 000 2h4a1 1 0 100-2H8z" clip-rule="evenodd"></path>
+                        </svg>
+                        Export as Excel
+                    </button>
+                    <button id="closeModal" class="px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </x-app-layout>
 

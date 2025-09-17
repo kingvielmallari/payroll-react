@@ -73,6 +73,72 @@
                 </div>
             </div>
 
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-3 mb-6">
+                <!-- Total Net Pay -->
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Net Pay</dt>
+                                    <dd class="text-lg font-medium text-gray-900">₱{{ number_format($summaryStats['total_net_pay'] ?? 0, 2) }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Deductions -->
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-8 h-8 bg-red-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Deductions</dt>
+                                    <dd class="text-lg font-medium text-gray-900">₱{{ number_format($summaryStats['total_deductions'] ?? 0, 2) }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Gross Pay -->
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Gross Pay</dt>
+                                    <dd class="text-lg font-medium text-gray-900">₱{{ number_format($summaryStats['total_gross_pay'] ?? 0, 2) }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Payrolls Table -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
@@ -188,6 +254,26 @@
 
                     <!-- Pagination -->
                     <div class="mt-6">
+                        <div class="flex items-center justify-between mb-5">
+                            <div class="flex items-center space-x-4">
+                                <div class="flex items-center space-x-2">
+                                    <label for="per_page" class="text-sm font-medium text-gray-700">Records per page:</label>
+                                    <select name="per_page" id="per_page" 
+                                            class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
+                                        <option value="25" {{ request('per_page') == 25 ? 'selected' : '' }}>25</option>
+                                        <option value="50" {{ request('per_page') == 50 ? 'selected' : '' }}>50</option>
+                                        <option value="100" {{ request('per_page') == 100 ? 'selected' : '' }}>100</option>
+                                    </select>
+                                </div>
+                                <div class="text-sm text-gray-700">
+                                    Showing {{ $payrolls->firstItem() ?? 0 }} to {{ $payrolls->lastItem() ?? 0 }} of {{ $payrolls->total() }} payrolls
+                                </div>
+                            </div>
+                            <div class="text-sm text-gray-500">
+                                Page {{ $payrolls->currentPage() }} of {{ $payrolls->lastPage() }}
+                            </div>
+                        </div>
                         {{ $payrolls->links() }}
                     </div>
                     @else
@@ -609,6 +695,17 @@
             document.getElementById('reset_filters').addEventListener('click', function() {
                 window.location.href = '{{ route("payrolls.index") }}';
             });
+
+            // Handle per page selection
+            const perPageSelect = document.getElementById('per_page');
+            if (perPageSelect) {
+                perPageSelect.addEventListener('change', function() {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('per_page', this.value);
+                    url.searchParams.delete('page'); // Reset to first page
+                    window.location.href = url.toString();
+                });
+            }
         });
     </script>
 

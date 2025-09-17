@@ -37,6 +37,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Employee Management
     Route::middleware('can:view employees')->group(function () {
+        // Employee summary generation
+        Route::post('employees/generate-summary', [EmployeeController::class, 'generateSummary'])
+            ->name('employees.generate-summary');
+
         Route::resource('employees', EmployeeController::class);
         // API endpoint for deduction calculation during employee creation
         Route::post('employees/calculate-deductions', [EmployeeController::class, 'calculateDeductions'])->name('employees.calculate-deductions');
@@ -89,6 +93,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Reports
         Route::prefix('reports')->name('reports.')->group(function () {
             Route::get('/employer-shares', [ReportsController::class, 'employerShares'])->name('employer-shares');
+            // Employer shares summary generation
+            Route::post('/employer-shares/generate-summary', [ReportsController::class, 'generateEmployerSharesSummary'])
+                ->name('employer-shares.generate-summary');
         });
     });
 
@@ -200,6 +207,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // AJAX route for checking employee active cash advances
         Route::post('cash-advances/check-active', [CashAdvanceController::class, 'checkEmployeeActiveAdvances'])
             ->name('cash-advances.check-active');
+
+        // Cash advance summary generation
+        Route::post('cash-advances/generate-summary', [CashAdvanceController::class, 'generateSummary'])
+            ->name('cash-advances.generate-summary')
+            ->middleware('can:view cash advances');
 
         Route::resource('cash-advances', CashAdvanceController::class);
 
@@ -338,6 +350,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('can:view own time logs')->group(function () {
         Route::get('my-time-logs', [TimeLogController::class, 'myTimeLogs'])->name('my-time-logs');
         Route::post('my-time-logs', [TimeLogController::class, 'storeMyTimeLog'])->name('my-time-logs.store');
+    });
+
+    // Employee Payslips
+    Route::middleware('can:view own payslips')->group(function () {
+        Route::get('my-payslips', [PayrollController::class, 'myPayslips'])->name('payrolls.my-payslips');
+    });
+
+    // Leave Requests
+    Route::middleware('can:view own leave requests')->group(function () {
+        Route::resource('leave-requests', \App\Http\Controllers\LeaveRequestController::class);
+    });
+
+    // User Management (System Administrator only)
+    Route::middleware('role:System Administrator')->group(function () {
+        // User summary generation
+        Route::post('users/generate-summary', [\App\Http\Controllers\UserController::class, 'generateSummary'])
+            ->name('users.generate-summary');
+
+        Route::resource('users', \App\Http\Controllers\UserController::class);
     });
 });
 
