@@ -1302,9 +1302,9 @@ class PayrollController extends Controller
             \Carbon\Carbon::parse($periodEnd)
         );
 
-        $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal, $payFrequency, $periodStart, $periodEnd);
+        // $deductions = $this->calculateDeductions($employee, $totalGrossPay, $taxableIncomeForDeductions, $overtimePay, $allowancesTotal, $bonusesTotal, $payFrequency, $periodStart, $periodEnd);
 
-        $netPay = $totalGrossPay - $deductions['total'] - $lateDeductions - $undertimeDeductions - $cashAdvanceDeductions;
+        $netPay = $totalGrossPay - $lateDeductions - $undertimeDeductions - $cashAdvanceDeductions;
 
         return [
             'basic_salary' => $basicSalary,  // Employee's base salary
@@ -1317,13 +1317,13 @@ class PayrollController extends Controller
             'bonuses' => $bonusesTotal,
             'bonuses_details' => $bonusesData['details'],
             'gross_pay' => $totalGrossPay,
-            'tax_deduction' => $deductions['tax'],
-            'sss_deduction' => $deductions['sss'],
-            'philhealth_deduction' => $deductions['philhealth'],
-            'pagibig_deduction' => $deductions['pagibig'],
-            'other_deductions' => $deductions['other'],
-            'deductions_details' => $deductions['deductions_details'],
-            'total_deductions' => $deductions['total'] + $lateDeductions + $undertimeDeductions + $cashAdvanceDeductions,
+            // 'tax_deduction' => $deductions['tax'],
+            // 'sss_deduction' => $deductions['sss'],
+            // 'philhealth_deduction' => $deductions['philhealth'],
+            // 'pagibig_deduction' => $deductions['pagibig'],
+            // 'other_deductions' => $deductions['other'],
+            // 'deductions_details' => $deductions['deductions_details'],
+            // 'total_deductions' => $deductions['total'] + $lateDeductions + $undertimeDeductions + $cashAdvanceDeductions,
             'net_pay' => $netPay,
             'hours_worked' => $hoursWorked,
             'days_worked' => $daysWorked,

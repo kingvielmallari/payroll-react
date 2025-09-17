@@ -349,14 +349,14 @@ class EmployeeController extends Controller
         }
     }
 
-    /**
+    /**$deductions = $this->calcu
      * Display the specified resource.
      */
     public function show(Employee $employee)
     {
         $this->authorize('view employees');
 
-        $employee->load(['user.roles', 'department', 'position', 'timeSchedule', 'daySchedule', 'timeLogs', 'payrollDetails', 'deductions', 'leaveRequests']);
+        $employee->load(['user.roles', 'department', 'position', 'timeSchedule', 'daySchedule', 'timeLogs', 'payrollDetails']);
 
         return view('employees.show', compact('employee'));
     }
