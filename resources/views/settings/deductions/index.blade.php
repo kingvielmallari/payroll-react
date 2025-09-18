@@ -185,7 +185,7 @@ function showDeductionContextMenu(event, deductionId, deductionName, deductionTy
         toggleUrl: `{{ route('settings.deductions.index') }}/${deductionId}/toggle`,
         deleteUrl: `{{ route('settings.deductions.index') }}/${deductionId}`,
         isActive: isActive,
-        canDelete: true,
+        canDelete: !isActive, // Only allow delete if inactive
         deleteConfirmMessage: 'Are you sure you want to delete this deduction?'
     };
     

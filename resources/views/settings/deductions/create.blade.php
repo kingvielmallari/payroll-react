@@ -89,6 +89,39 @@
                 @enderror
             </div>
 
+            <!-- Frequency and Distribution Method -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <div>
+                    <label for="frequency" class="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
+                    <select name="frequency" id="frequency" 
+                            class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+                        <option value="">Select Frequency</option>
+                        <option value="per_payroll" {{ old('frequency') == 'per_payroll' ? 'selected' : '' }}>Per Payroll</option>
+                        <option value="monthly" {{ old('frequency') == 'monthly' ? 'selected' : '' }}>Monthly</option>
+                        <option value="quarterly" {{ old('frequency') == 'quarterly' ? 'selected' : '' }}>Quarterly</option>
+                        <option value="annually" {{ old('frequency') == 'annually' ? 'selected' : '' }}>Annually</option>
+                    </select>
+                    @error('frequency')
+                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div id="distribution_method_field">
+                    <label for="distribution_method" class="block text-sm font-medium text-gray-700 mb-2">Distribution Method</label>
+                    <select name="distribution_method" id="distribution_method" 
+                            class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+                        <option value="">Select Distribution Method</option>
+                        <option value="first_payroll" {{ old('distribution_method') == 'first_payroll' ? 'selected' : '' }}>First Payroll Only</option>
+                        <option value="last_payroll" {{ old('distribution_method') == 'last_payroll' ? 'selected' : '' }}>Last Payroll Only</option>
+                        <option value="equally_distributed" {{ old('distribution_method') == 'equally_distributed' ? 'selected' : '' }}>Equally Distributed</option>
+                    </select>
+                    @error('distribution_method')
+                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                    <p class="mt-1 text-xs text-gray-500">Choose how the amount is distributed across payrolls within the frequency period.</p>
+                </div>
+            </div>
+
             <!-- Hidden Tax Table Type field -->
             <input type="hidden" name="tax_table_type" id="hidden_tax_table_type" value="{{ old('tax_table_type') }}">
 
@@ -208,51 +241,7 @@
                 <p class="mt-1 text-xs text-gray-500">Choose which employees this deduction/tax setting applies to based on their benefit status.</p>
             </div>
 
-            <!-- Deduction Distribution Settings -->
-            <div class="mt-6 p-4 border border-gray-200 rounded-md bg-gray-50">
-                <h3 class="text-lg font-medium text-gray-900 mb-1">Deduction Distribution</h3>
-                <p class="text-sm text-gray-600 mb-4">Select how this deduction should be applied across payrolls for all pay frequencies.</p>
-                
-                <div class="mb-4">
-                    <label for="distribution_method" class="block text-sm font-medium text-gray-700 mb-2">
-                        Distribution Method - Select when to deduct:
-                    </label>
-                    <select name="distribution_method" id="distribution_method" 
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        <option value="" {{ old('distribution_method') === null || old('distribution_method') === '' ? 'selected' : '' }}>
-                            All Payrolls (deduct full amount on every payroll)
-                        </option>
-                        <option value="first_payroll" {{ old('distribution_method') === 'first_payroll' ? 'selected' : '' }}>
-                            1st Payroll (full amount on first payroll of month, ₱0.00 on others)
-                        </option>
-                        <option value="last_payroll" {{ old('distribution_method') === 'last_payroll' ? 'selected' : '' }}>
-                            2nd Payroll (full amount on last payroll of month, ₱0.00 on others)
-                        </option>
-                        <option value="distribute_equally" {{ old('distribution_method') === 'distribute_equally' ? 'selected' : '' }}>
-                            Distribute Equally (split amount evenly across all payrolls in month)
-                        </option>
-                    </select>
-                </div>
 
-                <!-- Distribution Method Descriptions -->
-                <div class="text-xs text-gray-600">
-                    <strong>All Payrolls:</strong> Uses existing calculation logic - deducts the full computed amount on every generated payroll<br>
-                    <strong>1st Payroll:</strong> For semi-monthly, weekly, or daily employees - deducts full amount only on first payroll of the month<br>
-                    <strong>2nd Payroll:</strong> For semi-monthly, weekly, or daily employees - deducts full amount only on last payroll of the month<br>
-                    <strong>Distribute Equally:</strong> For semi-monthly, weekly, or daily employees - splits the monthly deduction amount evenly across all payrolls in the month
-                </div>
-
-                <!-- Examples -->
-                <div class="mt-4 p-3 bg-blue-50 rounded-md">
-                    <p class="text-sm text-blue-800 font-medium">Examples for SSS ₱800.00 monthly deduction:</p>
-                    <ul class="text-xs text-blue-700 mt-1 space-y-1">
-                        <li><strong>All Payrolls:</strong> Every payroll: ₱800.00 (existing behavior)</li>
-                        <li><strong>1st Payroll:</strong> Semi-monthly 1st cutoff: ₱800.00, 2nd cutoff: ₱0.00</li>
-                        <li><strong>2nd Payroll:</strong> Semi-monthly 1st cutoff: ₱0.00, 2nd cutoff: ₱800.00</li>
-                        <li><strong>Distribute Equally:</strong> Semi-monthly 1st cutoff: ₱400.00, 2nd cutoff: ₱400.00</li>
-                    </ul>
-                </div>
-            </div>
                     </ul>
                 </div>
             </div>
@@ -725,6 +714,18 @@ function filterCalculationTypeOptions() {
 document.getElementById('name').addEventListener('input', filterCalculationTypeOptions);
 document.getElementById('name').addEventListener('change', filterCalculationTypeOptions);
 
+// Handle frequency change to show/hide distribution method
+document.getElementById('frequency').addEventListener('change', function() {
+    const frequency = this.value;
+    const distributionField = document.getElementById('distribution_method_field');
+    
+    if (frequency === 'per_payroll') {
+        distributionField.style.display = 'none';
+    } else {
+        distributionField.style.display = 'block';
+    }
+});
+
 // Setup pay basis select dropdown handler
 document.addEventListener('DOMContentLoaded', function() {
     const payBasisSelect = document.getElementById('pay_basis');
@@ -735,6 +736,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize hidden fields based on current selection
     if (payBasisSelect.value) {
         updatePayBasisHiddenFields(payBasisSelect.value);
+    }
+    
+    // Trigger frequency change event to hide/show distribution method on page load
+    const frequencySelect = document.getElementById('frequency');
+    if (frequencySelect.value) {
+        frequencySelect.dispatchEvent(new Event('change'));
     }
     
     // Setup form submission handler

@@ -17,13 +17,13 @@
     @forelse($settings as $type => $typeSettings)
         <div class="bg-white rounded-lg shadow overflow-hidden mb-6">
             <div class="bg-gray-50 px-6 py-3">
-                <h3 class="text-lg font-medium text-gray-900 capitalize">{{ $type }}s</h3>
+                <h3 class="text-lg font-medium text-gray-900 capitalize">{{ $type }}</h3>
             </div>
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Frequency</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calculation</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -33,14 +33,21 @@
                     @foreach($typeSettings as $setting)
                         <tr class="hover:bg-gray-50 cursor-pointer {{ !$setting->is_active ? 'opacity-50 bg-gray-50' : '' }}"
                             data-context-menu
-                            oncontextmenu="showAllowanceContextMenu(event, {{ $setting->id }}, {{ json_encode($setting->name) }}, {{ json_encode($setting->category) }}, {{ $setting->is_active ? 'true' : 'false' }})">
+                            oncontextmenu="showAllowanceContextMenu(event, {{ $setting->id }}, {{ json_encode($setting->name) }}, {{ $setting->is_active ? 'true' : 'false' }})">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm font-medium {{ !$setting->is_active ? 'text-gray-400' : 'text-gray-900' }}">{{ $setting->name }}</div>
-                                <div class="text-xs {{ !$setting->is_active ? 'text-gray-300' : 'text-gray-500' }}">{{ $setting->description ?? 'No description' }}</div>
+                                <div class="text-xs {{ !$setting->is_active ? 'text-gray-300' : 'text-gray-500' }}">
+                                    @if($setting->requires_perfect_attendance)
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            Perfect Attendance Required
+                                        </span>
+                                    @endif
+                                </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm {{ !$setting->is_active ? 'text-gray-400' : 'text-gray-500' }} capitalize">{{ str_replace('_', ' ', $setting->category) }}</div>
-                                <div class="text-xs {{ !$setting->is_active ? 'text-gray-300' : 'text-gray-400' }}">{{ ucfirst(str_replace('_', ' ', $setting->frequency)) }}</div>
+                                <div class="text-sm {{ !$setting->is_active ? 'text-gray-400' : 'text-gray-900' }}">
+                                    {{ ucfirst(str_replace('_', ' ', $setting->frequency)) }}
+                                </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm {{ !$setting->is_active ? 'text-gray-400' : 'text-gray-500' }} capitalize">{{ str_replace('_', ' ', $setting->calculation_type) }}</div>
@@ -100,11 +107,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-function showAllowanceContextMenu(event, allowanceId, allowanceName, category, isActive) {
+function showAllowanceContextMenu(event, allowanceId, allowanceName, isActive) {
     const config = {
         id: allowanceId,
         name: allowanceName,
-        subtitle: category.replace('_', ' ').toUpperCase(),
+        subtitle: 'ALLOWANCE/BONUS',
         viewText: 'View Allowance',
         editText: 'Edit Allowance',
         deleteText: 'Delete Allowance',
@@ -113,7 +120,7 @@ function showAllowanceContextMenu(event, allowanceId, allowanceName, category, i
         toggleUrl: `{{ route('settings.allowances.index') }}/${allowanceId}/toggle`,
         deleteUrl: `{{ route('settings.allowances.index') }}/${allowanceId}`,
         isActive: isActive,
-        canDelete: true,
+        canDelete: !isActive, // Only allow delete if inactive
         deleteConfirmMessage: 'Are you sure you want to delete this allowance setting?'
     };
     

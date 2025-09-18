@@ -29,22 +29,9 @@
                         <option value="">Select Type</option>
                         <option value="allowance" {{ old('type', $allowance->type) == 'allowance' ? 'selected' : '' }}>Allowance</option>
                         <option value="bonus" {{ old('type', $allowance->type) == 'bonus' ? 'selected' : '' }}>Bonus</option>
-                        <option value="benefit" {{ old('type', $allowance->type) == 'benefit' ? 'selected' : '' }}>Benefit</option>
+                        <option value="incentives" {{ old('type', $allowance->type) == 'incentives' ? 'selected' : '' }}>Incentives</option>
                     </select>
                     @error('type')
-                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="category" class="block text-sm font-medium text-gray-700">Category</label>
-                    <select name="category" id="category" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
-                        <option value="">Select Category</option>
-                        <option value="regular" {{ old('category', $allowance->category) == 'regular' ? 'selected' : '' }}>Regular</option>
-                        <option value="conditional" {{ old('category', $allowance->category) == 'conditional' ? 'selected' : '' }}>Conditional</option>
-                        <option value="one_time" {{ old('category', $allowance->category) == 'one_time' ? 'selected' : '' }}>One Time</option>
-                    </select>
-                    @error('category')
                         <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                     @enderror
                 </div>
@@ -61,14 +48,33 @@
                         <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                     @enderror
                 </div>
-            </div>
 
-            <div>
-                <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
-                <textarea name="description" id="description" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">{{ old('description', $allowance->description) }}</textarea>
-                @error('description')
-                    <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-                @enderror
+                <div>
+                    <label for="frequency" class="block text-sm font-medium text-gray-700">Frequency</label>
+                    <select name="frequency" id="frequency" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+                        <option value="">Select Frequency</option>
+                        <option value="per_payroll" {{ old('frequency', $allowance->frequency) == 'per_payroll' ? 'selected' : '' }}>Per Payroll</option>
+                        <option value="monthly" {{ old('frequency', $allowance->frequency) == 'monthly' ? 'selected' : '' }}>Monthly</option>
+                        <option value="quarterly" {{ old('frequency', $allowance->frequency) == 'quarterly' ? 'selected' : '' }}>Quarterly</option>
+                        <option value="annually" {{ old('frequency', $allowance->frequency) == 'annually' ? 'selected' : '' }}>Annually</option>
+                    </select>
+                    @error('frequency')
+                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div id="distribution_method_field">
+                    <label for="distribution_method" class="block text-sm font-medium text-gray-700">Distribution Method</label>
+                    <select name="distribution_method" id="distribution_method" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <option value="first_payroll" {{ old('distribution_method', $allowance->distribution_method) == 'first_payroll' ? 'selected' : '' }}>First Payroll Only</option>
+                        <option value="last_payroll" {{ old('distribution_method', $allowance->distribution_method) == 'last_payroll' ? 'selected' : '' }}>Last Payroll Only</option>
+                        <option value="equally_distributed" {{ old('distribution_method', $allowance->distribution_method) == 'equally_distributed' ? 'selected' : '' }}>Equally Distributed</option>
+                    </select>
+                    @error('distribution_method')
+                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                    <p class="mt-1 text-xs text-gray-500">Choose how the amount is distributed across payrolls within the frequency period.</p>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -100,56 +106,27 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label for="frequency" class="block text-sm font-medium text-gray-700">Frequency</label>
-                    <select name="frequency" id="frequency" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
-                        <option value="">Select Frequency</option>
-                        <option value="daily" {{ old('frequency', $allowance->frequency) == 'daily' ? 'selected' : '' }}>Daily</option>
-                        <option value="per_payroll" {{ old('frequency', $allowance->frequency) == 'per_payroll' ? 'selected' : '' }}>Per Payroll</option>
-                        <option value="monthly" {{ old('frequency', $allowance->frequency) == 'monthly' ? 'selected' : '' }}>Monthly</option>
-                        <option value="quarterly" {{ old('frequency', $allowance->frequency) == 'quarterly' ? 'selected' : '' }}>Quarterly</option>
-                        <option value="annually" {{ old('frequency', $allowance->frequency) == 'annually' ? 'selected' : '' }}>Annually</option>
-                    </select>
-                    @error('frequency')
-                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
+            <!-- Perfect Attendance Option -->
+            <div class="mt-6" id="perfect-attendance-section">
+                <div class="flex items-center">
+                    <input type="hidden" name="requires_perfect_attendance" value="0">
+                    <input type="checkbox" name="requires_perfect_attendance" id="requires_perfect_attendance" 
+                           value="1" {{ old('requires_perfect_attendance', $allowance->requires_perfect_attendance) ? 'checked' : '' }}
+                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                    <label for="requires_perfect_attendance" class="ml-2 block text-sm text-gray-900">
+                        Apply to employees with perfect attendance only
+                    </label>
                 </div>
-
-                <div>
-                    <label for="sort_order" class="block text-sm font-medium text-gray-700">Sort Order</label>
-                    <input type="number" name="sort_order" id="sort_order" min="0" value="{{ old('sort_order', $allowance->sort_order) }}" 
-                           class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    @error('sort_order')
-                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label for="minimum_amount" class="block text-sm font-medium text-gray-700">Minimum Amount (₱)</label>
-                    <input type="number" name="minimum_amount" id="minimum_amount" step="0.01" min="0" value="{{ old('minimum_amount', $allowance->minimum_amount) }}" 
-                           class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    @error('minimum_amount')
-                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="maximum_amount" class="block text-sm font-medium text-gray-700">Maximum Amount (₱)</label>
-                    <input type="number" name="maximum_amount" id="maximum_amount" step="0.01" min="0" value="{{ old('maximum_amount', $allowance->maximum_amount) }}" 
-                           class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    @error('maximum_amount')
-                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
+                <p class="mt-1 text-xs text-gray-500">When checked, this allowance/bonus will only be given to employees who have perfect attendance for the pay period.</p>
+                @error('requires_perfect_attendance')
+                    <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                @enderror
             </div>
 
             <div class="space-y-4">
                 <h3 class="text-lg font-medium text-gray-900">Application Settings</h3>
                 
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="flex items-center">
                         <input type="hidden" name="is_taxable" value="0">
                         <input type="checkbox" name="is_taxable" id="is_taxable" value="1" {{ old('is_taxable', $allowance->is_taxable) ? 'checked' : '' }} 
@@ -158,39 +135,15 @@
                     </div>
 
                     <div class="flex items-center">
-                        <input type="hidden" name="apply_to_regular_days" value="0">
-                        <input type="checkbox" name="apply_to_regular_days" id="apply_to_regular_days" value="1" {{ old('apply_to_regular_days', $allowance->apply_to_regular_days) ? 'checked' : '' }} 
-                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <label for="apply_to_regular_days" class="ml-2 block text-sm text-gray-900">Regular Days</label>
-                    </div>
-
-                    <div class="flex items-center">
-                        <input type="hidden" name="apply_to_overtime" value="0">
-                        <input type="checkbox" name="apply_to_overtime" id="apply_to_overtime" value="1" {{ old('apply_to_overtime', $allowance->apply_to_overtime) ? 'checked' : '' }} 
-                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <label for="apply_to_overtime" class="ml-2 block text-sm text-gray-900">Overtime</label>
-                    </div>
-
-                    <div class="flex items-center">
-                        <input type="hidden" name="apply_to_holidays" value="0">
-                        <input type="checkbox" name="apply_to_holidays" id="apply_to_holidays" value="1" {{ old('apply_to_holidays', $allowance->apply_to_holidays) ? 'checked' : '' }} 
-                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <label for="apply_to_holidays" class="ml-2 block text-sm text-gray-900">Holidays</label>
-                    </div>
-
-                    <div class="flex items-center">
-                        <input type="hidden" name="apply_to_rest_days" value="0">
-                        <input type="checkbox" name="apply_to_rest_days" id="apply_to_rest_days" value="1" {{ old('apply_to_rest_days', $allowance->apply_to_rest_days) ? 'checked' : '' }} 
-                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <label for="apply_to_rest_days" class="ml-2 block text-sm text-gray-900">Rest Days</label>
-                    </div>
-
-                    <div class="flex items-center">
                         <input type="hidden" name="is_active" value="0">
                         <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', $allowance->is_active) ? 'checked' : '' }} 
                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
                         <label for="is_active" class="ml-2 block text-sm text-gray-900">Active</label>
                     </div>
+                </div>
+                
+                <div class="mt-4 text-sm text-gray-600">
+                    <p><strong>Taxable:</strong> When checked, this allowance/bonus will be included in taxable income calculations for deductions.</p>
                 </div>
             </div>
 
@@ -245,11 +198,28 @@ document.getElementById('calculation_type').addEventListener('change', function(
     }
 });
 
-// Trigger change event on page load to show the correct field
+// Handle frequency change to show/hide distribution method
+document.getElementById('frequency').addEventListener('change', function() {
+    const frequency = this.value;
+    const distributionField = document.getElementById('distribution_method_field');
+    
+    if (frequency === 'per_payroll') {
+        distributionField.style.display = 'none';
+    } else {
+        distributionField.style.display = 'block';
+    }
+});
+
+// Trigger change events on page load to show the correct fields
 document.addEventListener('DOMContentLoaded', function() {
     const calculationType = document.getElementById('calculation_type').value;
     if (calculationType) {
         document.getElementById('calculation_type').dispatchEvent(new Event('change'));
+    }
+    
+    const frequency = document.getElementById('frequency').value;
+    if (frequency) {
+        document.getElementById('frequency').dispatchEvent(new Event('change'));
     }
 });
 </script>

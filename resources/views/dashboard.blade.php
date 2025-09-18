@@ -249,7 +249,7 @@
                 @endisset
             @endif
 
-            <!-- Department Statistics (Hidden for Employee role) -->
+            {{-- <!-- Department Statistics (Hidden for Employee role) -->
             @if(!Auth::user()->hasRole('Employee'))
                 @if(count($dashboardData['department_stats'] ?? []) > 0)
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg mb-6">
@@ -309,10 +309,10 @@
                     </div>
                 </div>
                 @endif
-            @endif
+            @endif --}}
 
             <!-- Fallback Statistics Cards (Only for non-employee roles) -->
-            @if(!Auth::user()->hasRole('Employee'))
+            {{-- @if(!Auth::user()->hasRole('Employee'))
                 @isset($stats)
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                             @foreach($stats as $key => $value)
@@ -376,7 +376,7 @@
                             @endforeach
                         </div>
                     @endisset
-                @endif
+                @endif --}}
 
             <!-- Performance Overview -->
             @isset($topPerformers)

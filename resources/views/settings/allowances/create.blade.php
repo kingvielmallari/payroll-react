@@ -28,22 +28,9 @@
                         <option value="">Select Type</option>
                         <option value="allowance" {{ old('type') == 'allowance' ? 'selected' : '' }}>Allowance</option>
                         <option value="bonus" {{ old('type') == 'bonus' ? 'selected' : '' }}>Bonus</option>
-                        <option value="benefit" {{ old('type') == 'benefit' ? 'selected' : '' }}>Benefit</option>
+                        <option value="incentives" {{ old('type') == 'incentives' ? 'selected' : '' }}>Incentives</option>
                     </select>
                     @error('type')
-                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="category" class="block text-sm font-medium text-gray-700">Category</label>
-                    <select name="category" id="category" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
-                        <option value="">Select Category</option>
-                        <option value="regular" {{ old('category') == 'regular' ? 'selected' : '' }}>Regular</option>
-                        <option value="conditional" {{ old('category') == 'conditional' ? 'selected' : '' }}>Conditional</option>
-                        <option value="one_time" {{ old('category') == 'one_time' ? 'selected' : '' }}>One Time</option>
-                    </select>
-                    @error('category')
                         <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                     @enderror
                 </div>
@@ -60,14 +47,33 @@
                         <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                     @enderror
                 </div>
-            </div>
 
-            <div>
-                <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
-                <textarea name="description" id="description" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">{{ old('description') }}</textarea>
-                @error('description')
-                    <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-                @enderror
+                <div>
+                    <label for="frequency" class="block text-sm font-medium text-gray-700">Frequency</label>
+                    <select name="frequency" id="frequency" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+                        <option value="">Select Frequency</option>
+                        <option value="per_payroll" {{ old('frequency') == 'per_payroll' ? 'selected' : '' }}>Per Payroll</option>
+                        <option value="monthly" {{ old('frequency') == 'monthly' ? 'selected' : '' }}>Monthly</option>
+                        <option value="quarterly" {{ old('frequency') == 'quarterly' ? 'selected' : '' }}>Quarterly</option>
+                        <option value="annually" {{ old('frequency') == 'annually' ? 'selected' : '' }}>Annually</option>
+                    </select>
+                    @error('frequency')
+                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <div id="distribution_method_field">
+                    <label for="distribution_method" class="block text-sm font-medium text-gray-700">Distribution Method</label>
+                    <select name="distribution_method" id="distribution_method" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <option value="first_payroll" {{ old('distribution_method') == 'first_payroll' ? 'selected' : '' }}>First Payroll Only</option>
+                        <option value="last_payroll" {{ old('distribution_method') == 'last_payroll' ? 'selected' : '' }}>Last Payroll Only</option>
+                        <option value="equally_distributed" {{ old('distribution_method') == 'equally_distributed' ? 'selected' : '' }}>Equally Distributed</option>
+                    </select>
+                    @error('distribution_method')
+                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                    <p class="mt-1 text-xs text-gray-500">Choose how the amount is distributed across payrolls within the frequency period.</p>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -99,11 +105,28 @@
                 </div>
             </div>
 
+            <!-- Perfect Attendance Option -->
+            <div class="mt-6" id="perfect-attendance-section">
+                <div class="flex items-center">
+                    <input type="hidden" name="requires_perfect_attendance" value="0">
+                    <input type="checkbox" name="requires_perfect_attendance" id="requires_perfect_attendance" 
+                           value="1" {{ old('requires_perfect_attendance') ? 'checked' : '' }}
+                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                    <label for="requires_perfect_attendance" class="ml-2 block text-sm text-gray-900">
+                        Apply to employees with perfect attendance only
+                    </label>
+                </div>
+                <p class="mt-1 text-xs text-gray-500">When checked, this allowance/bonus will only be given to employees who have perfect attendance for the pay period.</p>
+                @error('requires_perfect_attendance')
+                    <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                @enderror
+            </div>
+
             <!-- Application Settings -->
             <div class="mt-6 p-4 border border-gray-200 rounded-lg">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Application Settings</h3>
                 
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="flex items-center">
                         <input type="hidden" name="is_taxable" value="0">
                         <input type="checkbox" name="is_taxable" id="is_taxable" value="1" {{ old('is_taxable', true) ? 'checked' : '' }} 
@@ -112,45 +135,16 @@
                     </div>
 
                     <div class="flex items-center">
-                        <input type="hidden" name="apply_to_regular_days" value="0">
-                        <input type="checkbox" name="apply_to_regular_days" id="apply_to_regular_days" value="1" {{ old('apply_to_regular_days', true) ? 'checked' : '' }} 
+                        <input type="hidden" name="is_active" value="0">
+                        <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', 1) ? 'checked' : '' }} 
                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <label for="apply_to_regular_days" class="ml-2 block text-sm text-gray-900">Regular Days</label>
-                    </div>
-
-                    <div class="flex items-center">
-                        <input type="hidden" name="apply_to_overtime" value="0">
-                        <input type="checkbox" name="apply_to_overtime" id="apply_to_overtime" value="1" {{ old('apply_to_overtime', false) ? 'checked' : '' }} 
-                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <label for="apply_to_overtime" class="ml-2 block text-sm text-gray-900">Overtime</label>
-                    </div>
-
-                    <div class="flex items-center">
-                        <input type="hidden" name="apply_to_holidays" value="0">
-                        <input type="checkbox" name="apply_to_holidays" id="apply_to_holidays" value="1" {{ old('apply_to_holidays', true) ? 'checked' : '' }} 
-                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <label for="apply_to_holidays" class="ml-2 block text-sm text-gray-900">Holidays</label>
-                    </div>
-
-                    <div class="flex items-center">
-                        <input type="hidden" name="apply_to_rest_days" value="0">
-                        <input type="checkbox" name="apply_to_rest_days" id="apply_to_rest_days" value="1" {{ old('apply_to_rest_days', true) ? 'checked' : '' }} 
-                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <label for="apply_to_rest_days" class="ml-2 block text-sm text-gray-900">Rest Days</label>
+                        <label for="is_active" class="ml-2 block text-sm text-gray-900">Active</label>
                     </div>
                 </div>
                 
                 <div class="mt-4 text-sm text-gray-600">
                     <p><strong>Taxable:</strong> When checked, this allowance/bonus will be included in taxable income calculations for deductions.</p>
-                    <p><strong>Day Type Application:</strong> Choose which types of working days this allowance/bonus applies to.</p>
                 </div>
-            </div>
-
-            <div class="flex items-center">
-                <input type="hidden" name="is_active" value="0">
-                <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', 1) ? 'checked' : '' }} 
-                       class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                <label for="is_active" class="ml-2 block text-sm text-gray-900">Active</label>
             </div>
 
             <div class="mt-6">
@@ -204,11 +198,28 @@ document.getElementById('calculation_type').addEventListener('change', function(
     }
 });
 
-// Trigger change event on page load to show the correct field
+// Handle frequency change to show/hide distribution method
+document.getElementById('frequency').addEventListener('change', function() {
+    const frequency = this.value;
+    const distributionField = document.getElementById('distribution_method_field');
+    
+    if (frequency === 'per_payroll') {
+        distributionField.style.display = 'none';
+    } else {
+        distributionField.style.display = 'block';
+    }
+});
+
+// Trigger change events on page load to show the correct fields
 document.addEventListener('DOMContentLoaded', function() {
     const calculationType = document.getElementById('calculation_type').value;
     if (calculationType) {
         document.getElementById('calculation_type').dispatchEvent(new Event('change'));
+    }
+    
+    const frequency = document.getElementById('frequency').value;
+    if (frequency) {
+        document.getElementById('frequency').dispatchEvent(new Event('change'));
     }
 });
 </script>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\AllowanceBonusSetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class AllowanceBonusSettingController extends Controller
 {
@@ -39,28 +40,31 @@ class AllowanceBonusSettingController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:50|unique:allowance_bonus_settings,code',
-            'description' => 'nullable|string',
-            'type' => 'required|in:allowance,bonus,benefit',
-            'category' => 'required|in:regular,conditional,one_time',
+            'type' => 'required|in:allowance,bonus,incentives',
             'calculation_type' => 'required|in:percentage,fixed_amount,daily_rate_multiplier',
-            'rate_percentage' => 'nullable|numeric|min:0|max:100',
-            'fixed_amount' => 'nullable|numeric|min:0',
-            'multiplier' => 'nullable|numeric|min:0',
+            'rate_percentage' => 'nullable|numeric|min:0|max:100|required_if:calculation_type,percentage',
+            'fixed_amount' => 'nullable|numeric|min:0|required_if:calculation_type,fixed_amount',
+            'daily_rate_multiplier' => 'nullable|numeric|min:0|required_if:calculation_type,daily_rate_multiplier',
             'is_taxable' => 'boolean',
-            'apply_to_regular_days' => 'boolean',
-            'apply_to_overtime' => 'boolean',
-            'apply_to_holidays' => 'boolean',
-            'apply_to_rest_days' => 'boolean',
-            'frequency' => 'required|in:daily,per_payroll,monthly,quarterly,annually',
-            'conditions' => 'nullable|array',
-            'minimum_amount' => 'nullable|numeric|min:0',
-            'maximum_amount' => 'nullable|numeric|min:0',
-            'max_days_per_period' => 'nullable|integer|min:1',
+            'frequency' => 'required|in:per_payroll,monthly,quarterly,annually',
+            'distribution_method' => 'required|in:first_payroll,last_payroll,equally_distributed',
             'is_active' => 'boolean',
-            'sort_order' => 'nullable|integer',
             'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
+            'requires_perfect_attendance' => 'boolean',
         ]);
+
+        // Auto-generate code from name
+        $baseCode = Str::slug($validated['name'], '_');
+        $code = $baseCode;
+        $counter = 1;
+
+        // Ensure unique code
+        while (AllowanceBonusSetting::where('code', $code)->exists()) {
+            $code = $baseCode . '_' . $counter;
+            $counter++;
+        }
+
+        $validated['code'] = $code;
 
         AllowanceBonusSetting::create($validated);
 
@@ -94,26 +98,17 @@ class AllowanceBonusSettingController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'type' => 'required|in:allowance,bonus,benefit',
-            'category' => 'required|in:regular,conditional,one_time',
+            'type' => 'required|in:allowance,bonus,incentives',
             'calculation_type' => 'required|in:percentage,fixed_amount,daily_rate_multiplier',
-            'rate_percentage' => 'nullable|numeric|min:0|max:100',
-            'fixed_amount' => 'nullable|numeric|min:0',
-            'multiplier' => 'nullable|numeric|min:0',
+            'rate_percentage' => 'nullable|numeric|min:0|max:100|required_if:calculation_type,percentage',
+            'fixed_amount' => 'nullable|numeric|min:0|required_if:calculation_type,fixed_amount',
+            'multiplier' => 'nullable|numeric|min:0|required_if:calculation_type,daily_rate_multiplier',
             'is_taxable' => 'boolean',
-            'apply_to_regular_days' => 'boolean',
-            'apply_to_overtime' => 'boolean',
-            'apply_to_holidays' => 'boolean',
-            'apply_to_rest_days' => 'boolean',
-            'frequency' => 'required|in:daily,per_payroll,monthly,quarterly,annually',
-            'conditions' => 'nullable|array',
-            'minimum_amount' => 'nullable|numeric|min:0',
-            'maximum_amount' => 'nullable|numeric|min:0',
-            'max_days_per_period' => 'nullable|integer|min:1',
+            'frequency' => 'required|in:per_payroll,monthly,quarterly,annually',
+            'distribution_method' => 'required|in:first_payroll,last_payroll,equally_distributed',
             'is_active' => 'boolean',
-            'sort_order' => 'nullable|integer',
             'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
+            'requires_perfect_attendance' => 'boolean',
         ]);
 
         $allowance->update($validated);
@@ -124,8 +119,8 @@ class AllowanceBonusSettingController extends Controller
 
     public function destroy(AllowanceBonusSetting $allowance)
     {
-        if ($allowance->is_system_default) {
-            return back()->with('error', 'Cannot delete system default allowance/bonus.');
+        if ($allowance->is_active) {
+            return back()->with('error', 'Cannot delete active allowance/bonus. Please deactivate it first.');
         }
 
         $allowance->delete();

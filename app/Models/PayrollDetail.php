@@ -30,6 +30,7 @@ class PayrollDetail extends Model
         'night_differential_pay',
         'allowances',
         'bonuses',
+        'incentives',
         'other_earnings',
         'gross_pay',
         'sss_contribution',
@@ -61,6 +62,7 @@ class PayrollDetail extends Model
         'night_differential_pay' => 'decimal:2',
         'allowances' => 'decimal:2',
         'bonuses' => 'decimal:2',
+        'incentives' => 'decimal:2',
         'other_earnings' => 'decimal:2',
         'gross_pay' => 'decimal:2',
         'sss_contribution' => 'decimal:2',
@@ -260,6 +262,7 @@ class PayrollDetail extends Model
                     $this->overtime_pay,
                     $this->bonuses,
                     $this->allowances,
+                    $this->incentives,
                     $this->gross_pay,
                     $taxableIncome,
                     null, // netPay
@@ -404,5 +407,22 @@ class PayrollDetail extends Model
         if ($taxableIncome <= 666667) return 33541.67 + (($taxableIncome - 166667) * 0.30);
 
         return 183541.67 + (($taxableIncome - 666667) * 0.35);
+    }
+
+    /**
+     * Get taxable income attribute
+     * This calculates taxable income including all taxable allowances, bonuses, and incentives
+     */
+    public function getTaxableIncomeAttribute()
+    {
+        // Base taxable income from salary components
+        $taxableIncome = $this->regular_pay + $this->overtime_pay + $this->holiday_pay + $this->rest_day_pay;
+
+        // Add taxable allowances, bonuses, and incentives
+        // Note: In a real scenario, you'd need to check which allowances/bonuses/incentives are taxable
+        // from their settings, but for simplicity, we'll include all for now
+        $taxableIncome += $this->allowances + $this->bonuses + $this->incentives;
+
+        return $taxableIncome;
     }
 }

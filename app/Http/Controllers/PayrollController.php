@@ -1142,6 +1142,7 @@ class PayrollController extends Controller
                         'rest_day_pay' => $payrollCalculation['rest_day_pay'] ?? 0,
                         'allowances' => $payrollCalculation['allowances'] ?? 0,
                         'bonuses' => $payrollCalculation['bonuses'] ?? 0,
+                        'incentives' => $payrollCalculation['incentives'] ?? 0,
                         'gross_pay' => $payrollCalculation['gross_pay'] ?? 0,
                         'sss_contribution' => $payrollCalculation['sss_deduction'] ?? 0,
                         'philhealth_contribution' => $payrollCalculation['philhealth_deduction'] ?? 0,
@@ -1156,6 +1157,7 @@ class PayrollController extends Controller
                         'earnings_breakdown' => json_encode([
                             'allowances' => $payrollCalculation['allowances_details'] ?? [],
                             'bonuses' => $payrollCalculation['bonuses_details'] ?? [],
+                            'incentives' => $payrollCalculation['incentives_details'] ?? [],
                         ]),
                         'deduction_breakdown' => json_encode($payrollCalculation['deductions_details'] ?? []),
                     ]);
@@ -1269,19 +1271,26 @@ class PayrollController extends Controller
         $grossPayData = $this->calculateGrossPayWithRateMultipliersDetailed($employee, $basicSalary, $timeLogs, $hoursWorked, $daysWorked, $periodStart, $periodEnd);
         $grossPay = $grossPayData['total_gross'];
 
+        // Use calculated basic pay for allowances/bonuses/incentives calculations instead of employee's basic salary
+        $calculatedBasicPay = $grossPayData['basic_pay'] ?? 0;
+
         // Calculate allowances using dynamic settings
-        $allowancesData = $this->calculateAllowances($employee, $basicSalary, $daysWorked, $hoursWorked);
+        $allowancesData = $this->calculateAllowances($employee, $calculatedBasicPay, $daysWorked, $hoursWorked);
         $allowancesTotal = $allowancesData['total'];
 
         // Calculate bonuses using dynamic settings
-        $bonusesData = $this->calculateBonuses($employee, $basicSalary, $daysWorked, $hoursWorked);
+        $bonusesData = $this->calculateBonuses($employee, $calculatedBasicPay, $daysWorked, $hoursWorked);
         $bonusesTotal = $bonusesData['total'];
+
+        // Calculate incentives using dynamic settings
+        $incentivesData = $this->calculateIncentives($employee, $calculatedBasicPay, $daysWorked, $hoursWorked, $periodStart, $periodEnd);
+        $incentivesTotal = $incentivesData['total'];
 
         // Calculate overtime pay (simplified for now)
         $overtimePay = 0; // TODO: Implement detailed overtime calculation based on time logs
 
-        // Total gross pay including allowances and bonuses
-        $totalGrossPay = round($grossPay + $allowancesTotal + $bonusesTotal + $overtimePay, 2);
+        // Total gross pay including allowances, bonuses, and incentives
+        $totalGrossPay = round($grossPay + $allowancesTotal + $bonusesTotal + $incentivesTotal + $overtimePay, 2);
 
         // Calculate late and undertime deductions based on dynamic calculations
         $lateDeductions = $this->calculateLateDeductions($employee, $lateHours);
@@ -1316,6 +1325,8 @@ class PayrollController extends Controller
             'allowances_details' => $allowancesData['details'],
             'bonuses' => $bonusesTotal,
             'bonuses_details' => $bonusesData['details'],
+            'incentives' => $incentivesTotal,
+            'incentives_details' => $incentivesData['details'],
             'gross_pay' => $totalGrossPay,
             // 'tax_deduction' => $deductions['tax'],
             // 'sss_deduction' => $deductions['sss'],
@@ -1941,6 +1952,48 @@ class PayrollController extends Controller
     }
 
     /**
+     * Calculate incentives for an employee using dynamic settings with perfect attendance check
+     */
+    private function calculateIncentives($employee, $basicPay, $daysWorked = 0, $hoursWorked = 0, $periodStart = null, $periodEnd = null)
+    {
+        $total = 0;
+        $details = [];
+
+        // Get active incentive settings that apply to this employee's benefit status
+        $incentiveSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'incentives')
+            ->forBenefitStatus($employee->benefits_status)
+            ->orderBy('sort_order')
+            ->get();
+
+        foreach ($incentiveSettings as $setting) {
+            // Check if this incentive requires perfect attendance
+            if ($setting->requires_perfect_attendance && $periodStart && $periodEnd) {
+                // Check if employee has perfect attendance for this period
+                if (!$setting->hasPerfectAttendance($employee, $periodStart, $periodEnd)) {
+                    continue; // Skip this incentive if perfect attendance not met
+                }
+            }
+
+            $amount = $this->calculateAllowanceBonusAmount($setting, $employee, $basicPay, $daysWorked, $hoursWorked);
+
+            if ($amount > 0) {
+                $details[$setting->code] = [
+                    'name' => $setting->name,
+                    'amount' => $amount,
+                    'is_taxable' => $setting->is_taxable
+                ];
+                $total += $amount;
+            }
+        }
+
+        return [
+            'total' => $total,
+            'details' => $details
+        ];
+    }
+
+    /**
      * Calculate allowance/bonus amount based on setting configuration
      */
     private function calculateAllowanceBonusAmount($setting, $employee, $basicPay, $daysWorked, $hoursWorked)
@@ -2497,6 +2550,7 @@ class PayrollController extends Controller
         // Load current dynamic settings for display
         $allowanceSettings = collect();
         $bonusSettings = collect();
+        $incentiveSettings = collect();
         $deductionSettings = collect();
 
         if ($isDynamic) {
@@ -2507,6 +2561,10 @@ class PayrollController extends Controller
                 ->get();
             $bonusSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
                 ->where('type', 'bonus')
+                ->orderBy('sort_order')
+                ->get();
+            $incentiveSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+                ->where('type', 'incentives')
                 ->orderBy('sort_order')
                 ->get();
             $deductionSettings = \App\Models\DeductionTaxSetting::active()
@@ -2586,6 +2644,9 @@ class PayrollController extends Controller
                     if (isset($settingsSnapshot['bonus_settings'])) {
                         $bonusSettings = collect($settingsSnapshot['bonus_settings']);
                     }
+                    if (isset($settingsSnapshot['incentive_settings'])) {
+                        $incentiveSettings = collect($settingsSnapshot['incentive_settings']);
+                    }
                     if (isset($settingsSnapshot['deduction_settings'])) {
                         $deductionSettings = collect($settingsSnapshot['deduction_settings']);
                     }
@@ -2629,6 +2690,7 @@ class PayrollController extends Controller
             'periodDates',
             'allowanceSettings',
             'bonusSettings',
+            'incentiveSettings',
             'deductionSettings',
             'isDynamic',
             'timeBreakdowns',
@@ -3147,6 +3209,7 @@ class PayrollController extends Controller
         // Calculate allowances and bonuses from settings
         $allowancesData = $this->calculateEmployeeAllowances($employee, $payroll, $regularHours, $overtimeHours, $holidayHours);
         $bonusesData = $this->calculateEmployeeBonuses($employee, $payroll, $regularHours, $overtimeHours, $holidayHours);
+        $incentivesData = $this->calculateEmployeeIncentives($employee, $payroll, $regularHours, $overtimeHours, $holidayHours);
 
         // Calculate cash advance deductions
         $cashAdvanceDeductions = $this->calculateCashAdvanceDeductions($employee, $payroll);
@@ -3172,6 +3235,7 @@ class PayrollController extends Controller
                 'night_differential_pay' => $nightDifferentialPay,
                 'allowances' => $allowancesData['total'],
                 'bonuses' => $bonusesData['total'],
+                'incentives' => $incentivesData['total'],
                 'other_earnings' => 0,
                 'late_deductions' => $lateDeductions,
                 'undertime_deductions' => $undertimeDeductions,
@@ -3180,6 +3244,7 @@ class PayrollController extends Controller
                 'earnings_breakdown' => json_encode([
                     'allowances' => $allowancesData['details'],
                     'bonuses' => $bonusesData['details'],
+                    'incentives' => $incentivesData['details'],
                 ]),
             ]
         );
@@ -3191,6 +3256,7 @@ class PayrollController extends Controller
             $payrollDetail->night_differential_pay +
             $payrollDetail->allowances +
             $payrollDetail->bonuses +
+            $payrollDetail->incentives +
             $payrollDetail->other_earnings;
 
         // Calculate deductions using the PayrollDetail model methods with employer sharing
@@ -3220,6 +3286,14 @@ class PayrollController extends Controller
         $allowanceDetails = [];
 
         foreach ($allowanceSettings as $setting) {
+            // Check if this allowance requires perfect attendance
+            if ($setting->requires_perfect_attendance) {
+                // Check if employee has perfect attendance for this payroll period
+                if (!$setting->hasPerfectAttendance($employee, $payroll->period_start, $payroll->period_end)) {
+                    continue; // Skip this allowance if perfect attendance not met
+                }
+            }
+
             $allowanceAmount = $this->calculateAllowanceBonusAmountForPayroll(
                 $setting,
                 $employee,
@@ -3261,6 +3335,14 @@ class PayrollController extends Controller
         $bonusDetails = [];
 
         foreach ($bonusSettings as $setting) {
+            // Check if this bonus requires perfect attendance
+            if ($setting->requires_perfect_attendance) {
+                // Check if employee has perfect attendance for this payroll period
+                if (!$setting->hasPerfectAttendance($employee, $payroll->period_start, $payroll->period_end)) {
+                    continue; // Skip this bonus if perfect attendance not met
+                }
+            }
+
             $bonusAmount = $this->calculateAllowanceBonusAmountForPayroll(
                 $setting,
                 $employee,
@@ -3287,6 +3369,55 @@ class PayrollController extends Controller
     }
 
     /**
+     * Calculate employee incentives for payroll
+     */
+    private function calculateEmployeeIncentives(Employee $employee, Payroll $payroll, $regularHours, $overtimeHours, $holidayHours)
+    {
+        // Get current active incentive settings that apply to this employee's benefit status
+        $incentiveSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'incentives')
+            ->forBenefitStatus($employee->benefits_status)
+            ->orderBy('sort_order')
+            ->get();
+
+        $totalIncentives = 0;
+        $incentiveDetails = [];
+
+        foreach ($incentiveSettings as $setting) {
+            // Check if this incentive requires perfect attendance
+            if ($setting->requires_perfect_attendance) {
+                // Check if employee has perfect attendance for this payroll period
+                if (!$setting->hasPerfectAttendance($employee, $payroll->period_start, $payroll->period_end)) {
+                    continue; // Skip this incentive if perfect attendance not met
+                }
+            }
+
+            $incentiveAmount = $this->calculateAllowanceBonusAmountForPayroll(
+                $setting,
+                $employee,
+                $payroll,
+                $regularHours,
+                $overtimeHours,
+                $holidayHours
+            );
+
+            if ($incentiveAmount > 0) {
+                $incentiveDetails[$setting->code] = [
+                    'name' => $setting->name,
+                    'amount' => $incentiveAmount,
+                    'is_taxable' => $setting->is_taxable
+                ];
+                $totalIncentives += $incentiveAmount;
+            }
+        }
+
+        return [
+            'total' => $totalIncentives,
+            'details' => $incentiveDetails
+        ];
+    }
+
+    /**
      * Calculate individual allowance or bonus amount for payroll
      */
     private function calculateAllowanceBonusAmountForPayroll($setting, $employee, $payroll, $regularHours, $overtimeHours, $holidayHours)
@@ -3296,16 +3427,6 @@ class PayrollController extends Controller
         switch ($setting->calculation_type) {
             case 'fixed_amount':
                 $amount = $setting->fixed_amount ?? 0;
-
-                // Apply frequency-based calculation
-                if ($setting->frequency === 'daily') {
-                    $daysWorked = $this->calculateDaysWorked($employee, $payroll);
-                    $maxDays = $setting->max_days_per_period ?? $daysWorked;
-                    $amount = $amount * min($daysWorked, $maxDays);
-                } elseif ($setting->frequency === 'weekly') {
-                    $weeksInPeriod = $this->calculateWeeksInPeriod($payroll);
-                    $amount = $amount * $weeksInPeriod;
-                }
                 break;
 
             case 'percentage':
@@ -3345,18 +3466,158 @@ class PayrollController extends Controller
                 // Calculate as multiplier of basic salary
                 $amount = ($employee->basic_salary ?? 0) * ($setting->multiplier ?? 0);
                 break;
+
+            case 'daily_rate_multiplier':
+                // Calculate as multiplier of daily rate
+                $dailyRate = $employee->daily_rate ?? ($employee->basic_salary / 22);
+                $daysWorked = $this->calculateDaysWorked($employee, $payroll);
+                $amount = $dailyRate * ($setting->multiplier ?? 0) * $daysWorked;
+                break;
         }
 
-        // Apply minimum and maximum limits
-        if ($setting->minimum_amount && $amount < $setting->minimum_amount) {
+        // Apply minimum and maximum limits (if fields still exist - this will be graceful)
+        if (isset($setting->minimum_amount) && $setting->minimum_amount && $amount < $setting->minimum_amount) {
             $amount = $setting->minimum_amount;
         }
 
-        if ($setting->maximum_amount && $amount > $setting->maximum_amount) {
+        if (isset($setting->maximum_amount) && $setting->maximum_amount && $amount > $setting->maximum_amount) {
             $amount = $setting->maximum_amount;
         }
 
+        // Apply frequency and distribution method logic
+        if ($amount > 0) {
+            // Check perfect attendance requirement if enabled
+            if ($setting->requires_perfect_attendance) {
+                if (!$setting->hasPerfectAttendance($employee, $payroll->period_start, $payroll->period_end)) {
+                    return 0; // Employee doesn't have perfect attendance, no allowance/bonus
+                }
+            }
+
+            // Get employee's pay schedule or auto-detect from payroll period
+            $employeePaySchedule = $employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                $payroll->period_start,
+                $payroll->period_end
+            );
+
+            // Apply distribution logic using the model method
+            $amount = $setting->calculateDistributedAmount(
+                $amount,
+                $payroll->period_start,
+                $payroll->period_end,
+                $employeePaySchedule
+            );
+        }
+
         return round($amount, 2);
+    }
+
+    /**
+     * Calculate distributed allowance/bonus amount based on frequency and distribution method
+     */
+    private function calculateDistributedAllowanceBonusAmount($setting, $payroll, $baseAmount)
+    {
+        $frequency = $setting->frequency;
+        $distributionMethod = $setting->distribution_method ?? 'all_payrolls';
+
+        if ($frequency === 'per_payroll') {
+            return $baseAmount;
+        }
+
+        // Calculate total payrolls in the frequency period
+        $totalPayrollsInPeriod = $this->calculatePayrollsInFrequencyPeriod($frequency, $payroll);
+
+        switch ($distributionMethod) {
+            case 'equally_distributed':
+                // Divide the total amount equally across all payrolls in the period
+                return round($baseAmount / $totalPayrollsInPeriod, 2);
+
+            case 'first_payroll':
+                // Give full amount only on the first payroll of the period
+                if ($this->isFirstPayrollInFrequencyPeriod($frequency, $payroll)) {
+                    return $baseAmount;
+                } else {
+                    return 0;
+                }
+
+            case 'last_payroll':
+                // Give full amount only on the last payroll of the period
+                if ($this->isLastPayrollInFrequencyPeriod($frequency, $payroll)) {
+                    return $baseAmount;
+                } else {
+                    return 0;
+                }
+
+            case 'all_payrolls':
+            default:
+                // Give full amount on every payroll
+                return $baseAmount;
+        }
+    }
+
+    /**
+     * Calculate number of payrolls in a frequency period
+     */
+    private function calculatePayrollsInFrequencyPeriod($frequency, $payroll)
+    {
+        switch ($frequency) {
+            case 'monthly':
+                // Assume semi-monthly payroll (2 payrolls per month)
+                return 2;
+            case 'quarterly':
+                // 3 months * 2 payrolls per month
+                return 6;
+            case 'annually':
+                // 12 months * 2 payrolls per month
+                return 24;
+            default:
+                return 1;
+        }
+    }
+
+    /**
+     * Check if current payroll is the first in the frequency period
+     */
+    private function isFirstPayrollInFrequencyPeriod($frequency, $payroll)
+    {
+        $periodStart = $payroll->period_start;
+
+        switch ($frequency) {
+            case 'monthly':
+                // First payroll of the month (1st-15th typically)
+                return $periodStart->day <= 15;
+            case 'quarterly':
+                // First payroll of the quarter
+                $quarterStartMonth = (ceil($periodStart->month / 3) - 1) * 3 + 1;
+                return $periodStart->month == $quarterStartMonth && $periodStart->day <= 15;
+            case 'annually':
+                // First payroll of the year
+                return $periodStart->month == 1 && $periodStart->day <= 15;
+            default:
+                return true;
+        }
+    }
+
+    /**
+     * Check if current payroll is the last in the frequency period
+     */
+    private function isLastPayrollInFrequencyPeriod($frequency, $payroll)
+    {
+        $periodEnd = $payroll->period_end;
+
+        switch ($frequency) {
+            case 'monthly':
+                // Last payroll of the month (16th-end typically)
+                return $periodEnd->day > 15;
+            case 'quarterly':
+                // Last payroll of the quarter
+                $quarterEndMonth = ceil($periodEnd->month / 3) * 3;
+                return $periodEnd->month == $quarterEndMonth && $periodEnd->day > 15;
+            case 'annually':
+                // Last payroll of the year
+                return $periodEnd->month == 12 && $periodEnd->day > 15;
+            default:
+                return true;
+        }
     }
 
     /**
@@ -5367,7 +5628,8 @@ class PayrollController extends Controller
 
             // Get breakdown data for allowances and bonuses (exactly as they are in draft mode)
             $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
-            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);            // Log the calculated values for debugging
+            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
+            $incentivesBreakdown = $this->getEmployeeIncentivesBreakdown($employee, $payroll);            // Log the calculated values for debugging
             Log::info("Snapshot calculation for employee {$employee->id}", [
                 'basic_pay' => $basicPay,
                 'holiday_pay' => $holidayPay,
@@ -5392,12 +5654,13 @@ class PayrollController extends Controller
             // This ensures no rounding discrepancies between display and snapshot
             $allowancesTotal = $payrollCalculation['allowances'] ?? 0;
             $bonusesTotal = $payrollCalculation['bonuses'] ?? 0;
+            $incentivesTotal = $payrollCalculation['incentives'] ?? 0;
             $otherEarnings = $payrollCalculation['other_earnings'] ?? 0;
 
             // Use exact component sum to match the individual breakdown calculations
             // This ensures the total matches what the UI displays from individual components
             // REMOVED ROUNDING: Store exact calculated values without rounding for snapshot precision
-            $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $otherEarnings;
+            $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowancesTotal + $bonusesTotal + $incentivesTotal + $otherEarnings;
 
 
             $netPay = $grossPay - $totalDeductions;
@@ -5609,6 +5872,8 @@ class PayrollController extends Controller
                 'allowances_total' => $payrollCalculation['allowances'] ?? 0,
                 'bonuses_breakdown' => $bonusesBreakdown,
                 'bonuses_total' => $payrollCalculation['bonuses'] ?? 0,
+                'incentives_breakdown' => $incentivesBreakdown,
+                'incentives_total' => $payrollCalculation['incentives'] ?? 0,
                 'other_earnings' => $payrollCalculation['other_earnings'] ?? 0,
                 'gross_pay' => $grossPay, // Use calculated gross pay
                 'deductions_breakdown' => $deductionsBreakdown,
@@ -5773,6 +6038,62 @@ class PayrollController extends Controller
             ->get();
 
         foreach ($bonusSettings as $setting) {
+            // Calculate hours data for this employee
+            $timeLogs = TimeLog::where('employee_id', $employee->id)
+                ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
+                ->get();
+
+            $regularHours = $timeLogs->sum('regular_hours') ?? 0;
+            $overtimeHours = $timeLogs->sum('overtime_hours') ?? 0;
+            $holidayHours = $timeLogs->sum('holiday_hours') ?? 0;
+
+            $amount = $this->calculateAllowanceBonusAmountForPayroll(
+                $setting,
+                $employee,
+                $payroll,
+                $regularHours,
+                $overtimeHours,
+                $holidayHours
+            );
+
+            if ($amount > 0) {
+                $breakdown[] = [
+                    'name' => $setting->name,
+                    'code' => $setting->code ?? $setting->name,
+                    'amount' => $amount,
+                    'is_taxable' => $setting->is_taxable ?? true,
+                    'calculation_type' => $setting->calculation_type,
+                    'description' => $setting->description ?? ''
+                ];
+            }
+        }
+
+        return $breakdown;
+    }
+
+    /**
+     * Get incentives breakdown for employee
+     */
+    private function getEmployeeIncentivesBreakdown(Employee $employee, Payroll $payroll)
+    {
+        $breakdown = [];
+
+        // Get active incentive settings that apply to this employee's benefit status
+        $incentiveSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'incentives')
+            ->forBenefitStatus($employee->benefits_status)
+            ->orderBy('sort_order')
+            ->get();
+
+        foreach ($incentiveSettings as $setting) {
+            // Check if this incentive requires perfect attendance
+            if ($setting->requires_perfect_attendance) {
+                // Check if employee has perfect attendance for this payroll period
+                if (!$setting->hasPerfectAttendance($employee, $payroll->period_start, $payroll->period_end)) {
+                    continue; // Skip this incentive if perfect attendance not met
+                }
+            }
+
             // Calculate hours data for this employee
             $timeLogs = TimeLog::where('employee_id', $employee->id)
                 ->whereBetween('log_date', [$payroll->period_start, $payroll->period_end])
@@ -6203,6 +6524,12 @@ class PayrollController extends Controller
                 ->toArray(),
             'bonus_settings' => \App\Models\AllowanceBonusSetting::where('is_active', true)
                 ->where('type', 'bonus')
+                ->forBenefitStatus($employee->benefits_status)
+                ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
+                ->get()
+                ->toArray(),
+            'incentive_settings' => \App\Models\AllowanceBonusSetting::where('is_active', true)
+                ->where('type', 'incentives')
                 ->forBenefitStatus($employee->benefits_status)
                 ->select('id', 'name', 'calculation_type', 'fixed_amount', 'rate_percentage')
                 ->get()
@@ -7072,6 +7399,7 @@ class PayrollController extends Controller
         $draftPayrollDetail->rest_day_pay = $payrollCalculation['rest_day_pay'] ?? 0;
         $draftPayrollDetail->allowances = $payrollCalculation['allowances'] ?? 0;
         $draftPayrollDetail->bonuses = $payrollCalculation['bonuses'] ?? 0;
+        $draftPayrollDetail->incentives = $payrollCalculation['incentives'] ?? 0;
         $draftPayrollDetail->gross_pay = $payrollCalculation['gross_pay'] ?? 0;
         $draftPayrollDetail->sss_contribution = $payrollCalculation['sss_deduction'] ?? 0;
         $draftPayrollDetail->philhealth_contribution = $payrollCalculation['philhealth_deduction'] ?? 0;
@@ -7262,6 +7590,10 @@ class PayrollController extends Controller
             ->where('type', 'bonus')
             ->orderBy('sort_order')
             ->get();
+        $incentiveSettings = \App\Models\AllowanceBonusSetting::where('is_active', true)
+            ->where('type', 'incentives')
+            ->orderBy('sort_order')
+            ->get();
         $deductionSettings = \App\Models\DeductionTaxSetting::active()
             ->orderBy('sort_order')
             ->get();
@@ -7276,6 +7608,7 @@ class PayrollController extends Controller
             'periodDates',
             'allowanceSettings',
             'bonusSettings',
+            'incentiveSettings',
             'deductionSettings',
             'timeBreakdowns',
             'payBreakdownByEmployee',

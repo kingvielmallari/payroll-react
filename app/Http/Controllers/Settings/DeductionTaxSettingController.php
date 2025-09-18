@@ -36,6 +36,8 @@ class DeductionTaxSettingController extends Controller
             'type' => 'required|in:government,loan,custom',
             'category' => 'required|in:mandatory,voluntary',
             'calculation_type' => 'required|in:percentage,fixed_amount,bracket,sss_table,philhealth_table,pagibig_table,withholding_tax_table',
+            'frequency' => 'required|in:per_payroll,monthly,quarterly,annually',
+            'distribution_method' => 'required|in:first_payroll,last_payroll,equally_distributed',
             'tax_table_type' => 'nullable|in:sss,philhealth,pagibig,withholding_tax',
             'rate_percentage' => 'nullable|numeric|min:0|max:100',
             'fixed_amount' => 'nullable|numeric|min:0',
@@ -58,7 +60,6 @@ class DeductionTaxSettingController extends Controller
             'is_active' => 'boolean',
             'sort_order' => 'nullable|integer',
             'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
-            'distribution_method' => 'nullable|in:first_payroll,last_payroll,distribute_equally',
         ]);
 
         // Convert tax table types to bracket with appropriate tax_table_type
@@ -109,6 +110,8 @@ class DeductionTaxSettingController extends Controller
             'type' => 'required|in:government,loan,custom',
             'category' => 'required|in:mandatory,voluntary',
             'calculation_type' => 'required|in:percentage,fixed_amount,bracket,sss_table,philhealth_table,pagibig_table,withholding_tax_table',
+            'frequency' => 'required|in:per_payroll,monthly,quarterly,annually',
+            'distribution_method' => 'required|in:first_payroll,last_payroll,equally_distributed',
             'tax_table_type' => 'nullable|in:sss,philhealth,pagibig,withholding_tax',
             'rate_percentage' => 'nullable|numeric|min:0|max:100',
             'fixed_amount' => 'nullable|numeric|min:0',
@@ -131,7 +134,6 @@ class DeductionTaxSettingController extends Controller
             'is_active' => 'boolean',
             'sort_order' => 'nullable|integer',
             'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
-            'distribution_method' => 'nullable|in:first_payroll,last_payroll,distribute_equally',
         ]);
 
         // Convert tax table types to bracket with appropriate tax_table_type
@@ -166,8 +168,8 @@ class DeductionTaxSettingController extends Controller
 
     public function destroy(DeductionTaxSetting $deduction)
     {
-        if ($deduction->is_system_default) {
-            return back()->with('error', 'Cannot delete system default deduction.');
+        if ($deduction->is_active) {
+            return back()->with('error', 'Cannot delete active deduction. Please deactivate it first.');
         }
 
         $deduction->delete();
