@@ -160,10 +160,64 @@ class PayrollController extends Controller
             }
         }
 
+        // Calculate summary stats using accurate breakdown data for all payrolls
+        $summaryPayrolls = $summaryQuery->clone()->with('snapshots', 'payrollDetails')->get();
+        $totalNetPay = 0;
+        $totalDeductions = 0;
+        $totalGrossPay = 0;
+
+        foreach ($summaryPayrolls as $payroll) {
+            if ($payroll->snapshots->isNotEmpty()) {
+                // Use snapshot data for locked/processing payrolls
+                foreach ($payroll->snapshots as $snapshot) {
+                    // Calculate basic pay from breakdown
+                    $basicPay = 0;
+                    if ($snapshot->basic_breakdown) {
+                        $basicBreakdown = is_string($snapshot->basic_breakdown) ?
+                            json_decode($snapshot->basic_breakdown, true) : $snapshot->basic_breakdown;
+                        if (is_array($basicBreakdown)) {
+                            foreach ($basicBreakdown as $type => $data) {
+                                $basicPay += $data['amount'] ?? 0;
+                            }
+                        }
+                    } else {
+                        $basicPay = $snapshot->regular_pay ?? 0;
+                    }
+
+                    // Calculate pay components from breakdown data
+                    $holidayPay = $this->calculateCorrectHolidayPayFromSnapshot($snapshot);
+                    $restPay = $this->calculateCorrectRestPayFromSnapshot($snapshot);
+                    $overtimePay = $this->calculateCorrectOvertimePayFromSnapshot($snapshot);
+
+                    $allowances = $snapshot->allowances_total ?? 0;
+                    $bonuses = $snapshot->bonuses_total ?? 0;
+                    $incentives = $snapshot->incentives_total ?? 0;
+
+                    // Calculate gross pay from components
+                    $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses + $incentives;
+
+                    // Calculate deductions from breakdown
+                    $deductions = $this->recalculateDeductionsFromBreakdown($snapshot, $grossPay);
+
+                    // Calculate net pay
+                    $netPay = $grossPay - $deductions;
+
+                    $totalGrossPay += $grossPay;
+                    $totalDeductions += $deductions;
+                    $totalNetPay += $netPay;
+                }
+            } else {
+                // Use stored totals for draft payrolls (no snapshots yet)
+                $totalGrossPay += $payroll->total_gross ?? 0;
+                $totalDeductions += $payroll->total_deductions ?? 0;
+                $totalNetPay += $payroll->total_net ?? 0;
+            }
+        }
+
         $summaryStats = [
-            'total_net_pay' => $summaryQuery->clone()->sum('total_net'),
-            'total_deductions' => $summaryQuery->clone()->sum('total_deductions'),
-            'total_gross_pay' => $summaryQuery->clone()->sum('total_gross'),
+            'total_net_pay' => $totalNetPay,
+            'total_deductions' => $totalDeductions,
+            'total_gross_pay' => $totalGrossPay,
         ];
 
         return view('payrolls.index', compact('payrolls', 'summaryStats'));
@@ -2673,6 +2727,7 @@ class PayrollController extends Controller
                         $detail->holiday_pay = $snapshot->holiday_pay;
                         $detail->allowances = $snapshot->allowances_total;
                         $detail->bonuses = $snapshot->bonuses_total;
+                        $detail->incentives = $snapshot->incentives_total;
                         $detail->gross_pay = $snapshot->gross_pay;
                         $detail->sss_contribution = $snapshot->sss_contribution;
                         $detail->philhealth_contribution = $snapshot->philhealth_contribution;
@@ -2826,6 +2881,7 @@ class PayrollController extends Controller
                         $detail->holiday_pay = $snapshot->holiday_pay;
                         $detail->allowances = $snapshot->allowances_total;
                         $detail->bonuses = $snapshot->bonuses_total;
+                        $detail->incentives = $snapshot->incentives_total;  // FIX: Add missing incentives
                         $detail->gross_pay = $snapshot->gross_pay;
                         $detail->sss_contribution = $snapshot->sss_contribution;
                         $detail->philhealth_contribution = $snapshot->philhealth_contribution;
@@ -5711,11 +5767,15 @@ class PayrollController extends Controller
             // Use the calculated total deductions from the payroll calculation
             $totalDeductions = $payrollCalculation['total_deductions'] ?? 0;
 
-            // Calculate gross pay from the EXACT SAME components as the dynamic display
-            // This ensures no rounding discrepancies between display and snapshot
-            $allowancesTotal = $payrollCalculation['allowances'] ?? 0;
-            $bonusesTotal = $payrollCalculation['bonuses'] ?? 0;
-            $incentivesTotal = $payrollCalculation['incentives'] ?? 0;
+            // Get breakdown data for allowances, bonuses, and incentives (with correct distribution methods)
+            $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
+            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
+            $incentivesBreakdown = $this->getEmployeeIncentivesBreakdown($employee, $payroll);
+
+            // Calculate totals from breakdown (these have correct distribution logic applied)
+            $allowancesTotal = array_sum(array_column($allowancesBreakdown, 'amount'));
+            $bonusesTotal = array_sum(array_column($bonusesBreakdown, 'amount'));
+            $incentivesTotal = array_sum(array_column($incentivesBreakdown, 'amount'));
             $otherEarnings = $payrollCalculation['other_earnings'] ?? 0;
 
             // Use exact component sum to match the individual breakdown calculations
@@ -5837,15 +5897,96 @@ class PayrollController extends Controller
                     $calculatedAmount = $setting->maximum_amount;
                 }
 
-                // Add taxable allowance/bonus to taxable income
-                $taxableIncome += $calculatedAmount;
+                // Apply distribution method for taxable calculation (same as view logic)
+                if ($calculatedAmount > 0) {
+                    $employeePaySchedule = $employee->pay_schedule ?? 'semi_monthly';
+                    $distributedAmount = $setting->calculateDistributedAmount(
+                        $calculatedAmount,
+                        $payroll->period_start,
+                        $payroll->period_end,
+                        $employeePaySchedule
+                    );
 
-                Log::info("Added taxable amount", [
+                    // Add distributed taxable allowance/bonus to taxable income
+                    $taxableIncome += $distributedAmount;
+
+                    Log::info("Added taxable distributed amount", [
+                        'setting_code' => $setting->code,
+                        'setting_type' => $setting->type,
+                        'original_amount' => $calculatedAmount,
+                        'distributed_amount' => $distributedAmount,
+                        'running_taxable_income' => $taxableIncome
+                    ]);
+                }
+            }
+
+            // Add only taxable incentives (same logic as allowances/bonuses)
+            $incentiveSettings = \App\Models\AllowanceBonusSetting::where('type', 'incentives')
+                ->where('is_active', true)
+                ->get();
+
+            Log::info("Processing incentive settings for taxable income", [
+                'employee_id' => $employee->id,
+                'incentive_settings' => $incentiveSettings->map(function ($s) {
+                    return ['code' => $s->code, 'name' => $s->name, 'is_taxable' => $s->is_taxable, 'type' => $s->type];
+                })
+            ]);
+
+            foreach ($incentiveSettings as $setting) {
+                // Log each setting we're processing
+                Log::info("Evaluating incentive setting for taxable income", [
+                    'employee_id' => $employee->id,
                     'setting_code' => $setting->code,
+                    'setting_name' => $setting->name,
                     'setting_type' => $setting->type,
-                    'calculated_amount' => $calculatedAmount,
-                    'running_taxable_income' => $taxableIncome
+                    'is_taxable' => $setting->is_taxable,
+                    'requires_perfect_attendance' => $setting->requires_perfect_attendance ?? false
                 ]);
+
+                // Only add if this setting is taxable
+                if (!$setting->is_taxable) {
+                    Log::info("Skipping non-taxable incentive setting: {$setting->code}");
+                    continue;
+                }
+
+                // Check if this incentive setting applies to this employee's benefit status
+                if (!$setting->appliesTo($employee)) {
+                    Log::info("Skipping incentive setting not applicable to employee benefit status: {$setting->code} for employee {$employee->id} (benefit status: {$employee->benefits_status})");
+                    continue;
+                }
+
+                // Check perfect attendance requirement
+                if ($setting->requires_perfect_attendance) {
+                    if (!$setting->hasPerfectAttendance($employee, $payroll->period_start, $payroll->period_end)) {
+                        Log::info("Skipping incentive setting due to imperfect attendance: {$setting->code} for employee {$employee->id}");
+                        continue;
+                    }
+                }
+
+                Log::info("Processing taxable incentive setting: {$setting->code}");
+
+                $calculatedIncentiveAmount = $setting->fixed_amount ?? 0;
+
+                // Apply distribution method for taxable calculation (same as view logic)
+                if ($calculatedIncentiveAmount > 0) {
+                    $employeePaySchedule = $employee->pay_schedule ?? 'semi_monthly';
+                    $distributedIncentiveAmount = $setting->calculateDistributedAmount(
+                        $calculatedIncentiveAmount,
+                        $payroll->period_start,
+                        $payroll->period_end,
+                        $employeePaySchedule
+                    );
+
+                    // Add distributed taxable incentive to taxable income
+                    $taxableIncome += $distributedIncentiveAmount;
+
+                    Log::info("Added taxable distributed incentive amount", [
+                        'setting_code' => $setting->code,
+                        'original_amount' => $calculatedIncentiveAmount,
+                        'distributed_amount' => $distributedIncentiveAmount,
+                        'running_taxable_income' => $taxableIncome
+                    ]);
+                }
             }
 
             $taxableIncome = max(0, $taxableIncome);
@@ -5904,6 +6045,28 @@ class PayrollController extends Controller
                 FILE_APPEND | LOCK_EX
             );
 
+            // Calculate totals from breakdown data (which includes proper distribution)
+            $allowancesTotal = 0;
+            if (is_array($allowancesBreakdown)) {
+                foreach ($allowancesBreakdown as $allowance) {
+                    $allowancesTotal += $allowance['amount'] ?? 0;
+                }
+            }
+
+            $bonusesTotal = 0;
+            if (is_array($bonusesBreakdown)) {
+                foreach ($bonusesBreakdown as $bonus) {
+                    $bonusesTotal += $bonus['amount'] ?? 0;
+                }
+            }
+
+            $incentivesTotal = 0;
+            if (is_array($incentivesBreakdown)) {
+                foreach ($incentivesBreakdown as $incentive) {
+                    $incentivesTotal += $incentive['amount'] ?? 0;
+                }
+            }
+
             // Create snapshot with exact draft mode calculations
             $snapshot = \App\Models\PayrollSnapshot::create([
                 'payroll_id' => $payroll->id,
@@ -5930,11 +6093,11 @@ class PayrollController extends Controller
                 'rest_breakdown' => $restBreakdown,
                 'overtime_breakdown' => $overtimeBreakdown,
                 'allowances_breakdown' => $allowancesBreakdown,
-                'allowances_total' => $payrollCalculation['allowances'] ?? 0,
+                'allowances_total' => $allowancesTotal, // Use calculated total from breakdown
                 'bonuses_breakdown' => $bonusesBreakdown,
-                'bonuses_total' => $payrollCalculation['bonuses'] ?? 0,
+                'bonuses_total' => $bonusesTotal, // Use calculated total from breakdown
                 'incentives_breakdown' => $incentivesBreakdown,
-                'incentives_total' => $payrollCalculation['incentives'] ?? 0,
+                'incentives_total' => $incentivesTotal, // Use calculated total from breakdown
                 'other_earnings' => $payrollCalculation['other_earnings'] ?? 0,
                 'gross_pay' => $grossPay, // Use calculated gross pay
                 'deductions_breakdown' => $deductionsBreakdown,

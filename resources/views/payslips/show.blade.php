@@ -83,8 +83,14 @@
                                     <dd class="text-sm text-gray-900">{{ $payrollDetail->payroll->pay_date->format('F d, Y') }}</dd>
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-gray-500">Basic Salary</dt>
-                                    <dd class="text-sm text-gray-900">₱{{ number_format($payrollDetail->basic_salary, 2) }}</dd>
+                                    <dt class="text-sm font-medium text-gray-500">Basic Pay</dt>
+                                    <dd class="text-sm text-gray-900">
+                                        @php
+                                            // Use snapshot regular_pay for locked payrolls, fallback to calculated basic pay for draft
+                                            $basicPayAmount = ($snapshot && $snapshot->regular_pay !== null) ? $snapshot->regular_pay : $payrollDetail->regular_pay;
+                                        @endphp
+                                        ₱{{ number_format($basicPayAmount, 2) }}
+                                    </dd>
                                 </div>
                             </dl>
                         </div>
@@ -154,18 +160,32 @@
                                     <td class="px-6 py-4 text-sm text-gray-900 text-right">₱{{ number_format($payrollDetail->holiday_pay, 2) }}</td>
                                 </tr>
                                 @endif
-                                @if($payrollDetail->allowances > 0)
+                                @php
+                                    // Use snapshot data for locked payrolls, fallback to payroll detail for draft
+                                    $allowancesAmount = ($snapshot && $snapshot->allowances_total !== null) ? $snapshot->allowances_total : $payrollDetail->allowances;
+                                    $bonusesAmount = ($snapshot && $snapshot->bonuses_total !== null) ? $snapshot->bonuses_total : $payrollDetail->bonuses;
+                                    $incentivesAmount = ($snapshot && $snapshot->incentives_total !== null) ? $snapshot->incentives_total : $payrollDetail->incentives;
+                                @endphp
+                                
+                                @if($allowancesAmount > 0)
                                 <tr>
                                     <td class="px-6 py-4 text-sm text-gray-900">Allowances</td>
                                     <td class="px-6 py-4 text-sm text-gray-500">-</td>
-                                    <td class="px-6 py-4 text-sm text-gray-900 text-right">₱{{ number_format($payrollDetail->allowances, 2) }}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-900 text-right">₱{{ number_format($allowancesAmount, 2) }}</td>
                                 </tr>
                                 @endif
-                                @if($payrollDetail->bonuses > 0)
+                                @if($bonusesAmount > 0)
                                 <tr>
                                     <td class="px-6 py-4 text-sm text-gray-900">Bonuses</td>
                                     <td class="px-6 py-4 text-sm text-gray-500">-</td>
-                                    <td class="px-6 py-4 text-sm text-gray-900 text-right">₱{{ number_format($payrollDetail->bonuses, 2) }}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-900 text-right">₱{{ number_format($bonusesAmount, 2) }}</td>
+                                </tr>
+                                @endif
+                                @if($incentivesAmount > 0)
+                                <tr>
+                                    <td class="px-6 py-4 text-sm text-gray-900">Incentives</td>
+                                    <td class="px-6 py-4 text-sm text-gray-500">-</td>
+                                    <td class="px-6 py-4 text-sm text-gray-900 text-right">₱{{ number_format($incentivesAmount, 2) }}</td>
                                 </tr>
                                 @endif
                                 <tr class="bg-green-100 font-bold">

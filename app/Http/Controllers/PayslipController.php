@@ -38,7 +38,15 @@ class PayslipController extends Controller
             }
         }
 
-        return view('payslips.show', compact('payrollDetail'));
+        // For locked/approved payrolls, get snapshot data for accurate amounts
+        $snapshot = null;
+        if ($payrollDetail->payroll->status !== 'draft') {
+            $snapshot = $payrollDetail->payroll->snapshots()
+                ->where('employee_id', $payrollDetail->employee_id)
+                ->first();
+        }
+
+        return view('payslips.show', compact('payrollDetail', 'snapshot'));
     }
 
     /**
@@ -63,11 +71,19 @@ class PayslipController extends Controller
             }
         }
 
-        $pdf = Pdf::loadView('payslips.pdf', compact('payrollDetail'));
+        // For locked/approved payrolls, get snapshot data for accurate amounts
+        $snapshot = null;
+        if ($payrollDetail->payroll->status !== 'draft') {
+            $snapshot = $payrollDetail->payroll->snapshots()
+                ->where('employee_id', $payrollDetail->employee_id)
+                ->first();
+        }
+
+        $pdf = Pdf::loadView('payslips.pdf', compact('payrollDetail', 'snapshot'));
         $pdf->setPaper('A4', 'portrait');
 
-        $filename = 'payslip_' . $payrollDetail->employee->employee_number . '_' . 
-                   $payrollDetail->payroll->period_start->format('Y-m') . '.pdf';
+        $filename = 'payslip_' . $payrollDetail->employee->employee_number . '_' .
+            $payrollDetail->payroll->period_start->format('Y-m') . '.pdf';
 
         return $pdf->download($filename);
     }
@@ -90,9 +106,17 @@ class PayslipController extends Controller
             return back()->with('error', 'Employee does not have a valid email address.');
         }
 
+        // For locked/approved payrolls, get snapshot data for accurate amounts
+        $snapshot = null;
+        if ($payrollDetail->payroll->status !== 'draft') {
+            $snapshot = $payrollDetail->payroll->snapshots()
+                ->where('employee_id', $payrollDetail->employee_id)
+                ->first();
+        }
+
         try {
             Mail::to($payrollDetail->employee->user->email)
-                ->send(new PayslipMail($payrollDetail));
+                ->send(new PayslipMail($payrollDetail, $snapshot));
 
             return back()->with('success', 'Payslip sent successfully to ' . $payrollDetail->employee->user->email);
         } catch (\Exception $e) {
@@ -131,7 +155,7 @@ class PayslipController extends Controller
         }
 
         $message = "Payslips sent: {$sent}, Failed: {$failed}";
-        
+
         if ($failed > 0) {
             return back()->with('warning', $message)->with('email_errors', $errors);
         }
@@ -169,8 +193,8 @@ class PayslipController extends Controller
             $pdf = Pdf::loadView('payslips.pdf', compact('payrollDetail'));
             $pdf->setPaper('A4', 'portrait');
 
-            $filename = 'payslip_' . $payrollDetail->employee->employee_number . '_' . 
-                       $payroll->period_start->format('Y-m') . '.pdf';
+            $filename = 'payslip_' . $payrollDetail->employee->employee_number . '_' .
+                $payroll->period_start->format('Y-m') . '.pdf';
 
             $pdfContent = $pdf->output();
             $zip->addFromString($filename, $pdfContent);
@@ -189,45 +213,45 @@ class PayslipController extends Controller
         $this->authorize('view own payslips');
 
         $employee = Employee::where('user_id', Auth::id())->first();
-        
+
         if (!$employee) {
             return redirect()->route('dashboard')
-                           ->with('error', 'Employee profile not found.');
+                ->with('error', 'Employee profile not found.');
         }
 
         $query = PayrollDetail::with(['payroll', 'employee.user'])
-                             ->where('employee_id', $employee->id);
+            ->where('employee_id', $employee->id);
 
         // Filter by year
         if ($request->filled('year')) {
-            $query->whereHas('payroll', function($q) use ($request) {
+            $query->whereHas('payroll', function ($q) use ($request) {
                 $q->whereYear('period_start', $request->year);
             });
         }
 
         // Filter by payroll type
         if ($request->filled('payroll_type')) {
-            $query->whereHas('payroll', function($q) use ($request) {
+            $query->whereHas('payroll', function ($q) use ($request) {
                 $q->where('payroll_type', $request->payroll_type);
             });
         }
 
-        $payslips = $query->whereHas('payroll', function($q) {
-                           $q->where('status', 'approved');
-                       })
-                       ->orderBy('created_at', 'desc')
-                       ->paginate(12);
+        $payslips = $query->whereHas('payroll', function ($q) {
+            $q->where('status', 'approved');
+        })
+            ->orderBy('created_at', 'desc')
+            ->paginate(12);
 
         // Get available years
-        $years = PayrollDetail::whereHas('payroll', function($q) use ($employee) {
-                                $q->where('status', 'approved');
-                            })
-                            ->where('employee_id', $employee->id)
-                            ->join('payrolls', 'payroll_details.payroll_id', '=', 'payrolls.id')
-                            ->selectRaw('YEAR(payrolls.period_start) as year')
-                            ->distinct()
-                            ->orderBy('year', 'desc')
-                            ->pluck('year');
+        $years = PayrollDetail::whereHas('payroll', function ($q) use ($employee) {
+            $q->where('status', 'approved');
+        })
+            ->where('employee_id', $employee->id)
+            ->join('payrolls', 'payroll_details.payroll_id', '=', 'payrolls.id')
+            ->selectRaw('YEAR(payrolls.period_start) as year')
+            ->distinct()
+            ->orderBy('year', 'desc')
+            ->pluck('year');
 
         return view('payslips.my-payslips', compact('payslips', 'employee', 'years'));
     }

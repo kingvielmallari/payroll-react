@@ -160,8 +160,14 @@
                 <td>{{ $payrollDetail->employee->position->title ?? 'N/A' }}</td>
             </tr>
             <tr>
-                <td class="label">Basic Salary:</td>
-                <td>₱{{ number_format($payrollDetail->basic_salary, 2) }}</td>
+                <td class="label">Basic Pay:</td>
+                <td>
+                    @php
+                        // Use snapshot regular_pay for locked payrolls, fallback to calculated basic pay for draft
+                        $basicPayAmount = ($snapshot && $snapshot->regular_pay !== null) ? $snapshot->regular_pay : $payrollDetail->regular_pay;
+                    @endphp
+                    ₱{{ number_format($basicPayAmount, 2) }}
+                </td>
                 <td class="label">Days Worked:</td>
                 <td>{{ $payrollDetail->days_worked }}</td>
             </tr>
@@ -217,18 +223,32 @@
                 <td class="amount">₱{{ number_format($payrollDetail->night_differential_pay, 2) }}</td>
             </tr>
             @endif
-            @if($payrollDetail->allowances > 0)
+            @php
+                // Use snapshot data for locked payrolls, fallback to payroll detail for draft
+                $allowancesAmount = ($snapshot && $snapshot->allowances_total !== null) ? $snapshot->allowances_total : $payrollDetail->allowances;
+                $bonusesAmount = ($snapshot && $snapshot->bonuses_total !== null) ? $snapshot->bonuses_total : $payrollDetail->bonuses;
+                $incentivesAmount = ($snapshot && $snapshot->incentives_total !== null) ? $snapshot->incentives_total : $payrollDetail->incentives;
+            @endphp
+            
+            @if($allowancesAmount > 0)
             <tr>
                 <td>Allowances</td>
                 <td>-</td>
-                <td class="amount">₱{{ number_format($payrollDetail->allowances, 2) }}</td>
+                <td class="amount">₱{{ number_format($allowancesAmount, 2) }}</td>
             </tr>
             @endif
-            @if($payrollDetail->bonuses > 0)
+            @if($bonusesAmount > 0)
             <tr>
                 <td>Bonuses</td>
                 <td>-</td>
-                <td class="amount">₱{{ number_format($payrollDetail->bonuses, 2) }}</td>
+                <td class="amount">₱{{ number_format($bonusesAmount, 2) }}</td>
+            </tr>
+            @endif
+            @if($incentivesAmount > 0)
+            <tr>
+                <td>Incentives</td>
+                <td>-</td>
+                <td class="amount">₱{{ number_format($incentivesAmount, 2) }}</td>
             </tr>
             @endif
             @if($payrollDetail->other_earnings > 0)

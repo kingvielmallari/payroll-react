@@ -130,14 +130,62 @@
                 $actualOvertimePay = $employeeSnapshot ? $employeeSnapshot->overtime_pay : $payrollDetail->overtime_pay;
             }
             
-            // Get allowances and bonuses from payroll detail
-            $actualAllowances = $payrollDetail->allowances ?? 0;
-            $actualBonuses = $payrollDetail->bonuses ?? 0;
+            // Get allowances, bonuses, and incentives - use snapshot values for locked payrolls
+            if ($employeeSnapshot && ($payroll->status === 'locked' || $payroll->status === 'processing')) {
+                // Use snapshot totals for locked/processing payrolls (already calculated with distribution methods)
+                $actualAllowances = $employeeSnapshot->allowances_total ?? 0;
+                $actualBonuses = $employeeSnapshot->bonuses_total ?? 0;
+                $actualIncentives = $employeeSnapshot->incentives_total ?? 0;
+            } else {
+                // Use detail values for draft payrolls
+                $actualAllowances = $payrollDetail->allowances ?? 0;
+                $actualBonuses = $payrollDetail->bonuses ?? 0;
+                $actualIncentives = $payrollDetail->incentives ?? 0;
+            }
             
             // Calculate gross pay by adding all components to ensure correct total
-            $actualGrossPay = $actualBasicPay + $actualHolidayPay + $actualRestPay + $actualOvertimePay + $actualAllowances + $actualBonuses;
+            $actualGrossPay = $actualBasicPay + $actualHolidayPay + $actualRestPay + $actualOvertimePay + $actualAllowances + $actualBonuses + $actualIncentives;
             
-            $actualNetPay = $employeeSnapshot ? $employeeSnapshot->net_pay : $payrollDetail->net_pay;
+            // Calculate total deductions (same logic as payslip view)
+            $calculatedDeductionTotal = 0;
+            $hasBreakdown = false;
+            
+            // Use the same conditional logic as the payslip view to avoid double-counting
+            if(isset($payrollDetail->deduction_breakdown) && is_array($payrollDetail->deduction_breakdown) && !empty($payrollDetail->deduction_breakdown)) {
+                // Use detail breakdown if available
+                $hasBreakdown = true;
+                foreach($payrollDetail->deduction_breakdown as $code => $deductionData) {
+                    $amount = $deductionData['amount'] ?? $deductionData;
+                    $calculatedDeductionTotal += $amount;
+                }
+            } elseif($employeeSnapshot && isset($employeeSnapshot->deductions_breakdown) && $employeeSnapshot->deductions_breakdown) {
+                // Use employee snapshot breakdown if available (handle both array and JSON string)
+                $hasBreakdown = true;
+                $deductionsBreakdown = is_string($employeeSnapshot->deductions_breakdown) 
+                    ? json_decode($employeeSnapshot->deductions_breakdown, true) 
+                    : $employeeSnapshot->deductions_breakdown;
+                
+                if (is_array($deductionsBreakdown)) {
+                    foreach ($deductionsBreakdown as $code => $deductionData) {
+                        $amount = $deductionData['amount'] ?? $deductionData;
+                        $calculatedDeductionTotal += $amount;
+                    }
+                }
+            } else {
+                // Fallback to individual fields
+                $calculatedDeductionTotal += $payrollDetail->sss_contribution ?? 0;
+                $calculatedDeductionTotal += $payrollDetail->philhealth_contribution ?? 0;
+                $calculatedDeductionTotal += $payrollDetail->pagibig_contribution ?? 0;
+                $calculatedDeductionTotal += $payrollDetail->withholding_tax ?? 0;
+                $calculatedDeductionTotal += $payrollDetail->cash_advance_deductions ?? 0;
+                $calculatedDeductionTotal += $payrollDetail->other_deductions ?? 0;
+            }
+            
+            // Use fallback to stored total if calculated is 0
+            $actualTotalDeductions = $calculatedDeductionTotal > 0 ? $calculatedDeductionTotal : ($payrollDetail->total_deductions ?? 0);
+            
+            // Calculate net pay dynamically: Gross Pay - Total Deductions
+            $actualNetPay = $actualGrossPay - $actualTotalDeductions;
         @endphp
         
         <p>Dear {{ $employee->first_name }} {{ $employee->last_name }},</p>

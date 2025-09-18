@@ -17,13 +17,15 @@ class PayslipMail extends Mailable
     use Queueable, SerializesModels;
 
     public $payrollDetail;
+    public $snapshot;
 
     /**
      * Create a new message instance.
      */
-    public function __construct(PayrollDetail $payrollDetail)
+    public function __construct(PayrollDetail $payrollDetail, $snapshot = null)
     {
         $this->payrollDetail = $payrollDetail;
+        $this->snapshot = $snapshot;
         $this->payrollDetail->load([
             'payroll',
             'employee.user',
@@ -52,6 +54,7 @@ class PayslipMail extends Mailable
             view: 'emails.payslip',
             with: [
                 'payrollDetail' => $this->payrollDetail,
+                'snapshot' => $this->snapshot,
                 'employee' => $this->payrollDetail->employee,
                 'payroll' => $this->payrollDetail->payroll,
             ],
@@ -66,15 +69,18 @@ class PayslipMail extends Mailable
     public function attachments(): array
     {
         // Generate PDF attachment
-        $pdf = Pdf::loadView('payslips.pdf', ['payrollDetail' => $this->payrollDetail]);
+        $pdf = Pdf::loadView('payslips.pdf', [
+            'payrollDetail' => $this->payrollDetail,
+            'snapshot' => $this->snapshot
+        ]);
         $pdf->setPaper('A4', 'portrait');
 
-        $filename = 'payslip_' . $this->payrollDetail->employee->employee_number . '_' . 
-                   $this->payrollDetail->payroll->period_start->format('Y-m') . '.pdf';
+        $filename = 'payslip_' . $this->payrollDetail->employee->employee_number . '_' .
+            $this->payrollDetail->payroll->period_start->format('Y-m') . '.pdf';
 
         return [
             Attachment::fromData(
-                fn () => $pdf->output(),
+                fn() => $pdf->output(),
                 $filename
             )->withMime('application/pdf'),
         ];

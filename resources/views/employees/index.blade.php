@@ -726,5 +726,73 @@
             url.searchParams.delete('page'); // Reset to first page
             window.location.href = url.toString();
         }
+
+        // Live filtering functionality
+        const searchInput = document.getElementById('search');
+        const departmentSelect = document.getElementById('department');
+        const employmentStatusSelect = document.getElementById('employment_status');
+        const sortNameSelect = document.getElementById('sort_name');
+        const sortHireDateSelect = document.getElementById('sort_hire_date');
+
+        // Debounce function for search input
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Update URL and reload page with current filter values
+        function updateFilters() {
+            const url = new URL(window.location.origin + window.location.pathname);
+            const params = new URLSearchParams();
+
+            // Add filter parameters
+            if (searchInput.value.trim()) params.set('search', searchInput.value.trim());
+            if (departmentSelect.value) params.set('department', departmentSelect.value);
+            if (employmentStatusSelect.value) params.set('employment_status', employmentStatusSelect.value);
+            if (sortNameSelect.value) params.set('sort_name', sortNameSelect.value);
+            if (sortHireDateSelect.value) params.set('sort_hire_date', sortHireDateSelect.value);
+
+            // Update URL
+            url.search = params.toString();
+            window.location.href = url.toString();
+        }
+
+        // Add event listeners for live filtering
+        searchInput.addEventListener('input', debounce(updateFilters, 500));
+        departmentSelect.addEventListener('change', updateFilters);
+        employmentStatusSelect.addEventListener('change', updateFilters);
+        sortNameSelect.addEventListener('change', updateFilters);
+        sortHireDateSelect.addEventListener('change', updateFilters);
+
+        // Auto-hide success and error messages after 2 seconds
+        const successMessage = document.getElementById('success-message');
+        const errorMessage = document.getElementById('error-message');
+        
+        if (successMessage) {
+            setTimeout(() => {
+                successMessage.style.transition = 'opacity 0.5s ease-out';
+                successMessage.style.opacity = '0';
+                setTimeout(() => {
+                    successMessage.remove();
+                }, 500);
+            }, 2000);
+        }
+        
+        if (errorMessage) {
+            setTimeout(() => {
+                errorMessage.style.transition = 'opacity 0.5s ease-out';
+                errorMessage.style.opacity = '0';
+                setTimeout(() => {
+                    errorMessage.remove();
+                }, 500);
+            }, 2000);
+        }
     </script>
 </x-app-layout>

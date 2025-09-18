@@ -281,20 +281,22 @@ class AllowanceBonusSetting extends Model
             ->whereNotNull('time_out')
             ->get();
 
-        // STEP 3: Filter logs to only include valid workdays (exclude rest days)
-        $validWorkLogs = $actualWorkLogs->filter(function ($timeLog) use ($timeSchedule) {
-            return $this->isValidWorkday($timeLog, $timeSchedule);
+        // STEP 3: Filter logs to only include SCHEDULED workdays (exclude rest day work)
+        // Perfect attendance means working ALL scheduled days, not extra rest day work
+        $scheduledWorkLogs = $actualWorkLogs->filter(function ($timeLog) use ($employee) {
+            return $this->isScheduledWorkday($timeLog, $employee);
         });
 
-        // STEP 4: Check if total valid workdays matches expected workdays
-        if ($validWorkLogs->count() !== $expectedWorkdays) {
-            return false; // Wrong number of workdays (too few or too many)
+        // STEP 4: Check if scheduled workdays count matches expected workdays exactly
+        // Must work ALL scheduled days - no substitutions allowed
+        if ($scheduledWorkLogs->count() !== $expectedWorkdays) {
+            return false; // Missing scheduled workdays or somehow worked more than expected scheduled days
         }
 
-        // STEP 5: Ensure all valid workdays have perfect time compliance
-        foreach ($validWorkLogs as $timeLog) {
+        // STEP 5: Ensure all scheduled workdays have perfect time compliance
+        foreach ($scheduledWorkLogs as $timeLog) {
             if (!$this->hasCompleteDayAttendance($employee, $timeLog, $timeSchedule)) {
-                return false; // One of the workdays has time issues
+                return false; // One of the scheduled workdays has time issues
             }
         }
 
@@ -318,6 +320,55 @@ class AllowanceBonusSetting extends Model
         }
 
         return $expectedWorkdays;
+    }
+
+    /**
+     * Check if a time log represents a scheduled workday (not rest day work)
+     * Only Regular Workday, Regular Holiday, and Special Holiday count toward perfect attendance
+     * Rest day work is bonus work and doesn't count toward attendance requirements
+     */
+    private function isScheduledWorkday($timeLog, $employee)
+    {
+        // Must have both time in and time out
+        if (!$timeLog->time_in || !$timeLog->time_out) {
+            return false;
+        }
+
+        // Check log_type - only scheduled workdays count toward perfect attendance
+        // Rest day work (any variant) should NOT count toward perfect attendance
+        $allowedLogTypes = [
+            'regular_workday',
+            'regular_holiday',
+            'special_holiday'
+        ];
+
+        if (!in_array($timeLog->log_type, $allowedLogTypes)) {
+            // This is rest day work or other non-scheduled work - doesn't count toward perfect attendance
+            return false;
+        }
+
+        // Verify sufficient work hours for the scheduled workday
+        $timeInTime = \Carbon\Carbon::parse($timeLog->time_in)->format('H:i:s');
+        $timeOutTime = \Carbon\Carbon::parse($timeLog->time_out)->format('H:i:s');
+        $logDate = \Carbon\Carbon::parse($timeLog->log_date)->format('Y-m-d');
+
+        $timeIn = \Carbon\Carbon::parse($logDate . ' ' . $timeInTime);
+        $timeOut = \Carbon\Carbon::parse($logDate . ' ' . $timeOutTime);
+
+        // Handle overnight shifts
+        if ($timeOut->lt($timeIn)) {
+            $timeOut->addDay();
+        }
+
+        // Calculate worked duration
+        $workedHours = $timeIn->diffInHours($timeOut);
+
+        // Must work at least 4 hours to count as a valid scheduled workday
+        if ($workedHours < 4) {
+            return false;
+        }
+
+        return true; // This is a valid scheduled workday
     }
 
     /**
@@ -359,16 +410,17 @@ class AllowanceBonusSetting extends Model
 
     /**
      * Check if employee has complete attendance for a specific time log
-     * Includes checking time in/out against scheduled hours
-     * Updated to work with TimeLog object directly instead of workDay array
+     * Only applies strict time compliance to SCHEDULED workdays
+     * Rest day work doesn't need time compliance (already filtered out in perfect attendance check)
      */
     private function hasCompleteDayAttendance($employee, $timeLog, $timeSchedule)
     {
-        // Check time in/out completeness (already verified in isValidWorkday, but double-check)
+        // Check time in/out completeness
         if (!$timeLog->time_in || !$timeLog->time_out) {
             return false; // Incomplete time logs
         }
 
+        // For scheduled workdays, apply strict time compliance
         // Parse scheduled and actual times
         $scheduledTimeIn = \Carbon\Carbon::parse($timeSchedule->time_in);
         $scheduledTimeOut = \Carbon\Carbon::parse($timeSchedule->time_out);
@@ -386,10 +438,6 @@ class AllowanceBonusSetting extends Model
         if ($actualTimeOut->format('H:i:s') < $scheduledTimeOut->format('H:i:s')) {
             return false; // Early departure
         }
-
-        // Note: We don't check late_hours and undertime_hours fields here because
-        // they might be calculated using different logic or outdated schedule references.
-        // We rely on the direct time comparison above which is more accurate.
 
         return true; // Passed all checks
     }

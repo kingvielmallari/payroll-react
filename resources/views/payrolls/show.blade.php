@@ -1809,15 +1809,23 @@
                                                         Current settings
                                                     </span>
                                                 </div>
-                                            @elseif($detail->allowances > 0)
+                                            @elseif($detail->allowances > 0 || ($employeeSnapshot && $employeeSnapshot->allowances_breakdown))
                                                 <!-- PROCESSING/APPROVED: Show Breakdown from Snapshot -->
                                                 @php
                                                     // Get allowances breakdown from the fetched snapshot
                                                     $allowancesBreakdown = [];
+                                                    $snapshotAllowancesTotal = 0;
                                                     if ($employeeSnapshot && $employeeSnapshot->allowances_breakdown) {
                                                         $allowancesBreakdown = is_string($employeeSnapshot->allowances_breakdown) 
                                                             ? json_decode($employeeSnapshot->allowances_breakdown, true) 
                                                             : $employeeSnapshot->allowances_breakdown;
+                                                        
+                                                        // Calculate total from breakdown (this is the CORRECT distributed amount)
+                                                        foreach ($allowancesBreakdown as $allowance) {
+                                                            if (isset($allowance['amount']) && $allowance['amount'] > 0) {
+                                                                $snapshotAllowancesTotal += $allowance['amount'];
+                                                            }
+                                                        }
                                                     }
                                                 @endphp
                                                 
@@ -1833,7 +1841,7 @@
                                                 @endif
                                                 
                                                 <div class="font-bold text-green-600">
-                                                    ₱{{ number_format($detail->allowances, 2) }}
+                                                    ₱{{ number_format($snapshotAllowancesTotal, 2) }}
                                                 </div>
                                                 <div class="text-xs text-gray-500">
                                                     <span class="inline-flex items-center">
@@ -1908,15 +1916,23 @@
                                                         Current settings
                                                     </span>
                                                 </div>
-                                            @elseif($detail->bonuses > 0)
+                                            @elseif($detail->bonuses > 0 || ($employeeSnapshot && $employeeSnapshot->bonuses_breakdown))
                                                 <!-- PROCESSING/APPROVED: Show Bonus Breakdown from Snapshot -->
                                                 @php
                                                     // Get bonuses breakdown from the fetched snapshot
                                                     $bonusesBreakdown = [];
+                                                    $snapshotBonusesTotal = 0;
                                                     if ($employeeSnapshot && $employeeSnapshot->bonuses_breakdown) {
                                                         $bonusesBreakdown = is_string($employeeSnapshot->bonuses_breakdown) 
                                                             ? json_decode($employeeSnapshot->bonuses_breakdown, true) 
                                                             : $employeeSnapshot->bonuses_breakdown;
+                                                        
+                                                        // Calculate total from breakdown (this is the CORRECT distributed amount)
+                                                        foreach ($bonusesBreakdown as $bonus) {
+                                                            if (isset($bonus['amount']) && $bonus['amount'] > 0) {
+                                                                $snapshotBonusesTotal += $bonus['amount'];
+                                                            }
+                                                        }
                                                     }
                                                 @endphp
                                                 
@@ -1932,7 +1948,7 @@
                                                 @endif
                                                 
                                                 <div class="font-bold text-blue-600">
-                                                    ₱{{ number_format($detail->bonuses, 2) }}
+                                                    ₱{{ number_format($snapshotBonusesTotal, 2) }}
                                                 </div>
                                                 <div class="text-xs text-gray-500">
                                                     <span class="inline-flex items-center">
@@ -2003,15 +2019,23 @@
                                                         Current settings
                                                     </span>
                                                 </div>
-                                            @elseif($detail->incentives > 0)
+                                            @elseif($detail->incentives > 0 || ($employeeSnapshot && $employeeSnapshot->incentives_breakdown))
                                                 <!-- PROCESSING/APPROVED: Show Incentive Breakdown from Snapshot -->
                                                 @php
                                                     // Get incentives breakdown from the fetched snapshot
                                                     $incentivesBreakdown = [];
+                                                    $snapshotIncentivesTotal = 0;
                                                     if ($employeeSnapshot && $employeeSnapshot->incentives_breakdown) {
                                                         $incentivesBreakdown = is_string($employeeSnapshot->incentives_breakdown) 
                                                             ? json_decode($employeeSnapshot->incentives_breakdown, true) 
                                                             : $employeeSnapshot->incentives_breakdown;
+                                                        
+                                                        // Calculate total from breakdown (this is the CORRECT distributed amount)
+                                                        foreach ($incentivesBreakdown as $incentive) {
+                                                            if (isset($incentive['amount']) && $incentive['amount'] > 0) {
+                                                                $snapshotIncentivesTotal += $incentive['amount'];
+                                                            }
+                                                        }
                                                     }
                                                 @endphp
                                                 
@@ -2027,7 +2051,7 @@
                                                 @endif
                                                 
                                                 <div class="font-bold text-purple-600">
-                                                    ₱{{ number_format($detail->incentives, 2) }}
+                                                    ₱{{ number_format($snapshotIncentivesTotal, 2) }}
                                                 </div>
                                                 <div class="text-xs text-gray-500">
                                                     <span class="inline-flex items-center">
@@ -2050,7 +2074,7 @@
                             
                             // Calculate DYNAMIC allowances (same logic as Allowances column)
                             $allowances = 0;
-                            if (isset($isDynamic) && $isDynamic && $allowanceSettings->isNotEmpty()) {
+                            if ($payroll->status === 'draft' && $allowanceSettings->isNotEmpty()) {
                                 foreach($allowanceSettings as $allowanceSetting) {
                                     // Check if this allowance setting applies to this employee's benefit status
                                     if (!$allowanceSetting->appliesTo($detail->employee)) {
@@ -2123,14 +2147,28 @@
                                     
                                     $allowances += $distributedAmount;
                                 }
-                            } else {
-                                // Fallback to stored value if no active settings
-                                $allowances = $detail->allowances ?? 0;
+            } else {
+                // For non-dynamic payrolls, use snapshot breakdown totals (CORRECT distributed amounts)
+                if ($employeeSnapshot && $employeeSnapshot->allowances_breakdown !== null) {
+                    $allowancesBreakdown = is_string($employeeSnapshot->allowances_breakdown) 
+                        ? json_decode($employeeSnapshot->allowances_breakdown, true) 
+                        : $employeeSnapshot->allowances_breakdown;
+                    
+                    $allowances = 0;
+                    if (is_array($allowancesBreakdown)) {
+                        foreach ($allowancesBreakdown as $allowance) {
+                            if (isset($allowance['amount']) && $allowance['amount'] > 0) {
+                                $allowances += $allowance['amount'];
                             }
-                            
-                            // Calculate DYNAMIC bonuses (same logic as Bonuses column)
+                        }
+                    }
+                } else {
+                    // Fallback to stored value if no snapshot breakdown exists
+                    $allowances = $detail->allowances ?? 0;
+                }
+            }                            // Calculate DYNAMIC bonuses (same logic as Bonuses column)
                             $bonuses = 0;
-                            if (isset($isDynamic) && $isDynamic && isset($bonusSettings) && $bonusSettings->isNotEmpty()) {
+                            if ($payroll->status === 'draft' && isset($bonusSettings) && $bonusSettings->isNotEmpty()) {
                                 foreach($bonusSettings as $bonusSetting) {
                                     // Check if this bonus setting applies to this employee's benefit status
                                     if (!$bonusSetting->appliesTo($detail->employee)) {
@@ -2160,14 +2198,28 @@
                                     
                                     $bonuses += $distributedAmount;
                                 }
-                            } else {
-                                // Fallback to stored value if no active settings
-                                $bonuses = $detail->bonuses ?? 0;
+            } else {
+                // For non-dynamic payrolls, use snapshot breakdown totals (CORRECT distributed amounts)
+                if ($employeeSnapshot && $employeeSnapshot->bonuses_breakdown !== null) {
+                    $bonusesBreakdown = is_string($employeeSnapshot->bonuses_breakdown) 
+                        ? json_decode($employeeSnapshot->bonuses_breakdown, true) 
+                        : $employeeSnapshot->bonuses_breakdown;
+                    
+                    $bonuses = 0;
+                    if (is_array($bonusesBreakdown)) {
+                        foreach ($bonusesBreakdown as $bonus) {
+                            if (isset($bonus['amount']) && $bonus['amount'] > 0) {
+                                $bonuses += $bonus['amount'];
                             }
-                            
-                            // Calculate DYNAMIC incentives (same logic as Incentives column)
+                        }
+                    }
+                } else {
+                    // Fallback to stored value if no snapshot breakdown exists
+                    $bonuses = $detail->bonuses ?? 0;
+                }
+            }                            // Calculate DYNAMIC incentives (same logic as Incentives column)
                             $incentives = 0;
-                            if (isset($isDynamic) && $isDynamic && isset($incentiveSettings) && $incentiveSettings->isNotEmpty()) {
+                            if ($payroll->status === 'draft' && isset($incentiveSettings) && $incentiveSettings->isNotEmpty()) {
                                 foreach($incentiveSettings as $incentiveSetting) {
                                     // Check if this incentive setting applies to this employee's benefit status
                                     if (!$incentiveSetting->appliesTo($detail->employee)) {
@@ -2198,36 +2250,120 @@
                                     
                                     $incentives += $distributedAmount;
                                 }
+            } else {
+                // For non-dynamic payrolls, use snapshot breakdown totals (CORRECT distributed amounts)
+                if ($employeeSnapshot && $employeeSnapshot->incentives_breakdown !== null) {
+                    $incentivesBreakdown = is_string($employeeSnapshot->incentives_breakdown) 
+                        ? json_decode($employeeSnapshot->incentives_breakdown, true) 
+                        : $employeeSnapshot->incentives_breakdown;
+                    
+                    $incentives = 0;
+                    if (is_array($incentivesBreakdown)) {
+                        foreach ($incentivesBreakdown as $incentive) {
+                            if (isset($incentive['amount']) && $incentive['amount'] > 0) {
+                                $incentives += $incentive['amount'];
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback to stored value if no snapshot breakdown exists
+                    $incentives = $detail->incentives ?? 0;
+                }
+            }                            // Handle basic pay - for locked payrolls use snapshot, for draft use dynamic calculation
+                            if ($payroll->status !== 'draft' && $employeeSnapshot) {
+                                // For locked/processing payrolls, use static snapshot data
+                                if ($employeeSnapshot->basic_breakdown) {
+                                    $basicBreakdown = is_string($employeeSnapshot->basic_breakdown) 
+                                        ? json_decode($employeeSnapshot->basic_breakdown, true) 
+                                        : $employeeSnapshot->basic_breakdown;
+                                    
+                                    $basicPayForGross = 0;
+                                    if (is_array($basicBreakdown)) {
+                                        foreach ($basicBreakdown as $type => $data) {
+                                            $basicPayForGross += $data['amount'] ?? 0;
+                                        }
+                                    }
+                                } else {
+                                    // Fallback to stored regular_pay if no breakdown
+                                    $basicPayForGross = $employeeSnapshot->regular_pay ?? 0;
+                                }
                             } else {
-                                // Fallback to stored value if no active settings
-                                $incentives = $detail->incentives ?? 0;
+                                // For draft payrolls, use dynamic calculation
+                                $basicPayForGross = round($basicPay, 2); // Use rounded value to match display
                             }
                             
-                            // Handle basic pay - use the same calculation as the Basic column for consistency
-                            $basicPayForGross = round($basicPay, 2); // Use rounded value to match display
-                            
-                            // Handle holiday pay - use the same calculation as the Holiday column for consistency
-                            $holidayPayForGross = round($holidayPay, 2); // Use rounded value to match display
-                            
-                            // Handle rest pay - use the same calculation as the Rest column for consistency
-                            $restPayForGross = round($restDayPay, 2); // Use rounded value to match display
-                            
-            // Handle overtime pay - use the SAME variable that was calculated in the Overtime column
-                            // DO NOT recalculate, just use the $overtimePay that was already computed above
-                            // This ensures 100% consistency between Overtime column and Gross Pay breakdown
-                            
-                            // Round overtime pay to match display precision
-                            $overtimePay = round($overtimePay, 2);
-                            
-                            // Calculate gross pay using stored snapshot value or dynamic calculation
-                            if ($payroll->status !== 'draft' && $employeeSnapshot && isset($employeeSnapshot->gross_pay)) {
-                                // For processing/approved payrolls, ALWAYS use stored gross pay from snapshot
-                                // This ensures gross pay is locked and doesn't change when settings are modified
-                                $calculatedGrossPay = $employeeSnapshot->gross_pay;
+                            // Handle holiday pay - for locked payrolls use snapshot, for draft use dynamic calculation
+                            if ($payroll->status !== 'draft' && $employeeSnapshot) {
+                                // For locked/processing payrolls, use static snapshot data
+                                if ($employeeSnapshot->holiday_breakdown) {
+                                    $holidayBreakdown = is_string($employeeSnapshot->holiday_breakdown) 
+                                        ? json_decode($employeeSnapshot->holiday_breakdown, true) 
+                                        : $employeeSnapshot->holiday_breakdown;
+                                    
+                                    $holidayPayForGross = 0;
+                                    if (is_array($holidayBreakdown)) {
+                                        foreach ($holidayBreakdown as $type => $data) {
+                                            $holidayPayForGross += $data['amount'] ?? 0;
+                                        }
+                                    }
+                                } else {
+                                    // Fallback to stored holiday_pay if no breakdown
+                                    $holidayPayForGross = $employeeSnapshot->holiday_pay ?? 0;
+                                }
                             } else {
-                                // For draft payrolls or if no valid snapshot data, calculate gross pay dynamically
-                                $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay + $allowances + $bonuses + $incentives;
+                                // For draft payrolls, use dynamic calculation
+                                $holidayPayForGross = round($holidayPay, 2); // Use rounded value to match display
                             }
+                            
+                            // Handle rest pay - for locked payrolls use snapshot, for draft use dynamic calculation
+                            if ($payroll->status !== 'draft' && $employeeSnapshot) {
+                                // For locked/processing payrolls, use static snapshot data
+                                if ($employeeSnapshot->rest_breakdown) {
+                                    $restBreakdown = is_string($employeeSnapshot->rest_breakdown) 
+                                        ? json_decode($employeeSnapshot->rest_breakdown, true) 
+                                        : $employeeSnapshot->rest_breakdown;
+                                    
+                                    $restPayForGross = 0;
+                                    if (is_array($restBreakdown)) {
+                                        foreach ($restBreakdown as $restData) {
+                                            $restPayForGross += $restData['amount'] ?? 0;
+                                        }
+                                    }
+                                } else {
+                                    // Fallback to stored rest_day_pay if no breakdown
+                                    $restPayForGross = $employeeSnapshot->rest_day_pay ?? 0;
+                                }
+                            } else {
+                                // For draft payrolls, use dynamic calculation
+                                $restPayForGross = round($restDayPay, 2); // Use rounded value to match display
+                            }
+                            
+                            // Handle overtime pay - for locked payrolls use snapshot, for draft use dynamic calculation
+                            if ($payroll->status !== 'draft' && $employeeSnapshot) {
+                                // For locked/processing payrolls, use static snapshot data
+                                if ($employeeSnapshot->overtime_breakdown) {
+                                    $overtimeBreakdown = is_string($employeeSnapshot->overtime_breakdown) 
+                                        ? json_decode($employeeSnapshot->overtime_breakdown, true) 
+                                        : $employeeSnapshot->overtime_breakdown;
+                                    
+                                    $overtimePayForGross = 0;
+                                    if (is_array($overtimeBreakdown)) {
+                                        foreach ($overtimeBreakdown as $type => $data) {
+                                            $overtimePayForGross += $data['amount'] ?? 0;
+                                        }
+                                    }
+                                } else {
+                                    // Fallback to stored overtime_pay if no breakdown
+                                    $overtimePayForGross = $employeeSnapshot->overtime_pay ?? 0;
+                                }
+                            } else {
+                                // For draft payrolls, use dynamic calculation and round overtime pay to match display precision
+                                $overtimePayForGross = round($overtimePay, 2);
+                            }
+                            
+                            // Calculate gross pay - for locked payrolls, calculate from breakdown totals to match display
+                            // This ensures the gross pay total always matches the sum of breakdown components
+                            $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePayForGross + $allowances + $bonuses + $incentives;
                         @endphp                                        <!-- Show Gross Pay Breakdown -->
                                         <div class="space-y-1">
                                             @if($calculatedGrossPay > 0)
@@ -2250,10 +2386,10 @@
                                                             <span>₱{{ number_format($restPayForGross, 2) }}</span>
                                                         </div>
                                                     @endif
-                                                    @if($overtimePay > 0)
+                                                    @if($overtimePayForGross > 0)
                                                         <div class="text-xs text-gray-500">
                                                             <span>Overtime:</span>
-                                                            <span>₱{{ number_format($overtimePay, 2) }}</span>
+                                                            <span>₱{{ number_format($overtimePayForGross, 2) }}</span>
                                                         </div>
                                                     @endif
                                                     @if($allowances > 0)
@@ -2275,19 +2411,59 @@
                                         </div>
                                     @endif                                            @endif
                                             @php
-                                                // Calculate taxable income using stored snapshot value or dynamic calculation
-                                                if ($payroll->status !== 'draft' && $employeeSnapshot && isset($employeeSnapshot->taxable_income)) {
-                                                    // For processing/approved payrolls, ALWAYS use stored taxable income from snapshot
-                                                    // This ensures taxable income is locked and doesn't change when settings are modified
-                                                    $taxableIncome = $employeeSnapshot->taxable_income;
-                                                } else {
-                                                    // For draft payrolls or if no valid snapshot data, calculate taxable income dynamically
-                                                    // Same calculation as PayrollDetail.getTaxableIncomeAttribute()
-                                                    // NOTE: Night differential amounts are already embedded in basic, holiday, and rest pay
-                                                    // through the breakdown calculations (Regular Workday+ND, Holiday+ND, etc.)
-                                                    $taxableIncome = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay;
+                                                // Calculate taxable income from breakdown components to match display
+                                                // This ensures taxable income always matches the sum of taxable breakdown components
+                                                $taxableIncome = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePayForGross;
+                                                
+                                                // Add taxable allowances/bonuses/incentives from breakdown calculations
+                                                // For locked payrolls, these are already calculated from snapshot breakdown above
+                                                // For draft payrolls, these are calculated dynamically above
+                                                if ($payroll->status !== 'draft' && $employeeSnapshot) {
+                                                    // For locked payrolls, check taxable settings from snapshot breakdown
+                                                    // Add taxable allowances
+                                                    if ($employeeSnapshot->allowances_breakdown) {
+                                                        $allowancesBreakdown = is_string($employeeSnapshot->allowances_breakdown) 
+                                                            ? json_decode($employeeSnapshot->allowances_breakdown, true) 
+                                                            : $employeeSnapshot->allowances_breakdown;
+                                                        
+                                                        foreach ($allowancesBreakdown as $allowance) {
+                                                            if (isset($allowance['is_taxable']) && $allowance['is_taxable'] && isset($allowance['amount'])) {
+                                                                $taxableIncome += $allowance['amount'];
+                                                            }
+                                                        }
+                                                    }
                                                     
-                                                    // Add taxable allowances/bonuses/incentives from settings
+                                                    // Add taxable bonuses
+                                                    if ($employeeSnapshot->bonuses_breakdown) {
+                                                        $bonusesBreakdown = is_string($employeeSnapshot->bonuses_breakdown) 
+                                                            ? json_decode($employeeSnapshot->bonuses_breakdown, true) 
+                                                            : $employeeSnapshot->bonuses_breakdown;
+                                                        
+                                                        foreach ($bonusesBreakdown as $bonus) {
+                                                            if (isset($bonus['is_taxable']) && $bonus['is_taxable'] && isset($bonus['amount'])) {
+                                                                $taxableIncome += $bonus['amount'];
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Add taxable incentives
+                                                    if ($employeeSnapshot->incentives_breakdown) {
+                                                        $incentivesBreakdown = is_string($employeeSnapshot->incentives_breakdown) 
+                                                            ? json_decode($employeeSnapshot->incentives_breakdown, true) 
+                                                            : $employeeSnapshot->incentives_breakdown;
+                                                        
+                                                        foreach ($incentivesBreakdown as $incentive) {
+                                                            if (isset($incentive['is_taxable']) && $incentive['is_taxable'] && isset($incentive['amount'])) {
+                                                                $taxableIncome += $incentive['amount'];
+                                                            }
+                                                        }
+                                                    }
+                                                } else {
+                                    // For draft payrolls, calculate taxable income dynamically
+                                    // Same calculation as PayrollDetail.getTaxableIncomeAttribute()
+                                    // NOTE: Night differential amounts are already embedded in basic, holiday, and rest pay
+                                    // through the breakdown calculations (Regular Workday+ND, Holiday+ND, etc.)
+                                    // Base taxable income already calculated above: $taxableIncome = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePayForGross;                                                    // Add taxable allowances/bonuses/incentives from settings
                                                     $allSettings = collect();
                                                     if (isset($allowanceSettings) && $allowanceSettings->isNotEmpty()) {
                                                         $allSettings = $allSettings->merge($allowanceSettings);
@@ -2385,8 +2561,9 @@
                                                         }
                                                     }
                                                     
-                                                    $taxableIncome = max(0, $taxableIncome);
                                                 }
+                                                
+                                                $taxableIncome = max(0, $taxableIncome);
                                             @endphp
                                           
                                             <div class="font-medium text-green-600 gross-pay-amount" data-gross-amount="{{ $calculatedGrossPay }}">₱{{ number_format($calculatedGrossPay, 2) }}</div>
@@ -2455,9 +2632,10 @@
                                                             $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->basic_pay ?? 0;
                                                             // Use the CALCULATED gross pay from the Gross Pay column instead of stored value
                                                             $grossPayForDeduction = $calculatedGrossPay;
-                                                            $overtimePay = $detail->overtime_pay ?? 0;
-                                                            $allowances = $detail->allowances ?? 0;
-                                                            $bonuses = $detail->bonuses ?? 0;
+                                                            // Use the CALCULATED breakdown components for consistency
+                                                            $overtimePayForDeduction = $overtimePayForGross;
+                                                            $allowancesForDeduction = $allowances;
+                                                            $bonusesForDeduction = $bonuses;
                                                             
                                                             // Auto-detect pay frequency from payroll period using dynamic pay schedule settings
                                                             $payFrequency = \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
@@ -2468,9 +2646,9 @@
                                             // Use the calculated taxable income from the previous column
                                             $calculatedAmount = $setting->calculateDeduction(
                                                 $basicPay, 
-                                                $overtimePay, 
-                                                $bonuses, 
-                                                $allowances, 
+                                                $overtimePayForDeduction, 
+                                                $bonusesForDeduction, 
+                                                $allowancesForDeduction, 
                                                 $grossPayForDeduction,
                                                 $taxableIncome,  // Pass calculated taxable income
                                                 null, // netPay (not used for now)

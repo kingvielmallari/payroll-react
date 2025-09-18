@@ -150,10 +150,18 @@
                     $actualOvertimePay = $employeeSnapshot ? $employeeSnapshot->overtime_pay : $detail->overtime_pay;
                 }
                 
-                // Get allowances, bonuses, and incentives from payroll detail
-                $actualAllowances = $detail->allowances ?? 0;
-                $actualBonuses = $detail->bonuses ?? 0;
-                $actualIncentives = $detail->incentives ?? 0;
+                // Get allowances, bonuses, and incentives - use snapshot values for locked payrolls
+                if ($employeeSnapshot && ($payroll->status === 'locked' || $payroll->status === 'processing')) {
+                    // Use snapshot totals for locked/processing payrolls (already calculated with distribution methods)
+                    $actualAllowances = $employeeSnapshot->allowances_total ?? 0;
+                    $actualBonuses = $employeeSnapshot->bonuses_total ?? 0;
+                    $actualIncentives = $employeeSnapshot->incentives_total ?? 0;
+                } else {
+                    // Use detail values for draft payrolls
+                    $actualAllowances = $detail->allowances ?? 0;
+                    $actualBonuses = $detail->bonuses ?? 0;
+                    $actualIncentives = $detail->incentives ?? 0;
+                }
                 
                 // Calculate total deductions (same logic as payroll show view)
                 $calculatedDeductionTotal = 0;
@@ -272,7 +280,7 @@
                             </div>
                             <div class="grid grid-cols-3 gap-2">
                                 <span class="font-medium text-gray-700">Basic Pay:</span>
-                                <span class="col-span-2">₱{{ number_format($detail->basic_salary ?? 0, 2) }}</span>
+                                <span class="col-span-2">₱{{ number_format($detail->regular_pay ?? 0, 2) }}</span>
                             </div>
                             <div class="grid grid-cols-3 gap-2">
                                 <span class="font-medium text-gray-700">Regular Hours:</span>
