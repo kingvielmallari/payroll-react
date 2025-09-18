@@ -171,11 +171,25 @@ class Payroll extends Model
     }
 
     /**
-     * Generate unique payroll number.
+     * Generate a unique payroll number.
      */
     public static function generatePayrollNumber($type = 'regular')
     {
-        $prefix = strtoupper(substr($type, 0, 3));
+        // Map payroll types to abbreviated prefixes
+        $prefixMap = [
+            'semi_monthly' => 'SM',
+            'semi-monthly' => 'SM',
+            'semimonthly' => 'SM',
+            'daily' => 'D',
+            'weekly' => 'W',
+            'monthly' => 'M',
+            'regular' => 'REG',
+            'automatic' => 'AUTO',
+            'bonus' => 'BON',
+            'adjustment' => 'ADJ'
+        ];
+
+        $prefix = $prefixMap[strtolower($type)] ?? strtoupper(substr($type, 0, 3));
         $year = date('Y');
         $month = date('m');
 
@@ -184,13 +198,13 @@ class Payroll extends Model
             ->first();
 
         if ($lastPayroll) {
-            $lastNumber = (int) substr($lastPayroll->payroll_number, -4);
-            $newNumber = str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
+            $lastNumber = (int) substr($lastPayroll->payroll_number, -3);
+            $newNumber = str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
         } else {
-            $newNumber = '0001';
+            $newNumber = '001';
         }
 
-        return "{$prefix}-{$year}{$month}{$newNumber}";
+        return "{$prefix}-{$year}{$month}-{$newNumber}";
     }
 
     /**

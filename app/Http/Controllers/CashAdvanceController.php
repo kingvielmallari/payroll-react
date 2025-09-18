@@ -28,22 +28,31 @@ class CashAdvanceController extends Controller
 
         $query = CashAdvance::with(['employee', 'requestedBy', 'approvedBy']);
 
+        // Filter by name search (employee name)
+        if ($request->filled('name_search')) {
+            $query->whereHas('employee', function ($q) use ($request) {
+                $searchTerm = $request->name_search;
+                $q->where(DB::raw("CONCAT(first_name, ' ', middle_name, ' ', last_name)"), 'LIKE', "%{$searchTerm}%")
+                    ->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$searchTerm}%")
+                    ->orWhere('first_name', 'LIKE', "%{$searchTerm}%")
+                    ->orWhere('last_name', 'LIKE', "%{$searchTerm}%");
+            });
+        }
+
         // Filter by status
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        // Filter by employee (for HR/Admin)
-        if ($request->filled('employee_id')) {
-            $query->where('employee_id', $request->employee_id);
+        // Filter by date approved (single date)
+        if ($request->filled('date_approved')) {
+            $query->whereDate('approved_date', $request->date_approved);
         }
 
-        // Filter by date range
-        if ($request->filled('date_from')) {
-            $query->whereDate('requested_date', '>=', $request->date_from);
-        }
-        if ($request->filled('date_to')) {
-            $query->whereDate('requested_date', '<=', $request->date_to);
+        // Filter by date completed (single date - fully paid date)
+        if ($request->filled('date_completed')) {
+            $query->whereDate('updated_at', $request->date_completed)
+                ->where('status', 'fully_paid');
         }
 
         // If employee user, only show their own cash advances
@@ -62,17 +71,24 @@ class CashAdvanceController extends Controller
         $summaryQuery = CashAdvance::query();
 
         // Apply same filters for summary
+        if ($request->filled('name_search')) {
+            $summaryQuery->whereHas('employee', function ($q) use ($request) {
+                $searchTerm = $request->name_search;
+                $q->where(DB::raw("CONCAT(first_name, ' ', middle_name, ' ', last_name)"), 'LIKE', "%{$searchTerm}%")
+                    ->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$searchTerm}%")
+                    ->orWhere('first_name', 'LIKE', "%{$searchTerm}%")
+                    ->orWhere('last_name', 'LIKE', "%{$searchTerm}%");
+            });
+        }
         if ($request->filled('status')) {
             $summaryQuery->where('status', $request->status);
         }
-        if ($request->filled('employee_id')) {
-            $summaryQuery->where('employee_id', $request->employee_id);
+        if ($request->filled('date_approved')) {
+            $summaryQuery->whereDate('approved_date', $request->date_approved);
         }
-        if ($request->filled('date_from')) {
-            $summaryQuery->whereDate('requested_date', '>=', $request->date_from);
-        }
-        if ($request->filled('date_to')) {
-            $summaryQuery->whereDate('requested_date', '<=', $request->date_to);
+        if ($request->filled('date_completed')) {
+            $summaryQuery->whereDate('updated_at', $request->date_completed)
+                ->where('status', 'fully_paid');
         }
         if (Auth::user()->hasRole('Employee')) {
             $employee = Auth::user()->employee;
@@ -84,7 +100,7 @@ class CashAdvanceController extends Controller
         $summaryStats = [
             'total_approved_amount' => $summaryQuery->clone()->where('status', 'approved')->sum('approved_amount'),
             'total_interest_amount' => $summaryQuery->clone()->where('status', 'approved')->sum('interest_amount'),
-            'total_paid_amount' => $summaryQuery->clone()->where('status', 'approved')->sum(DB::raw('approved_amount - outstanding_balance')),
+            'total_paid_amount' => $summaryQuery->clone()->where('status', 'approved')->get()->sum('total_paid'),
             'total_unpaid_amount' => $summaryQuery->clone()->where('status', 'approved')->sum('outstanding_balance'),
         ];
 

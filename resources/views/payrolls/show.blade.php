@@ -158,7 +158,17 @@
                                                         $calculatedAllowanceAmount = $allowanceSetting->maximum_amount;
                                                     }
                                                     
-                                                    $allowances += $calculatedAllowanceAmount;
+                                                    // Apply distribution method for summary calculation (to match individual columns)
+                                                    if ($calculatedAllowanceAmount > 0) {
+                                                        $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                                        $distributedAmount = $allowanceSetting->calculateDistributedAmount(
+                                                            $calculatedAllowanceAmount,
+                                                            $payroll->period_start,
+                                                            $payroll->period_end,
+                                                            $employeePaySchedule
+                                                        );
+                                                        $allowances += $distributedAmount;
+                                                    }
                                                 }
                                             } else {
                                                 // Fallback to stored value if no active settings
@@ -181,7 +191,17 @@
                                                         $calculatedBonusAmount = $bonusSetting->fixed_amount;
                                                     }
                                                     
-                                                    $bonuses += $calculatedBonusAmount;
+                                                    // Apply distribution method for summary calculation (to match individual columns)
+                                                    if ($calculatedBonusAmount > 0) {
+                                                        $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                                        $distributedAmount = $bonusSetting->calculateDistributedAmount(
+                                                            $calculatedBonusAmount,
+                                                            $payroll->period_start,
+                                                            $payroll->period_end,
+                                                            $employeePaySchedule
+                                                        );
+                                                        $bonuses += $distributedAmount;
+                                                    }
                                                 }
                                             } else {
                                                 // Fallback to stored value if no active settings
@@ -197,14 +217,27 @@
                                                         continue; // Skip this setting for this employee
                                                     }
                                                     
-                                                    $calculatedIncentiveAmount = 0;
-                                                    if($incentiveSetting->calculation_type === 'percentage') {
-                                                        $calculatedIncentiveAmount = ($basicPay * $incentiveSetting->rate_percentage) / 100;
-                                                    } elseif($incentiveSetting->calculation_type === 'fixed_amount') {
-                                                        $calculatedIncentiveAmount = $incentiveSetting->fixed_amount;
+                                                    // Check if this incentive requires perfect attendance
+                                                    if ($incentiveSetting->requires_perfect_attendance) {
+                                                        // Check if employee has perfect attendance for this payroll period
+                                                        if (!$incentiveSetting->hasPerfectAttendance($detail->employee, $payroll->period_start, $payroll->period_end)) {
+                                                            continue; // Skip this incentive if perfect attendance not met
+                                                        }
                                                     }
                                                     
-                                                    $incentives += $calculatedIncentiveAmount;
+                                                    $calculatedIncentiveAmount = $incentiveSetting->fixed_amount ?? 0;
+                                                    
+                                                    // Apply distribution method for summary calculation (to match individual columns)
+                                                    if ($calculatedIncentiveAmount > 0) {
+                                                        $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                                        $distributedAmount = $incentiveSetting->calculateDistributedAmount(
+                                                            $calculatedIncentiveAmount,
+                                                            $payroll->period_start,
+                                                            $payroll->period_end,
+                                                            $employeePaySchedule
+                                                        );
+                                                        $incentives += $distributedAmount;
+                                                    }
                                                 }
                                             } else {
                                                 // Fallback to stored value if no active settings
@@ -1732,43 +1765,26 @@
                                                         if ($setting->maximum_amount && $displayAmount > $setting->maximum_amount) {
                                                             $displayAmount = $setting->maximum_amount;
                                                         }
-
-                                                        // Apply frequency and distribution method logic
+                                                        
+                                                        // Apply distribution method
+                                                        $distributedAmount = 0;
                                                         if ($displayAmount > 0) {
-                                                            // Check perfect attendance requirement if enabled
-                                                            if ($setting->requires_perfect_attendance) {
-                                                                if (!$setting->hasPerfectAttendance($detail->employee, $payroll->period_start, $payroll->period_end)) {
-                                                                    $displayAmount = 0; // Employee doesn't have perfect attendance
-                                                                }
-                                                            }
-
-                                                            // Apply distribution logic only if amount is still > 0
-                                                            if ($displayAmount > 0) {
-                                                                // Get employee's pay schedule or auto-detect from payroll period
-                                                                $employeePaySchedule = $detail->employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
-                                                                    $payroll->period_start,
-                                                                    $payroll->period_end
-                                                                );
-                                                                
-                                                                // Apply distribution logic based on frequency and distribution method
-                                                                $distributedAmount = $setting->calculateDistributedAmount(
-                                                                    $displayAmount,
-                                                                    $payroll->period_start,
-                                                                    $payroll->period_end,
-                                                                    $employeePaySchedule
-                                                                );
-                                                                
-                                                                $displayAmount = $distributedAmount;
-                                                            }
+                                                            $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                                            $distributedAmount = $setting->calculateDistributedAmount(
+                                                                $displayAmount,
+                                                                $payroll->period_start,
+                                                                $payroll->period_end,
+                                                                $employeePaySchedule
+                                                            );
                                                         }
                                                         
                                                         // Add to breakdown and total
-                                                        if ($displayAmount > 0) {
+                                                        if ($distributedAmount > 0) {
                                                             $allowanceBreakdownDisplay[] = [
                                                                 'name' => $setting->name,
-                                                                'amount' => $displayAmount
+                                                                'amount' => $distributedAmount
                                                             ];
-                                                            $dynamicAllowancesTotal += $displayAmount;
+                                                            $dynamicAllowancesTotal += $distributedAmount;
                                                         }
                                                     @endphp
                                                 @endforeach
@@ -1858,42 +1874,25 @@
                                                         } elseif($setting->calculation_type === 'fixed_amount') {
                                                             $displayAmount = $setting->fixed_amount;
                                                         }
-
-                                                        // Apply frequency and distribution method logic
+                                                        
+                                                        // Apply distribution method
+                                                        $distributedAmount = 0;
                                                         if ($displayAmount > 0) {
-                                                            // Check perfect attendance requirement if enabled
-                                                            if ($setting->requires_perfect_attendance) {
-                                                                if (!$setting->hasPerfectAttendance($detail->employee, $payroll->period_start, $payroll->period_end)) {
-                                                                    $displayAmount = 0; // Employee doesn't have perfect attendance
-                                                                }
-                                                            }
-
-                                                            // Apply distribution logic only if amount is still > 0
-                                                            if ($displayAmount > 0) {
-                                                                // Get employee's pay schedule or auto-detect from payroll period
-                                                                $employeePaySchedule = $detail->employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
-                                                                    $payroll->period_start,
-                                                                    $payroll->period_end
-                                                                );
-                                                                
-                                                                // Apply distribution logic based on frequency and distribution method
-                                                                $distributedAmount = $setting->calculateDistributedAmount(
-                                                                    $displayAmount,
-                                                                    $payroll->period_start,
-                                                                    $payroll->period_end,
-                                                                    $employeePaySchedule
-                                                                );
-                                                                
-                                                                $displayAmount = $distributedAmount;
-                                                            }
+                                                            $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                                            $distributedAmount = $setting->calculateDistributedAmount(
+                                                                $displayAmount,
+                                                                $payroll->period_start,
+                                                                $payroll->period_end,
+                                                                $employeePaySchedule
+                                                            );
                                                         }
                                                         
-                                                        $dynamicBonusTotal += $displayAmount;
+                                                        $dynamicBonusTotal += $distributedAmount;
                                                     @endphp
-                                                    @if($displayAmount > 0)
+                                                    @if($distributedAmount > 0)
                                                         <div class="text-xs text-gray-500">
                                                             <span>{{ $setting->name }}:</span>
-                                                            <span>₱{{ number_format($displayAmount, 2) }}</span>
+                                                            <span>₱{{ number_format($distributedAmount, 2) }}</span>
                                                         </div>
                                                     @endif
                                                 @endforeach
@@ -1966,50 +1965,29 @@
                                                         }
                                                         $hasDynamicIncentives = true;
                                                         
-                                                        // Calculate actual amount for display
-                                                        $displayAmount = 0;
-                                                        if($setting->calculation_type === 'percentage') {
-                                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
-                                                            $displayAmount = ($basicPay * $setting->rate_percentage) / 100;
-                                                        } elseif($setting->calculation_type === 'fixed_amount') {
-                                                            $displayAmount = $setting->fixed_amount;
-                                                        }
-
-                                                        // Apply frequency and distribution method logic
-                                                        if ($displayAmount > 0) {
-                                                            // Check perfect attendance requirement if enabled
-                                                            if ($setting->requires_perfect_attendance) {
-                                                                if (!$setting->hasPerfectAttendance($detail->employee, $payroll->period_start, $payroll->period_end)) {
-                                                                    $displayAmount = 0; // Employee doesn't have perfect attendance
-                                                                }
-                                                            }
-
-                                                            // Apply distribution logic only if amount is still > 0
-                                                            if ($displayAmount > 0) {
-                                                                // Get employee's pay schedule or auto-detect from payroll period
-                                                                $employeePaySchedule = $detail->employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
-                                                                    $payroll->period_start,
-                                                                    $payroll->period_end
-                                                                );
-                                                                
-                                                                // Apply distribution logic based on frequency and distribution method
-                                                                $distributedAmount = $setting->calculateDistributedAmount(
-                                                                    $displayAmount,
-                                                                    $payroll->period_start,
-                                                                    $payroll->period_end,
-                                                                    $employeePaySchedule
-                                                                );
-                                                                
-                                                                $displayAmount = $distributedAmount;
+                                                        // Check if this incentive requires perfect attendance
+                                                        if ($setting->requires_perfect_attendance) {
+                                                            // Check if employee has perfect attendance for this payroll period
+                                                            if (!$setting->hasPerfectAttendance($detail->employee, $payroll->period_start, $payroll->period_end)) {
+                                                                continue; // Skip this incentive if perfect attendance not met
                                                             }
                                                         }
                                                         
-                                                        $dynamicIncentiveTotal += $displayAmount;
+                                                        // Calculate distributed amount
+                                                        $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                                        $distributedAmount = $setting->calculateDistributedAmount(
+                                                            $setting->fixed_amount ?? 0,
+                                                            $payroll->period_start,
+                                                            $payroll->period_end,
+                                                            $employeePaySchedule
+                                                        );
+                                                        
+                                                        $dynamicIncentiveTotal += $distributedAmount;
                                                     @endphp
-                                                    @if($displayAmount > 0)
+                                                    @if($distributedAmount > 0)
                                                         <div class="text-xs text-gray-500">
                                                             <span>{{ $setting->name }}:</span>
-                                                            <span>₱{{ number_format($displayAmount, 2) }}</span>
+                                                            <span>₱{{ number_format($distributedAmount, 2) }}</span>
                                                         </div>
                                                     @endif
                                                 @endforeach
@@ -2068,13 +2046,162 @@
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                         @php
                             // Calculate correct gross pay: Basic + Holiday + Rest + Overtime + Allowances + Bonuses + Incentives
-                            $allowances = $detail->allowances ?? 0;
+                            // Use the SAME distributed calculation logic as individual columns
                             
-                            // Use dynamic bonus total if available (calculated in Bonuses column above)
-                            $bonuses = isset($dynamicBonusTotal) ? $dynamicBonusTotal : ($detail->bonuses ?? 0);
+                            // Calculate DYNAMIC allowances (same logic as Allowances column)
+                            $allowances = 0;
+                            if (isset($isDynamic) && $isDynamic && $allowanceSettings->isNotEmpty()) {
+                                foreach($allowanceSettings as $allowanceSetting) {
+                                    // Check if this allowance setting applies to this employee's benefit status
+                                    if (!$allowanceSetting->appliesTo($detail->employee)) {
+                                        continue; // Skip this setting for this employee
+                                    }
+                                    
+                                    // Calculate actual amount for display based on setting configuration
+                                    $displayAmount = 0;
+                                    if($allowanceSetting->calculation_type === 'percentage') {
+                                        $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                        $displayAmount = ($basicPay * $allowanceSetting->rate_percentage) / 100;
+                                    } elseif($allowanceSetting->calculation_type === 'fixed_amount') {
+                                        $displayAmount = $allowanceSetting->fixed_amount;
+                                        
+                                        // Apply frequency-based calculation for daily allowances
+                                        if ($allowanceSetting->frequency === 'daily') {
+                                            // Calculate actual working days for this employee in this period
+                                            $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
+                                            $workingDays = 0;
+                                            
+                                            // Count working days from DTR data
+                                            if (isset($employeeBreakdown['regular_workday'])) {
+                                                $regularBreakdown = $employeeBreakdown['regular_workday'];
+                                                $workingDays += ($regularBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                            }
+                                            if (isset($employeeBreakdown['special_holiday'])) {
+                                                $specialBreakdown = $employeeBreakdown['special_holiday'];
+                                                $workingDays += ($specialBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                            }
+                                            if (isset($employeeBreakdown['regular_holiday'])) {
+                                                $regularHolidayBreakdown = $employeeBreakdown['regular_holiday'];
+                                                $workingDays += ($regularHolidayBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                            }
+                                            if (isset($employeeBreakdown['rest_day'])) {
+                                                $restBreakdown = $employeeBreakdown['rest_day'];
+                                                $workingDays += ($restBreakdown['regular_hours'] ?? 0) > 0 ? 1 : 0;
+                                            }
+                                            
+                                            // Apply max days limit if set
+                                            $maxDays = $allowanceSetting->max_days_per_period ?? $workingDays;
+                                            $applicableDays = min($workingDays, $maxDays);
+                                            
+                                            $displayAmount = $allowanceSetting->fixed_amount * $applicableDays;
+                                        }
+                                    } elseif($allowanceSetting->calculation_type === 'daily_rate_multiplier') {
+                                        $dailyRate = $detail->employee->daily_rate ?? 0;
+                                        $multiplier = $allowanceSetting->multiplier ?? 1;
+                                        $displayAmount = $dailyRate * $multiplier;
+                                    }
+                                    
+                                    // Apply minimum and maximum limits
+                                    if ($allowanceSetting->minimum_amount && $displayAmount < $allowanceSetting->minimum_amount) {
+                                        $displayAmount = $allowanceSetting->minimum_amount;
+                                    }
+                                    if ($allowanceSetting->maximum_amount && $displayAmount > $allowanceSetting->maximum_amount) {
+                                        $displayAmount = $allowanceSetting->maximum_amount;
+                                    }
+                                    
+                                    // Apply distribution method
+                                    $distributedAmount = 0;
+                                    if ($displayAmount > 0) {
+                                        $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                        $distributedAmount = $allowanceSetting->calculateDistributedAmount(
+                                            $displayAmount,
+                                            $payroll->period_start,
+                                            $payroll->period_end,
+                                            $employeePaySchedule
+                                        );
+                                    }
+                                    
+                                    $allowances += $distributedAmount;
+                                }
+                            } else {
+                                // Fallback to stored value if no active settings
+                                $allowances = $detail->allowances ?? 0;
+                            }
                             
-                            // Use dynamic incentive total if available (calculated in Incentives column above)
-                            $incentives = isset($dynamicIncentiveTotal) ? $dynamicIncentiveTotal : ($detail->incentives ?? 0);
+                            // Calculate DYNAMIC bonuses (same logic as Bonuses column)
+                            $bonuses = 0;
+                            if (isset($isDynamic) && $isDynamic && isset($bonusSettings) && $bonusSettings->isNotEmpty()) {
+                                foreach($bonusSettings as $bonusSetting) {
+                                    // Check if this bonus setting applies to this employee's benefit status
+                                    if (!$bonusSetting->appliesTo($detail->employee)) {
+                                        continue; // Skip this setting for this employee
+                                    }
+                                    
+                                    // Calculate actual amount for display
+                                    $displayAmount = 0;
+                                    if($bonusSetting->calculation_type === 'percentage') {
+                                        $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                        $displayAmount = ($basicPay * $bonusSetting->rate_percentage) / 100;
+                                    } elseif($bonusSetting->calculation_type === 'fixed_amount') {
+                                        $displayAmount = $bonusSetting->fixed_amount;
+                                    }
+                                    
+                                    // Apply distribution method
+                                    $distributedAmount = 0;
+                                    if ($displayAmount > 0) {
+                                        $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                        $distributedAmount = $bonusSetting->calculateDistributedAmount(
+                                            $displayAmount,
+                                            $payroll->period_start,
+                                            $payroll->period_end,
+                                            $employeePaySchedule
+                                        );
+                                    }
+                                    
+                                    $bonuses += $distributedAmount;
+                                }
+                            } else {
+                                // Fallback to stored value if no active settings
+                                $bonuses = $detail->bonuses ?? 0;
+                            }
+                            
+                            // Calculate DYNAMIC incentives (same logic as Incentives column)
+                            $incentives = 0;
+                            if (isset($isDynamic) && $isDynamic && isset($incentiveSettings) && $incentiveSettings->isNotEmpty()) {
+                                foreach($incentiveSettings as $incentiveSetting) {
+                                    // Check if this incentive setting applies to this employee's benefit status
+                                    if (!$incentiveSetting->appliesTo($detail->employee)) {
+                                        continue; // Skip this setting for this employee
+                                    }
+                                    
+                                    // Check if this incentive requires perfect attendance
+                                    if ($incentiveSetting->requires_perfect_attendance) {
+                                        // Check if employee has perfect attendance for this payroll period
+                                        if (!$incentiveSetting->hasPerfectAttendance($detail->employee, $payroll->period_start, $payroll->period_end)) {
+                                            continue; // Skip this incentive if perfect attendance not met
+                                        }
+                                    }
+                                    
+                                    $calculatedIncentiveAmount = $incentiveSetting->fixed_amount ?? 0;
+                                    
+                                    // Apply distribution method
+                                    $distributedAmount = 0;
+                                    if ($calculatedIncentiveAmount > 0) {
+                                        $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                        $distributedAmount = $incentiveSetting->calculateDistributedAmount(
+                                            $calculatedIncentiveAmount,
+                                            $payroll->period_start,
+                                            $payroll->period_end,
+                                            $employeePaySchedule
+                                        );
+                                    }
+                                    
+                                    $incentives += $distributedAmount;
+                                }
+                            } else {
+                                // Fallback to stored value if no active settings
+                                $incentives = $detail->incentives ?? 0;
+                            }
                             
                             // Handle basic pay - use the same calculation as the Basic column for consistency
                             $basicPayForGross = round($basicPay, 2); // Use rounded value to match display
@@ -2135,20 +2262,18 @@
                                                             <span>₱{{ number_format($allowances, 2) }}</span>
                                                         </div>
                                                     @endif
-                                                    @if($bonuses > 0)
-                                                        <div class="text-xs text-gray-500">
-                                                            <span>Bonus:</span>
-                                                            <span>₱{{ number_format($bonuses, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                                    @if($incentives > 0)
-                                                        <div class="text-xs text-gray-500">
-                                                            <span>Incentives:</span>
-                                                            <span>₱{{ number_format($incentives, 2) }}</span>
-                                                        </div>
-                                                    @endif
-                                             
-                                            @endif
+                                    @if($bonuses > 0)
+                                        <div class="text-xs text-gray-500">
+                                            <span>Bonus:</span>
+                                            <span>₱{{ number_format($bonuses, 2) }}</span>
+                                        </div>
+                                    @endif
+                                    @if($incentives > 0)
+                                        <div class="text-xs text-gray-500">
+                                            <span>Incent:</span>
+                                            <span>₱{{ number_format($incentives, 2) }}</span>
+                                        </div>
+                                    @endif                                            @endif
                                             @php
                                                 // Calculate taxable income using stored snapshot value or dynamic calculation
                                                 if ($payroll->status !== 'draft' && $employeeSnapshot && isset($employeeSnapshot->taxable_income)) {
@@ -2162,7 +2287,7 @@
                                                     // through the breakdown calculations (Regular Workday+ND, Holiday+ND, etc.)
                                                     $taxableIncome = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePay;
                                                     
-                                                    // Add taxable allowances/bonuses from settings
+                                                    // Add taxable allowances/bonuses/incentives from settings
                                                     $allSettings = collect();
                                                     if (isset($allowanceSettings) && $allowanceSettings->isNotEmpty()) {
                                                         $allSettings = $allSettings->merge($allowanceSettings);
@@ -2170,8 +2295,11 @@
                                                     if (isset($bonusSettings) && $bonusSettings->isNotEmpty()) {
                                                         $allSettings = $allSettings->merge($bonusSettings);
                                                     }
+                                                    if (isset($incentiveSettings) && $incentiveSettings->isNotEmpty()) {
+                                                        $allSettings = $allSettings->merge($incentiveSettings);
+                                                    }
                                                     
-                                                    // Add only taxable allowances/bonuses
+                                                    // Add only taxable allowances/bonuses/incentives
                                                     if ($allSettings->isNotEmpty()) {
                                                         foreach($allSettings as $setting) {
                                                             // Check if this setting applies to this employee's benefit status
@@ -2182,6 +2310,13 @@
                                                             // Only add if this setting is taxable
                                                             if (!$setting->is_taxable) {
                                                                 continue;
+                                                            }
+                                                            
+                                                            // Check perfect attendance for incentives
+                                                            if ($setting->type === 'incentives' && $setting->requires_perfect_attendance) {
+                                                                if (!$setting->hasPerfectAttendance($detail->employee, $payroll->period_start, $payroll->period_end)) {
+                                                                    continue; // Skip this incentive if perfect attendance not met
+                                                                }
                                                             }
                                                             
                                                             $calculatedAmount = 0;
@@ -2234,8 +2369,19 @@
                                                                 $calculatedAmount = $setting->maximum_amount;
                                                             }
                                                             
-                                                            // Add taxable allowance/bonus to taxable income
-                                                            $taxableIncome += $calculatedAmount;
+                                                            // Apply distribution method
+                                                            if ($calculatedAmount > 0) {
+                                                                $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                                                $distributedAmount = $setting->calculateDistributedAmount(
+                                                                    $calculatedAmount,
+                                                                    $payroll->period_start,
+                                                                    $payroll->period_end,
+                                                                    $employeePaySchedule
+                                                                );
+                                                                
+                                                                // Add taxable allowance/bonus/incentive to taxable income
+                                                                $taxableIncome += $distributedAmount;
+                                                            }
                                                         }
                                                     }
                                                     

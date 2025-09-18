@@ -280,6 +280,7 @@ class PayrollController extends Controller
             $totalOvertimeExcel = 0;
             $totalAllowancesExcel = 0;
             $totalBonusesExcel = 0;
+            $totalIncentivesExcel = 0;
             $totalGrossExcel = 0;
             $totalDeductionsExcel = 0;
             $totalNetExcel = 0;
@@ -295,6 +296,7 @@ class PayrollController extends Controller
                 'Overtime Pay',
                 'Allowances',
                 'Bonuses',
+                'Incentives',
                 'Total Gross',
                 'Total Deductions',
                 'Total Net'
@@ -315,6 +317,7 @@ class PayrollController extends Controller
                         $basicPay = $detail->basic_pay ?? 0;
                         $allowances = $detail->allowances_total ?? 0;
                         $bonuses = $detail->bonuses_total ?? 0;
+                        $incentives = $detail->incentives ?? 0;
                         $grossPay = $detail->gross_pay ?? 0;
                         $deductions = $detail->total_deductions ?? 0;
                         $netPay = $detail->net_pay ?? 0;
@@ -326,6 +329,7 @@ class PayrollController extends Controller
                         $totalOvertimeExcel += $correctOvertimePay;
                         $totalAllowancesExcel += $allowances;
                         $totalBonusesExcel += $bonuses;
+                        $totalIncentivesExcel += $incentives;
                         $totalGrossExcel += $grossPay;
                         $totalDeductionsExcel += $deductions;
                         $totalNetExcel += $netPay;
@@ -340,6 +344,7 @@ class PayrollController extends Controller
                             number_format($correctOvertimePay, 2),
                             number_format($allowances, 2),
                             number_format($bonuses, 2),
+                            number_format($incentives, 2),
                             number_format($grossPay, 2),
                             number_format($deductions, 2),
                             number_format($netPay, 2)
@@ -369,9 +374,10 @@ class PayrollController extends Controller
 
                         $allowances = $snapshot->allowances_total ?? 0;
                         $bonuses = $snapshot->bonuses_total ?? 0;
+                        $incentives = $snapshot->incentives_total ?? 0;
 
                         // Calculate gross pay from corrected component values
-                        $grossPay = $basicPay + $correctHolidayPay + $correctRestPay + $correctOvertimePay + $allowances + $bonuses;
+                        $grossPay = $basicPay + $correctHolidayPay + $correctRestPay + $correctOvertimePay + $allowances + $bonuses + $incentives;
 
                         // Recalculate deductions based on the recalculated gross pay
                         $deductions = $this->recalculateDeductionsFromBreakdown($snapshot, $grossPay);
@@ -386,6 +392,7 @@ class PayrollController extends Controller
                         $totalOvertimeExcel += $correctOvertimePay;
                         $totalAllowancesExcel += $allowances;
                         $totalBonusesExcel += $bonuses;
+                        $totalIncentivesExcel += $incentives;
                         $totalGrossExcel += $grossPay;
                         $totalDeductionsExcel += $deductions;
                         $totalNetExcel += $netPay;
@@ -400,6 +407,7 @@ class PayrollController extends Controller
                             number_format($correctOvertimePay, 2),
                             number_format($allowances, 2),
                             number_format($bonuses, 2),
+                            number_format($incentives, 2),
                             number_format($grossPay, 2),
                             number_format($deductions, 2),
                             number_format($netPay, 2)
@@ -419,6 +427,7 @@ class PayrollController extends Controller
                 number_format($totalOvertimeExcel, 2),
                 number_format($totalAllowancesExcel, 2),
                 number_format($totalBonusesExcel, 2),
+                number_format($totalIncentivesExcel, 2),
                 number_format($totalGrossExcel, 2),
                 number_format($totalDeductionsExcel, 2),
                 number_format($totalNetExcel, 2)
@@ -475,6 +484,7 @@ class PayrollController extends Controller
                         <th class="currency">Overtime</th>
                         <th class="currency">Allowances</th>
                         <th class="currency">Bonuses</th>
+                        <th class="currency">Incentives</th>
                         <th class="currency">Gross Pay</th>
                         <th class="currency">Deductions</th>
                         <th class="currency">Net Pay</th>
@@ -488,6 +498,7 @@ class PayrollController extends Controller
         $totalOvertime = 0;
         $totalAllowances = 0;
         $totalBonuses = 0;
+        $totalIncentives = 0;
         $totalGross = 0;
         $totalDeductions = 0;
         $totalNet = 0;
@@ -504,6 +515,7 @@ class PayrollController extends Controller
                     $overtimePay = $this->calculateCorrectOvertimePay($detail, $payroll);
                     $allowances = $detail->allowances_total ?? 0;
                     $bonuses = $detail->bonuses_total ?? 0;
+                    $incentives = $detail->incentives ?? 0;
                     $grossPay = $detail->gross_pay ?? 0;
                     $deductions = $detail->total_deductions ?? 0;
                     $netPay = $detail->net_pay ?? 0;
@@ -514,6 +526,7 @@ class PayrollController extends Controller
                     $totalOvertime += $overtimePay;
                     $totalAllowances += $allowances;
                     $totalBonuses += $bonuses;
+                    $totalIncentives += $incentives;
                     $totalGross += $grossPay;
                     $totalDeductions += $deductions;
                     $totalNet += $netPay;
@@ -529,6 +542,7 @@ class PayrollController extends Controller
                             <td class="currency">' . number_format($overtimePay, 2) . '</td>
                             <td class="currency">' . number_format($allowances, 2) . '</td>
                             <td class="currency">' . number_format($bonuses, 2) . '</td>
+                            <td class="currency">' . number_format($incentives, 2) . '</td>
                             <td class="currency">' . number_format($grossPay, 2) . '</td>
                             <td class="currency">' . number_format($deductions, 2) . '</td>
                             <td class="currency">' . number_format($netPay, 2) . '</td>
@@ -556,9 +570,10 @@ class PayrollController extends Controller
                     $overtimePay = $this->calculateCorrectOvertimePayFromSnapshot($snapshot);
                     $allowances = $snapshot->allowances_total ?? 0;
                     $bonuses = $snapshot->bonuses_total ?? 0;
+                    $incentives = $snapshot->incentives_total ?? 0;
 
                     // Calculate gross pay from corrected component values
-                    $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses;
+                    $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses + $incentives;
 
                     // Recalculate deductions based on the recalculated gross pay
                     $deductions = $this->recalculateDeductionsFromBreakdown($snapshot, $grossPay);
@@ -572,6 +587,7 @@ class PayrollController extends Controller
                     $totalOvertime += $overtimePay;
                     $totalAllowances += $allowances;
                     $totalBonuses += $bonuses;
+                    $totalIncentives += $incentives;
                     $totalGross += $grossPay;
                     $totalDeductions += $deductions;
                     $totalNet += $netPay;
@@ -587,6 +603,7 @@ class PayrollController extends Controller
                             <td class="currency">' . number_format($overtimePay, 2) . '</td>
                             <td class="currency">' . number_format($allowances, 2) . '</td>
                             <td class="currency">' . number_format($bonuses, 2) . '</td>
+                            <td class="currency">' . number_format($incentives, 2) . '</td>
                             <td class="currency">' . number_format($grossPay, 2) . '</td>
                             <td class="currency">' . number_format($deductions, 2) . '</td>
                             <td class="currency">' . number_format($netPay, 2) . '</td>
@@ -604,6 +621,7 @@ class PayrollController extends Controller
                         <td class="currency"><strong>' . number_format($totalOvertime, 2) . '</strong></td>
                         <td class="currency"><strong>' . number_format($totalAllowances, 2) . '</strong></td>
                         <td class="currency"><strong>' . number_format($totalBonuses, 2) . '</strong></td>
+                        <td class="currency"><strong>' . number_format($totalIncentives, 2) . '</strong></td>
                         <td class="currency"><strong>' . number_format($totalGross, 2) . '</strong></td>
                         <td class="currency"><strong>' . number_format($totalDeductions, 2) . '</strong></td>
                         <td class="currency"><strong>' . number_format($totalNet, 2) . '</strong></td>
@@ -1901,13 +1919,34 @@ class PayrollController extends Controller
         foreach ($allowanceSettings as $setting) {
             $amount = $this->calculateAllowanceBonusAmount($setting, $employee, $basicPay, $daysWorked, $hoursWorked);
 
+            // Apply distribution logic if amount > 0
             if ($amount > 0) {
-                $details[$setting->code] = [
-                    'name' => $setting->name,
-                    'amount' => $amount,
-                    'is_taxable' => $setting->is_taxable
-                ];
-                $total += $amount;
+                // Apply distribution logic using period dates from current payroll context
+                // We need payroll period for distribution calculation
+                $payroll = request()->route('payroll'); // Get current payroll from route
+                if ($payroll && $payroll instanceof \App\Models\Payroll) {
+                    $employeePaySchedule = $employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                        $payroll->period_start,
+                        $payroll->period_end
+                    );
+
+                    // Apply distribution logic using the model method
+                    $amount = $setting->calculateDistributedAmount(
+                        $amount,
+                        $payroll->period_start,
+                        $payroll->period_end,
+                        $employeePaySchedule
+                    );
+                }
+
+                if ($amount > 0) {
+                    $details[$setting->code] = [
+                        'name' => $setting->name,
+                        'amount' => $amount,
+                        'is_taxable' => $setting->is_taxable
+                    ];
+                    $total += $amount;
+                }
             }
         }
 
@@ -1935,13 +1974,34 @@ class PayrollController extends Controller
         foreach ($bonusSettings as $setting) {
             $amount = $this->calculateAllowanceBonusAmount($setting, $employee, $basicPay, $daysWorked, $hoursWorked);
 
+            // Apply distribution logic if amount > 0
             if ($amount > 0) {
-                $details[$setting->code] = [
-                    'name' => $setting->name,
-                    'amount' => $amount,
-                    'is_taxable' => $setting->is_taxable
-                ];
-                $total += $amount;
+                // Apply distribution logic using period dates from current payroll context
+                // We need payroll period for distribution calculation
+                $payroll = request()->route('payroll'); // Get current payroll from route
+                if ($payroll && $payroll instanceof \App\Models\Payroll) {
+                    $employeePaySchedule = $employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                        $payroll->period_start,
+                        $payroll->period_end
+                    );
+
+                    // Apply distribution logic using the model method
+                    $amount = $setting->calculateDistributedAmount(
+                        $amount,
+                        $payroll->period_start,
+                        $payroll->period_end,
+                        $employeePaySchedule
+                    );
+                }
+
+                if ($amount > 0) {
+                    $details[$setting->code] = [
+                        'name' => $setting->name,
+                        'amount' => $amount,
+                        'is_taxable' => $setting->is_taxable
+                    ];
+                    $total += $amount;
+                }
             }
         }
 
@@ -1977,13 +2037,34 @@ class PayrollController extends Controller
 
             $amount = $this->calculateAllowanceBonusAmount($setting, $employee, $basicPay, $daysWorked, $hoursWorked);
 
+            // Apply distribution logic if amount > 0
             if ($amount > 0) {
-                $details[$setting->code] = [
-                    'name' => $setting->name,
-                    'amount' => $amount,
-                    'is_taxable' => $setting->is_taxable
-                ];
-                $total += $amount;
+                // Apply distribution logic using period dates from current payroll context
+                // We need payroll period for distribution calculation
+                $payroll = request()->route('payroll'); // Get current payroll from route
+                if ($payroll && $payroll instanceof \App\Models\Payroll) {
+                    $employeePaySchedule = $employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                        $payroll->period_start,
+                        $payroll->period_end
+                    );
+
+                    // Apply distribution logic using the model method
+                    $amount = $setting->calculateDistributedAmount(
+                        $amount,
+                        $payroll->period_start,
+                        $payroll->period_end,
+                        $employeePaySchedule
+                    );
+                }
+
+                if ($amount > 0) {
+                    $details[$setting->code] = [
+                        'name' => $setting->name,
+                        'amount' => $amount,
+                        'is_taxable' => $setting->is_taxable
+                    ];
+                    $total += $amount;
+                }
             }
         }
 
@@ -5105,28 +5186,8 @@ class PayrollController extends Controller
      */
     private function generatePayrollNumber($paySchedule)
     {
-        $today = Carbon::now();
-        $year = $today->format('Y');
-        $month = $today->format('m');
-
-        // Format: SCHEDULE-YEAR-MONTH-COUNT
-        $scheduleCode = strtoupper(str_replace('_', '', $paySchedule));
-        $prefix = "{$scheduleCode}-{$year}{$month}";
-
-        // Find the last payroll with this prefix to determine next number
-        $lastPayroll = \App\Models\Payroll::where('payroll_number', 'like', "{$prefix}%")
-            ->orderBy('payroll_number', 'desc')
-            ->first();
-
-        if ($lastPayroll) {
-            // Extract the last 3 digits from the payroll number
-            $lastNumber = (int) substr($lastPayroll->payroll_number, -3);
-            $newNumber = sprintf('%03d', $lastNumber + 1);
-        } else {
-            $newNumber = '001';
-        }
-
-        return "{$prefix}-{$newNumber}";
+        // Use the model's generatePayrollNumber method for consistency
+        return \App\Models\Payroll::generatePayrollNumber($paySchedule);
     }
 
     /**

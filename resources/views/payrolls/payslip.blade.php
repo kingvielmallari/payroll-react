@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payslip - {{ $payroll->payroll_number }}</title>
+    
+    <!-- Include Tailwind CSS -->
+    <link rel="stylesheet" href="{{ asset('build/assets/app-BBnAiJRu.css') }}">
+    
+    <!-- Fallback CDN Tailwind CSS for payslip styling -->
+    {{-- <script src="https://cdn.tailwindcss.com"></script> --}}
+    
     <!-- Local assets instead of external CDNs -->
     <script src="/assets/js/jspdf.min.js"></script>
     <script src="/assets/js/html2canvas.min.js"></script>
@@ -143,9 +150,10 @@
                     $actualOvertimePay = $employeeSnapshot ? $employeeSnapshot->overtime_pay : $detail->overtime_pay;
                 }
                 
-                // Get allowances and bonuses from payroll detail
+                // Get allowances, bonuses, and incentives from payroll detail
                 $actualAllowances = $detail->allowances ?? 0;
                 $actualBonuses = $detail->bonuses ?? 0;
+                $actualIncentives = $detail->incentives ?? 0;
                 
                 // Calculate total deductions (same logic as payroll show view)
                 $calculatedDeductionTotal = 0;
@@ -186,7 +194,7 @@
                 $actualTotalDeductions = $calculatedDeductionTotal > 0 ? $calculatedDeductionTotal : ($detail->total_deductions ?? 0);
                 
                 // Calculate gross pay by adding all components to ensure correct total
-                $actualGrossPay = $actualBasicPay + $actualHolidayPay + $actualRestPay + $actualOvertimePay + $actualAllowances + $actualBonuses;
+                $actualGrossPay = $actualBasicPay + $actualHolidayPay + $actualRestPay + $actualOvertimePay + $actualAllowances + $actualBonuses + $actualIncentives;
                 
                 // Calculate net pay dynamically: Gross Pay - Total Deductions
                 $actualNetPay = $actualGrossPay - $actualTotalDeductions;
@@ -260,11 +268,11 @@
                         <div class="space-y-2 text-sm">
                             <div class="grid grid-cols-3 gap-2">
                                 <span class="font-medium text-gray-700">Pay Type:</span>
-                                <span class="col-span-2">{{ ucfirst($detail->employee->pay_schedule) }}</span>
+                                <span class="col-span-2">{{ ucwords(str_replace('_', ' ', $detail->employee->pay_schedule)) }}</span>
                             </div>
                             <div class="grid grid-cols-3 gap-2">
-                                <span class="font-medium text-gray-700">Hourly Rate:</span>
-                                <span class="col-span-2">₱{{ number_format($detail->hourly_rate ?? 0, 2) }}/hr</span> {{-- Use calculated hourly rate --}}
+                                <span class="font-medium text-gray-700">Basic Pay:</span>
+                                <span class="col-span-2">₱{{ number_format($detail->basic_salary ?? 0, 2) }}</span>
                             </div>
                             <div class="grid grid-cols-3 gap-2">
                                 <span class="font-medium text-gray-700">Regular Hours:</span>
@@ -322,6 +330,12 @@
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Bonuses</span>
                                 <span class="font-semibold text-indigo-600">₱{{ number_format($detail->bonuses, 2) }}</span>
+                            </div>
+                            @endif
+                            @if($detail->incentives > 0)
+                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span class="text-sm text-gray-700">Incentives</span>
+                                <span class="font-semibold text-purple-600">₱{{ number_format($detail->incentives, 2) }}</span>
                             </div>
                             @endif
                             @if($detail->other_earnings > 0)
@@ -434,7 +448,7 @@
                         <div>
                             <div class="border-t border-gray-400 pt-2 mt-16">
                                 <p class="text-sm font-semibold">Authorized Signature</p>
-                                <p class="text-xs text-gray-500">HR Department</p>
+                                <p class="text-xs text-gray-500">{{ $payroll->approver ? $payroll->approver->name : 'HR Department' }}</p>
                             </div>
                         </div>
                     </div>

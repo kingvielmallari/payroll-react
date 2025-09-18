@@ -55,6 +55,13 @@
                     <!-- Filter Inputs in 1 Row -->
                     <div class="flex flex-wrap items-end gap-4 mb-4 w-full">
                         <div class="flex-1 min-w-[180px]">
+                            <label class="block text-sm font-medium text-gray-700">Name Search</label>
+                            <input type="text" name="name_search" id="name_search" value="{{ request('name_search') }}" 
+                                   placeholder="Search employee name..."
+                                   class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+                        
+                        <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Status</label>
                             <select name="status" id="status" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All Statuses</option>
@@ -65,30 +72,16 @@
                                 <option value="cancelled" {{ request('status') === 'cancelled' ? 'selected' : '' }}>Cancelled</option>
                             </select>
                         </div>
-                        
-                        @can('view cash advances')
-                        <div class="flex-1 min-w-[180px]">
-                            <label class="block text-sm font-medium text-gray-700">Employee</label>
-                            <select name="employee_id" id="employee_id" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
-                                <option value="">All Employees</option>
-                                @foreach($employees as $employee)
-                                <option value="{{ $employee->id }}" {{ request('employee_id') == $employee->id ? 'selected' : '' }}>
-                                    {{ $employee->full_name }}
-                                </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        @endcan
 
                         <div class="flex-1 min-w-[160px]">
-                            <label class="block text-sm font-medium text-gray-700">Date From</label>
-                            <input type="date" name="date_from" id="date_from" value="{{ request('date_from') }}" 
+                            <label class="block text-sm font-medium text-gray-700">Date Approved</label>
+                            <input type="date" name="date_approved" id="date_approved" value="{{ request('date_approved') }}" 
                                    class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
 
                         <div class="flex-1 min-w-[160px]">
-                            <label class="block text-sm font-medium text-gray-700">Date To</label>
-                            <input type="date" name="date_to" id="date_to" value="{{ request('date_to') }}" 
+                            <label class="block text-sm font-medium text-gray-700">Date Completed</label>
+                            <input type="date" name="date_completed" id="date_completed" value="{{ request('date_completed') }}" 
                                    class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
 
@@ -553,20 +546,20 @@
                 const currentParams = new URLSearchParams(window.location.search);
 
                 // Get filter values
+                const nameSearch = document.getElementById('name_search').value;
                 const status = document.getElementById('status').value;
-                const employeeId = document.getElementById('employee_id')?.value || '';
-                const dateFrom = document.getElementById('date_from').value;
-                const dateTo = document.getElementById('date_to').value;
+                const dateApproved = document.getElementById('date_approved').value;
+                const dateCompleted = document.getElementById('date_completed').value;
 
                 // Add filter parameters
+                if (nameSearch) params.set('name_search', nameSearch);
                 if (status) params.set('status', status);
-                if (employeeId) params.set('employee_id', employeeId);
-                if (dateFrom) params.set('date_from', dateFrom);
-                if (dateTo) params.set('date_to', dateTo);
+                if (dateApproved) params.set('date_approved', dateApproved);
+                if (dateCompleted) params.set('date_completed', dateCompleted);
 
                 // Copy over existing parameters that aren't filters
                 for (const [key, value] of currentParams) {
-                    if (!['status', 'employee_id', 'date_from', 'date_to', 'page'].includes(key)) {
+                    if (!['name_search', 'status', 'date_approved', 'date_completed', 'page'].includes(key)) {
                         params.set(key, value);
                     }
                 }
@@ -578,6 +571,8 @@
             // Add event listeners for live filtering
             filterSelects.forEach(select => {
                 select.addEventListener('change', applyFilters);
+                // Also add input event for text inputs (name search)
+                select.addEventListener('input', applyFilters);
             });
 
             // Reset filters functionality

@@ -130,7 +130,7 @@ class DeductionTaxSetting extends Model
             case 'last_payroll':
                 return $this->isLastPayrollOfMonth($periodStart, $periodEnd);
 
-            case 'distribute_equally':
+            case 'equally_distributed':
                 return true; // Will be handled in calculateDistributedAmount
 
             default:
@@ -148,8 +148,8 @@ class DeductionTaxSetting extends Model
             return 0;
         }
 
-        // If distribution method is not 'distribute_equally', return full amount
-        if ($this->distribution_method !== 'distribute_equally') {
+        // If distribution method is not 'equally_distributed', return full amount
+        if ($this->distribution_method !== 'equally_distributed') {
             return $originalAmount;
         }
 
