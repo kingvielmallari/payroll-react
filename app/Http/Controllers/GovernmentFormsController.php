@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Employee;
+use App\Models\Department;
 use App\Models\Payroll;
 use App\Models\PayrollDetail;
 use App\Services\BIR1601CService;
 use App\Services\BIR2316Service;
+use App\Services\BIR2316TemplateService;
 use App\Services\SSSReportService;
 use App\Services\PhilHealthReportService;
 use App\Services\PagibigReportService;
@@ -27,6 +29,7 @@ class GovernmentFormsController extends Controller
 
     protected $bir1601CService;
     protected $bir2316Service;
+    protected $bir2316TemplateService;
     protected $sssReportService;
     protected $philHealthReportService;
     protected $pagibigReportService;
@@ -34,12 +37,14 @@ class GovernmentFormsController extends Controller
     public function __construct(
         BIR1601CService $bir1601CService,
         BIR2316Service $bir2316Service,
+        BIR2316TemplateService $bir2316TemplateService,
         SSSReportService $sssReportService,
         PhilHealthReportService $philHealthReportService,
         PagibigReportService $pagibigReportService
     ) {
         $this->bir1601CService = $bir1601CService;
         $this->bir2316Service = $bir2316Service;
+        $this->bir2316TemplateService = $bir2316TemplateService;
         $this->sssReportService = $sssReportService;
         $this->philHealthReportService = $philHealthReportService;
         $this->pagibigReportService = $pagibigReportService;
@@ -104,7 +109,7 @@ class GovernmentFormsController extends Controller
         }
 
         $employees = Employee::active()->with(['user', 'department', 'position'])->get();
-        
+
         if ($request->get('action') === 'download_all') {
             $allData = [];
             $employees = Employee::active()->get();
@@ -231,5 +236,134 @@ class GovernmentFormsController extends Controller
         }
 
         return view('government-forms.bir-1604c', compact('data', 'year'));
+    }
+
+    /**
+     * Display list of active employees for BIR 2316 form generation
+     */
+    public function bir2316EmployeeList(Request $request)
+    {
+        $this->authorize('generate reports');
+
+        $year = $request->get('year', now()->year);
+        $perPage = $request->get('per_page', 10);
+
+        $query = Employee::with(['user', 'department', 'position']);
+
+        // Apply filters
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('employee_number', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('email', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        if ($request->filled('department')) {
+            $query->where('department_id', $request->department);
+        }
+
+        if ($request->filled('employment_status')) {
+            $query->where('employment_status', $request->employment_status);
+        } else {
+            // Default to active employees only
+            $query->where('employment_status', 'active');
+        }
+
+        // Apply sorting
+        if ($request->filled('sort_name')) {
+            if ($request->sort_name === 'asc') {
+                $query->orderBy('first_name', 'asc')->orderBy('last_name', 'asc');
+            } elseif ($request->sort_name === 'desc') {
+                $query->orderBy('first_name', 'desc')->orderBy('last_name', 'desc');
+            }
+        } elseif ($request->filled('sort_hire_date')) {
+            $query->orderBy('hire_date', $request->sort_hire_date);
+        } else {
+            // Default sorting by employee number
+            $query->orderBy('employee_number');
+        }
+
+        // Paginate with query string preservation
+        $employees = $query->paginate($perPage)->withQueryString();
+
+        // Get departments for filter dropdown
+        $departments = Department::active()->get();
+
+        // Return JSON for AJAX requests
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'employees' => $employees,
+                'departments' => $departments,
+                'year' => $year,
+                'html' => view('government-forms.partials.bir-2316-employee-list', compact('employees', 'year'))->render()
+            ]);
+        }
+
+        return view('government-forms.bir-2316-employees', compact('employees', 'year', 'departments'));
+    }
+
+    /**
+     * Generate BIR 2316 summary (bulk download like payroll summary)
+     */
+    public function bir2316GenerateSummary(Request $request)
+    {
+        $this->authorize('generate reports');
+
+        $year = $request->get('year', now()->year);
+        $format = $request->get('export', 'pdf');
+
+        // Get all active employees
+        $employees = Employee::with(['user', 'department', 'position'])
+            ->where('employment_status', 'active')
+            ->orderBy('employee_number')
+            ->get();
+
+        if ($format === 'excel') {
+            return $this->bir2316TemplateService->downloadAllExcel($employees, $year);
+        } else {
+            return $this->bir2316TemplateService->downloadAllPDF($employees, $year);
+        }
+    }
+    /**
+     * Generate individual BIR 2316 form for a specific employee
+     */
+    public function bir2316Individual(Request $request, Employee $employee)
+    {
+        // Check if user has proper authorization for government forms
+        if (!$request->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff'])) {
+            abort(403, 'Unauthorized access. Only System Administrator, HR Head, and HR Staff can access government forms.');
+        }
+
+        $year = $request->get('year', now()->year);
+
+        // Generate the BIR 2316 data for this employee
+        $data = $this->bir2316Service->generateForEmployee($employee, $year);
+
+        return view('government-forms.bir-2316-individual', compact('employee', 'data', 'year'));
+    }
+
+    /**
+     * Generate individual BIR 2316 download (like payroll summary)
+     */
+    public function bir2316IndividualGenerate(Request $request, Employee $employee)
+    {
+        // Check if user has proper authorization for government forms
+        if (!$request->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff'])) {
+            abort(403, 'Unauthorized access. Only System Administrator, HR Head, and HR Staff can access government forms.');
+        }
+
+        $year = $request->get('year', now()->year);
+        $format = $request->get('export', 'pdf');
+
+        if ($format === 'excel') {
+            return $this->bir2316TemplateService->downloadIndividualExcel($employee, $year);
+        } else {
+            return $this->bir2316TemplateService->downloadIndividualPDF($employee, $year);
+        }
     }
 }

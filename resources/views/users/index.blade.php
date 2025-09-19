@@ -26,6 +26,12 @@
                         </select>
                     </div>
                     <div class="flex items-center space-x-2">
+                        <button type="button" id="reset_filters" class="inline-flex items-center px-4 h-10 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Reset Filters
+                        </button>
                         <button type="button" onclick="openExportModal()" 
                            class="inline-flex items-center px-4 h-10 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -152,79 +158,16 @@
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CREATED</th>
                             </tr>
                         </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            @forelse($users as $user)
-                                <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
-                                    onclick="window.location='{{ route('users.show', $user) }}'"
-                                    oncontextmenu="showContextMenu(event, {{ $user->id }}); return false;">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="flex items-center">
-                                            <div class="flex-shrink-0 h-10 w-10">
-                                                <div class="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                                                    <span class="text-sm font-medium text-gray-700">
-                                                        {{ strtoupper(substr($user->name, 0, 1)) }}{{ strtoupper(substr(explode(' ', $user->name)[1] ?? $user->name, 0, 1)) }}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div class="ml-4">
-                                                <div class="text-sm font-medium text-gray-900">{{ $user->name }}</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">{{ $user->email }}</div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        @if($user->roles->count() > 0)
-                                            @foreach($user->roles as $role)
-                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full mb-1
-                                                    @if($role->name === 'System Administrator') bg-red-100 text-red-800
-                                                    @elseif($role->name === 'HR Head') bg-purple-100 text-purple-800
-                                                    @elseif($role->name === 'HR Staff') bg-indigo-100 text-indigo-800
-                                                    @elseif($role->name === 'Employee') bg-green-100 text-green-800
-                                                    @else bg-gray-100 text-gray-800
-                                                    @endif">
-                                                    {{ $role->name }}
-                                                </span>
-                                                @if(!$loop->last)<br>@endif
-                                            @endforeach
-                                        @else
-                                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                                                No Role
-                                            </span>
-                                        @endif
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
-                                            @if($user->status === 'active') bg-green-100 text-green-800
-                                            @elseif($user->status === 'inactive') bg-yellow-100 text-yellow-800
-                                            @elseif($user->status === 'suspended') bg-red-100 text-red-800
-                                            @else bg-gray-100 text-gray-800
-                                            @endif">
-                                            {{ ucfirst($user->status) }}
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {{ $user->created_at->format('M d, Y') }}
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                                        No users found.
-                                    </td>
-                                </tr>
-                            @endforelse
+                        <tbody class="bg-white divide-y divide-gray-200" id="users-tbody">
+                            @include('users.partials.user-list')
                         </tbody>
                     </table>
                 </div>
 
                 <!-- Pagination -->
-                @if($users->hasPages())
-                    <div class="px-6 py-3 border-t border-gray-200">
-                        {{ $users->links() }}
-                    </div>
-                @endif
+                <div id="pagination-container">
+                    @include('users.partials.pagination')
+                </div>
             </div>
         </div>
     </div>
@@ -465,7 +408,7 @@
             };
         }
 
-        // Update URL and reload page with current filter values
+        // Update URL and apply filters via AJAX
         function updateFilters() {
             const url = new URL(window.location.origin + window.location.pathname);
             const params = new URLSearchParams();
@@ -474,14 +417,47 @@
             if (searchInput.value.trim()) params.set('search', searchInput.value.trim());
             if (roleSelect.value) params.set('role', roleSelect.value);
 
-            // Update URL
+            // Update URL without page reload
             url.search = params.toString();
-            window.location.href = url.toString();
+            window.history.pushState({}, '', url.toString());
+
+            // Make AJAX request to get filtered data
+            fetch(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update users table
+                document.getElementById('users-tbody').innerHTML = data.html;
+                
+                // Update pagination
+                document.getElementById('pagination-container').innerHTML = data.pagination;
+                
+                // Update export form hidden inputs
+                document.getElementById('export_search').value = searchInput.value.trim();
+                document.getElementById('export_role').value = roleSelect.value;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
         }
 
         // Add event listeners for live filtering
         searchInput.addEventListener('input', debounce(updateFilters, 500));
         roleSelect.addEventListener('change', updateFilters);
+
+        // Reset filter button functionality
+        const resetButton = document.getElementById('reset_filters');
+        if (resetButton) {
+            resetButton.addEventListener('click', function() {
+                // Reset to clean URL without any parameters (like BIR 2316)
+                window.location.href = '{{ route("users.index") }}';
+            });
+        }
 
         // Auto-hide success and error messages after 2 seconds
         const successMessage = document.getElementById('success-message');

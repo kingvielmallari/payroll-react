@@ -21,7 +21,7 @@
                 <div class="p-6">
                     <!-- Filter Inputs and Action Buttons in 1 Row -->
                     <div class="flex flex-wrap items-end gap-4 mb-4 w-full">
-                        <div class="flex-1 min-w-[180px]">
+                        <div class="flex-1 ">
                             <label class="block text-sm font-medium text-gray-700">Pay Schedule</label>
                             <select name="pay_schedule" id="pay_schedule" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All Schedules</option>
@@ -31,7 +31,7 @@
                                 <option value="monthly" {{ request('pay_schedule') == 'monthly' ? 'selected' : '' }}>Monthly</option>
                             </select>
                         </div>
-                        <div class="flex-1 min-w-[180px]">
+                        <div class="flex-1 ">
                             <label class="block text-sm font-medium text-gray-700">Status</label>
                             <select name="status" id="status" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All Statuses</option>
@@ -40,7 +40,7 @@
                                 <option value="paid" {{ request('status') == 'paid' ? 'selected' : '' }}>Paid</option>
                             </select>
                         </div>
-                        <div class="flex-1 min-w-[180px]">
+                        <div class="flex-1 ">
                             <label class="block text-sm font-medium text-gray-700">Type</label>
                             <select name="type" id="type" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All Types</option>
@@ -48,27 +48,28 @@
                                 <option value="manual" {{ request('type') == 'manual' ? 'selected' : '' }}>Manual</option>
                             </select>
                         </div>
-                        <div class="flex-1 min-w-[220px]">
+                        <div class="flex-1 ">
                             <label class="block text-sm font-medium text-gray-700">Pay Period</label>
                             <select name="pay_period" id="pay_period" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500 text-sm">
                                 <option value="">All Periods</option>
                                 <!-- Pay periods will be populated dynamically based on schedule selection -->
                             </select>
                         </div>
-                        <div class="flex items-end gap-2">
+                        <div class="flex items-center space-x-2">
                             <button type="button" id="reset_filters" class="inline-flex items-center px-4 h-10 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                 </svg>
                                 Reset Filters
                             </button>
-                            <button type="button" id="generate_summary" class="inline-flex items-center px-4 h-10 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                         <button type="button" id="generate_summary" class="inline-flex items-center px-4 h-10 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
                                 Generate Payroll Summary
                             </button>
                         </div>
+                        
                     </div>
                 </div>
             </div>
@@ -152,141 +153,13 @@
                         </div>
                     </div>
 
-                    @if($payrolls->count() > 0)
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
-                                        Payroll Number
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
-                                        Period
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
-                                        Employee
-                                    </th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
-                                        Status
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                @foreach($payrolls as $payroll)
-                                <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
-                                   oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $payroll->payroll_type }}', '{{ $payroll->pay_schedule }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : '' }}')"
-                                   onclick="window.open('@if($payroll->payroll_type === 'automated' && $payroll->payrollDetails->count() === 1){{ route('payrolls.automation.show', ['schedule' => $payroll->pay_schedule, 'employee' => $payroll->payrollDetails->first()->employee_id]) }}@else{{ route('payrolls.show', $payroll) }}@endif', '_blank')"
-                                   title="Click to open in new tab, Right-click for actions">
-                                   
-                                    <!-- Payroll Number Column -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium text-gray-900">{{ $payroll->payroll_number }}</div>
-                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 w-fit
-                                            {{ $payroll->payroll_type == 'automated' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800' }}">
-                                            {{ ucfirst(str_replace('_', ' ', $payroll->payroll_type)) }}
-                                        </span>
-                                    </td>
-                                    
-                                    <!-- Period Column -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900 font-medium">
-                                            {{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}
-                                        </div>
-                                        <div class="text-xs text-gray-500">Pay Date: {{ $payroll->pay_date->format('M d, Y') }}</div>
-                                    </td>
-                                    
-                                    <!-- Employee Column -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        @if($payroll->payroll_details_count <= 3)
-                                            @foreach($payroll->payrollDetails as $detail)
-                                                <div class="text-sm font-medium text-gray-900">{{ $detail->employee->full_name }}</div>
-                                                <div class="text-xs text-gray-500">{{ $detail->employee->employee_number }}</div>
-                                                @if(!$loop->last)
-                                                    <div class="my-1"></div>
-                                                @endif
-                                            @endforeach
-                                        @else
-                                            @foreach($payroll->payrollDetails->take(2) as $detail)
-                                                <div class="text-sm font-medium text-gray-900">{{ $detail->employee->full_name }}</div>
-                                                <div class="text-xs text-gray-500">{{ $detail->employee->employee_number }}</div>
-                                                @if(!$loop->last)
-                                                    <div class="my-1"></div>
-                                                @endif
-                                            @endforeach
-                                            <div class="text-xs text-blue-600 mt-2">
-                                                +{{ $payroll->payroll_details_count - 2 }} more employees
-                                            </div>
-                                        @endif
-                                    </td>
-                                    
-                                    <!-- Status Column -->
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium text-gray-900">
-                                            @if($payroll->is_paid && $payroll->marked_paid_at)
-                                                {{ $payroll->marked_paid_at->format('M d, Y') }}
-                                            @elseif($payroll->status == 'approved' && $payroll->approved_at)
-                                                {{ $payroll->approved_at->format('M d, Y') }}
-                                            @elseif($payroll->status == 'processing' && $payroll->processed_at)
-                                                {{ $payroll->processed_at->format('M d, Y') }}
-                                            @else
-                                                {{ $payroll->created_at->format('M d, Y') }}
-                                            @endif
-                                        </div>
-                                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 w-fit
-                                            @if($payroll->is_paid)
-                                                bg-green-100 text-green-800
-                                            @elseif($payroll->status == 'approved')
-                                                bg-blue-100 text-blue-800
-                                            @elseif($payroll->status == 'processing')
-                                                bg-yellow-100 text-yellow-800
-                                           
-                                            @else
-                                                bg-gray-100 text-gray-800
-                                            @endif">
-                                            {{ $payroll->is_paid ? 'Paid' : ucfirst($payroll->status) }}
-                                        </span>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                    <div id="payroll-list-container">
+                        @include('payrolls.partials.payroll-list', ['payrolls' => $payrolls])
                     </div>
 
-                    <!-- Pagination -->
-                    <div class="mt-6">
-                        <div class="flex items-center justify-between mb-5">
-                            <div class="flex items-center space-x-4">
-                                <div class="flex items-center space-x-2">
-                                    <label for="per_page" class="text-sm font-medium text-gray-700">Records per page:</label>
-                                    <select name="per_page" id="per_page" 
-                                            class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                        <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
-                                        <option value="25" {{ request('per_page') == 25 ? 'selected' : '' }}>25</option>
-                                        <option value="50" {{ request('per_page') == 50 ? 'selected' : '' }}>50</option>
-                                        <option value="100" {{ request('per_page') == 100 ? 'selected' : '' }}>100</option>
-                                    </select>
-                                </div>
-                                <div class="text-sm text-gray-700">
-                                    Showing {{ $payrolls->firstItem() ?? 0 }} to {{ $payrolls->lastItem() ?? 0 }} of {{ $payrolls->total() }} payrolls
-                                </div>
-                            </div>
-                            <div class="text-sm text-gray-500">
-                                Page {{ $payrolls->currentPage() }} of {{ $payrolls->lastPage() }}
-                            </div>
-                        </div>
-                        {{ $payrolls->links() }}
+                    <div id="pagination-container">
+                        @include('payrolls.partials.pagination', ['payrolls' => $payrolls])
                     </div>
-                    @else
-                    <div class="text-center py-12">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">No payrolls found</h3>
-                        <p class="mt-1 text-sm text-gray-500">
-                            No payrolls match your current filter criteria. Try adjusting your filters or create a new payroll.
-                        </p>
-                    </div>
-                    @endif
                 </div>
             </div>
         </div>
@@ -572,8 +445,9 @@
                 .catch(error => console.error('Error fetching periods:', error));
             }
 
-            // Function to apply filters and reload page
+            // Function to apply filters via AJAX (no page reload)
             function applyFilters() {
+                const url = new URL(window.location.origin + window.location.pathname);
                 const params = new URLSearchParams();
                 
                 // Keep any existing parameters except page
@@ -591,8 +465,29 @@
                     }
                 }
 
-                // Reload page with new filters
-                window.location.href = `{{ route('payrolls.index') }}?${params.toString()}`;
+                // Update URL without page reload
+                url.search = params.toString();
+                window.history.pushState({}, '', url.toString());
+
+                // Make AJAX request to get filtered data
+                fetch(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Update payroll list
+                    document.getElementById('payroll-list-container').innerHTML = data.html;
+                    
+                    // Update pagination
+                    document.getElementById('pagination-container').innerHTML = data.pagination;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
             }
 
             // Add event listeners for live filtering
@@ -700,10 +595,7 @@
             const perPageSelect = document.getElementById('per_page');
             if (perPageSelect) {
                 perPageSelect.addEventListener('change', function() {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('per_page', this.value);
-                    url.searchParams.delete('page'); // Reset to first page
-                    window.location.href = url.toString();
+                    applyFilters(); // Use AJAX instead of page reload
                 });
             }
         });

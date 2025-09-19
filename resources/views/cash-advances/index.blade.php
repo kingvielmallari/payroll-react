@@ -201,184 +201,13 @@
                         </div>
                     </div>
 
-                    @if($cashAdvances->count() > 0)
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Reference #
-                                    </th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Employee
-                                    </th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Deduction Date
-                                    </th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Approved Amount
-                                    </th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Installment Amount
-                                    </th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Outstanding Balance
-                                    </th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Status
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                @foreach($cashAdvances as $cashAdvance)
-                                <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
-                                   oncontextmenu="showContextMenu(event, '{{ $cashAdvance->id }}', '{{ $cashAdvance->reference_number }}', '{{ $cashAdvance->employee->full_name }}', '{{ $cashAdvance->status }}')"
-                                   onclick="window.location.href='{{ route('cash-advances.show', $cashAdvance) }}'"
-                                   title="Right-click for actions">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium text-gray-900">
-                                            {{ $cashAdvance->reference_number }}
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium text-gray-900">
-                                            {{ $cashAdvance->employee->full_name }}
-                                        </div>
-                                        <div class="text-sm text-gray-500">
-                                            {{ $cashAdvance->employee->employee_number }}
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        @if($cashAdvance->status === 'approved' && $cashAdvance->first_deduction_date)
-                                            <div class="text-sm text-gray-900">
-                                                {{ $cashAdvance->first_deduction_date->format('M d, Y') }}
-                                            </div>
-                                            <div class="text-xs text-gray-500">
-                                                Next payroll period
-                                            </div>
-                                        @elseif($cashAdvance->status === 'pending')
-                                            <div class="text-sm text-gray-500">
-                                                Pending approval
-                                            </div>
-                                        @else
-                                            <div class="text-sm text-gray-500">
-                                                —
-                                            </div>
-                                        @endif
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        @if($cashAdvance->approved_amount)
-                                            <div class="text-sm text-gray-900">
-                                                ₱{{ number_format($cashAdvance->approved_amount, 2) }}
-                                            </div>
-                                            {{-- @if($cashAdvance->approved_date)
-                                                <div class="text-xs text-green-600">
-                                                    Approved {{ $cashAdvance->approved_date->format('M d, Y') }}
-                                                </div>
-                                            @endif --}}
-                                            @if($cashAdvance->interest_rate > 0)
-                                                <div class="text-xs text-orange-600">
-                                                    +{{ $cashAdvance->interest_rate }}% interest
-                                                </div>
-                                                {{-- <div class="text-xs text-red-600">
-                                                    Total: ₱{{ number_format($cashAdvance->total_amount, 2) }}
-                                                </div> --}}
-                                            @endif
-                                        @else
-                                            <div class="text-sm text-gray-900">
-                                                ₱{{ number_format($cashAdvance->requested_amount, 2) }}
-                                            </div>
-                                            <div class="text-xs text-gray-500">
-                                                Requested {{ $cashAdvance->requested_date->format('M d, Y') }}
-                                            </div>
-                                        @endif
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        @if($cashAdvance->installment_amount)
-                                            <div class="text-sm text-blue-600">
-                                                ₱{{ number_format($cashAdvance->installment_amount, 2) }}
-                                            </div>
-                                            <div class="text-xs text-gray-500">
-                                                for {{ $cashAdvance->installments }} 
-                                                @if($cashAdvance->deduction_frequency === 'monthly')
-                                                    month{{ $cashAdvance->installments > 1 ? 's' : '' }}
-                                                @else
-                                                    Pay Period{{ $cashAdvance->installments > 1 ? 's' : '' }}
-                                                @endif
-                                            </div>
-                                        @else
-                                            <span class="text-sm text-gray-500">—</span>
-                                        @endif
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        @if($cashAdvance->outstanding_balance > 0)
-                                            <span class="text-sm text-yellow-600">₱{{ number_format($cashAdvance->outstanding_balance, 2) }}</span>
-                                        @else
-                                            <span class="text-sm text-green-600">₱0.00</span>
-                                        @endif
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        @switch($cashAdvance->status)
-                                            @case('pending')
-                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                                    Pending
-                                                </span>
-                                                @break
-                                            @case('approved')
-                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                                    Approved
-                                                </span>
-                                                @break
-                                            @case('rejected')
-                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                                                    Rejected
-                                                </span>
-                                                @break
-                                            @case('fully_paid')
-                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                                                    Fully Paid
-                                                </span>
-                                                @break
-                                            @case('cancelled')
-                                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                                                    Cancelled
-                                                </span>
-                                                @break
-                                        @endswitch
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                    <div id="cash-advance-list-container">
+                        @include('cash-advances.partials.cash-advance-list', ['cashAdvances' => $cashAdvances])
                     </div>
 
-                    <!-- Pagination -->
-                    <div class="flex items-center justify-between mt-6">
-                        <div class="text-sm text-gray-700">
-                            Showing {{ $cashAdvances->firstItem() }} to {{ $cashAdvances->lastItem() }} 
-                            of {{ $cashAdvances->total() }} results
-                        </div>
-                        <div>
-                            {{ $cashAdvances->appends(request()->query())->links() }}
-                        </div>
+                    <div id="pagination-container">
+                        @include('cash-advances.partials.pagination', ['cashAdvances' => $cashAdvances])
                     </div>
-                    @else
-                    <div class="text-center py-12">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                        </svg>
-                        <h3 class="mt-2 text-sm font-medium text-gray-900">No cash advances found</h3>
-                        <p class="mt-1 text-sm text-gray-500">Get started by creating a new cash advance request.</p>
-                        @can('create cash advances')
-                        <div class="mt-6">
-                            <a href="{{ route('cash-advances.create') }}" 
-                               class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
-                                Create First Cash Advance
-                            </a>
-                        </div>
-                        @endcan
-                    </div>
-                    @endif
                 </div>
             </div>
         </div>
@@ -540,8 +369,9 @@
         document.addEventListener('DOMContentLoaded', function() {
             const filterSelects = document.querySelectorAll('.cash-advance-filter');
 
-            // Function to apply filters immediately
+            // Function to apply filters via AJAX (no page reload)
             function applyFilters() {
+                const url = new URL(window.location.origin + window.location.pathname);
                 const params = new URLSearchParams();
                 const currentParams = new URLSearchParams(window.location.search);
 
@@ -564,8 +394,29 @@
                     }
                 }
 
-                // Reload page with new filters
-                window.location.href = `{{ route('cash-advances.index') }}?${params.toString()}`;
+                // Update URL without page reload
+                url.search = params.toString();
+                window.history.pushState({}, '', url.toString());
+
+                // Make AJAX request to get filtered data
+                fetch(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Update cash advance list
+                    document.getElementById('cash-advance-list-container').innerHTML = data.html;
+                    
+                    // Update pagination
+                    document.getElementById('pagination-container').innerHTML = data.pagination;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
             }
 
             // Add event listeners for live filtering

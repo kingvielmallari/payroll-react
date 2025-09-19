@@ -104,6 +104,17 @@ class CashAdvanceController extends Controller
             'total_unpaid_amount' => $summaryQuery->clone()->where('status', 'approved')->sum('outstanding_balance'),
         ];
 
+        // Return JSON for AJAX requests
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'cashAdvances' => $cashAdvances,
+                'employees' => $employees,
+                'summaryStats' => $summaryStats,
+                'html' => view('cash-advances.partials.cash-advance-list', compact('cashAdvances'))->render(),
+                'pagination' => view('cash-advances.partials.pagination', compact('cashAdvances'))->render()
+            ]);
+        }
+
         return view('cash-advances.index', compact('cashAdvances', 'employees', 'summaryStats'));
     }
 

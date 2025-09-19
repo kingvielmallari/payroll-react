@@ -324,6 +324,19 @@
                                         <div class="text-xs text-indigo-600 mt-1">Default values & configurations</div>
                                     </div>
                                 </a>
+
+                                @hasrole(['System Administrator', 'HR Head'])
+                                <a href="{{ route('settings.employer.index') }}" 
+                                   class="flex items-center px-6 py-3 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-800 transition-colors duration-150">
+                                    <svg class="mr-4 h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                                    </svg>
+                                    <div class="flex-1">
+                                        <div class="font-medium text-purple-700">Employer Settings</div>
+                                        <div class="text-xs text-purple-600 mt-1">Business details & government forms</div>
+                                    </div>
+                                </a>
+                                @endhasrole
                                 
                                 
                                 <div class="border-t border-gray-100 my-2"></div>

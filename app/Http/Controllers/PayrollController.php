@@ -220,6 +220,16 @@ class PayrollController extends Controller
             'total_gross_pay' => $totalGrossPay,
         ];
 
+        // Return JSON for AJAX requests
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'payrolls' => $payrolls,
+                'summaryStats' => $summaryStats,
+                'html' => view('payrolls.partials.payroll-list', compact('payrolls'))->render(),
+                'pagination' => view('payrolls.partials.pagination', compact('payrolls'))->render()
+            ]);
+        }
+
         return view('payrolls.index', compact('payrolls', 'summaryStats'));
     }
 
@@ -6013,7 +6023,7 @@ class PayrollController extends Controller
             $deductionsBreakdown = $this->getEmployeeDeductionsBreakdown($employee, $detail, $taxableIncome, $payroll, $grossPay);
 
             // Calculate employer deductions breakdown
-            $employerDeductionsBreakdown = $this->getEmployerDeductionsBreakdown($employee, $detail, $taxableIncome);
+            $employerDeductionsBreakdown = $this->getEmployerDeductionsBreakdown($employee, $detail, $taxableIncome, $payroll);
 
             // Log taxable income calculation for debugging
             Log::info("Final taxable income calculation for employee {$employee->id}", [
@@ -6597,7 +6607,7 @@ class PayrollController extends Controller
     /**
      * Get employer deductions breakdown for employee
      */
-    private function getEmployerDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null)
+    private function getEmployerDeductionsBreakdown(Employee $employee, PayrollDetail $detail, $taxableIncome = null, $payroll = null)
     {
         $breakdown = [];
         $payFrequency = $employee->pay_schedule ?? 'semi_monthly';
@@ -6633,7 +6643,7 @@ class PayrollController extends Controller
                     $payBasisAmount = $detail->net_pay ?? 0;
                     $payBasisName = 'netpay';
                 } elseif ($setting->apply_to_monthly_basic_salary) {
-                    $payBasisAmount = $employee->basic_salary ?? 0;
+                    $payBasisAmount = $employee->calculateMonthlyBasicSalary($payroll->period_start ?? null, $payroll->period_end ?? null);
                     $payBasisName = 'mbs';
                 } else {
                     // Calculate component-based pay basis
@@ -6709,7 +6719,7 @@ class PayrollController extends Controller
                         $detail->gross_pay ?? 0,
                         null,
                         null,
-                        $employee->basic_salary,
+                        $employee->calculateMonthlyBasicSalary($payroll->period_start ?? null, $payroll->period_end ?? null),
                         $payFrequency
                     );
                     $employerShare = $setting->calculateEmployerShare($employeeDeduction, $cappedAmount);

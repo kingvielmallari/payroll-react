@@ -8,6 +8,7 @@ use App\Http\Controllers\Settings\PaidLeaveSettingController;
 use App\Http\Controllers\Settings\HolidaySettingController;
 use App\Http\Controllers\Settings\NoWorkSuspendedSettingController;
 use App\Http\Controllers\Settings\EmployeeSettingController;
+use App\Http\Controllers\Settings\EmployerSettingController;
 use App\Http\Controllers\EmploymentTypeController;
 
 Route::middleware(['auth', 'verified'])->prefix('settings')->name('settings.')->group(function () {
@@ -17,6 +18,10 @@ Route::middleware(['auth', 'verified'])->prefix('settings')->name('settings.')->
     Route::post('employee', [EmployeeSettingController::class, 'update'])->name('employee.update');
     Route::post('employee/reset', [EmployeeSettingController::class, 'reset'])->name('employee.reset');
     Route::get('employee/next-number', [EmployeeSettingController::class, 'getNextEmployeeNumber'])->name('employee.next-number');
+
+    // Employer Settings
+    Route::get('employer', [EmployerSettingController::class, 'index'])->name('employer.index');
+    Route::post('employer', [EmployerSettingController::class, 'update'])->name('employer.update');
 
     // Employment Type Management
     Route::resource('employment-types', EmploymentTypeController::class);

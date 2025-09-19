@@ -75,13 +75,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     // Government Forms
-    Route::middleware('can:view reports')->group(function () {
+    Route::middleware('auth')->group(function () {
         Route::prefix('government-forms')->name('government-forms.')->group(function () {
             Route::get('/', [GovernmentFormsController::class, 'index'])->name('index');
 
             // BIR Forms
             Route::get('/bir-1601c', [GovernmentFormsController::class, 'bir1601C'])->name('bir-1601c');
-            Route::get('/bir-2316', [GovernmentFormsController::class, 'bir2316'])->name('bir-2316');
+            Route::get('/bir-2316', [GovernmentFormsController::class, 'bir2316EmployeeList'])->name('bir-2316.employees');
+            Route::post('/bir-2316/generate-summary', [GovernmentFormsController::class, 'bir2316GenerateSummary'])->name('bir-2316.generate-summary');
+            Route::get('/bir-2316/{employee}', [GovernmentFormsController::class, 'bir2316Individual'])->name('bir-2316.individual');
+            Route::post('/bir-2316/{employee}/generate', [GovernmentFormsController::class, 'bir2316IndividualGenerate'])->name('bir-2316.individual.generate');
             Route::get('/bir-1604c', [GovernmentFormsController::class, 'bir1604C'])->name('bir-1604c');
 
             // Government Agency Forms
@@ -116,8 +119,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('payrolls/automation/{schedule}/{employee}/approve', [PayrollController::class, 'approveUnifiedPayroll'])->name('payrolls.automation.approve')->middleware('can:approve payrolls');
         Route::post('payrolls/automation/{schedule}/{employee}/back-to-draft', [PayrollController::class, 'backToUnifiedDraft'])->name('payrolls.automation.back-to-draft');
 
-        // Test Dynamic Payroll Settings
-        Route::get('payrolls/test-dynamic', [PayrollController::class, 'testDynamic'])->name('payrolls.test-dynamic');
+        // // Test Dynamic Payroll Settings
+        // Route::get('payrolls/test-dynamic', [PayrollController::class, 'testDynamic'])->name('payrolls.test-dynamic');
 
         // Manual Payroll - manual employee selection
         Route::get('payrolls/manual', [PayrollController::class, 'manualIndex'])->name('payrolls.manual.index');

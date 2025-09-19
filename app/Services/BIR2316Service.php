@@ -22,11 +22,11 @@ class BIR2316Service
 
         // Get all payroll details for the employee for the year
         $payrollDetails = PayrollDetail::where('employee_id', $employee->id)
-                                     ->whereHas('payroll', function($query) use ($startDate, $endDate) {
-                                         $query->whereBetween('pay_period_start', [$startDate, $endDate]);
-                                     })
-                                     ->with('payroll')
-                                     ->get();
+            ->whereHas('payroll', function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('pay_period_start', [$startDate, $endDate]);
+            })
+            ->with('payroll')
+            ->get();
 
         $monthlyData = [];
         $totals = [
@@ -49,7 +49,7 @@ class BIR2316Service
 
         // Group by months
         for ($month = 1; $month <= 12; $month++) {
-            $monthlyDetails = $payrollDetails->filter(function($detail) use ($month) {
+            $monthlyDetails = $payrollDetails->filter(function ($detail) use ($month) {
                 return $detail->payroll->pay_period_start->month == $month;
             });
 
@@ -72,7 +72,7 @@ class BIR2316Service
 
             // Add to totals
             $totals['gross_compensation'] += $monthData['gross_compensation'];
-            $totals['basic_salary'] += $monthData['basic_salary']; 
+            $totals['basic_salary'] += $monthData['basic_salary'];
             $totals['overtime_pay'] += $monthData['overtime_pay'];
             $totals['allowances'] += $monthData['allowances'];
             $totals['bonuses'] += $monthData['bonuses'];
@@ -83,9 +83,9 @@ class BIR2316Service
             $totals['net_pay'] += $monthData['net_pay'];
         }
 
-        $totals['total_contributions'] = $totals['sss_contributions'] + 
-                                       $totals['philhealth_contributions'] + 
-                                       $totals['pagibig_contributions'];
+        $totals['total_contributions'] = $totals['sss_contributions'] +
+            $totals['philhealth_contributions'] +
+            $totals['pagibig_contributions'];
 
         return [
             'employee' => $employee,
@@ -103,19 +103,27 @@ class BIR2316Service
     {
         $pdf = Pdf::loadView('government-forms.pdf.bir-2316', compact('employee', 'data', 'year'));
         $filename = "BIR_2316_{$employee->employee_number}_{$year}.pdf";
-        
+
         return $pdf->download($filename);
     }
 
     /**
      * Download all BIR 2316 forms for all employees.
      */
-    public function downloadAllPDF($year)
+    public function downloadAllPDF($employees, $year)
     {
-        $employees = Employee::active()->get();
-        $pdf = Pdf::loadView('government-forms.pdf.bir-2316-all', compact('employees', 'year'));
+        $allData = [];
+        foreach ($employees as $employee) {
+            $data = $this->generateForEmployee($employee, $year);
+            $allData[] = [
+                'employee' => $employee,
+                'data' => $data
+            ];
+        }
+
+        $pdf = Pdf::loadView('government-forms.pdf.bir-2316-all', compact('allData', 'year'));
         $filename = "BIR_2316_All_Employees_{$year}.pdf";
-        
+
         return $pdf->download($filename);
     }
 
@@ -140,7 +148,7 @@ class BIR2316Service
     {
         $employees = Employee::active()->get();
         $summaryData = [];
-        
+
         $grandTotals = [
             'gross_compensation' => 0,
             'total_tax_withheld' => 0,
@@ -177,9 +185,9 @@ class BIR2316Service
         // Annual tax computation for Philippines (2025 rates)
         $annualExemption = 300000; // PHP 300,000 annual exemption
         $taxableIncome = max(0, $grossAnnualPay - $annualExemption);
-        
+
         $tax = 0;
-        
+
         if ($taxableIncome <= 400000) {
             $tax = 0;
         } elseif ($taxableIncome <= 2000000) {

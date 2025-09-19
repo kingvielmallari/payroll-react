@@ -44,21 +44,18 @@
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <!-- BIR 1601C -->
-                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow opacity-50">
                             <h4 class="font-medium text-gray-900 mb-2">BIR Form 1601-C</h4>
                             <p class="text-sm text-gray-600 mb-3">Monthly Remittance Return of Income Taxes Withheld on Compensation</p>
                             <div class="space-y-2">
                                 <span class="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded">Monthly</span>
                                 <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">Tax Withholding</span>
                             </div>
-                            @can('generate bir forms')
                             <div class="mt-4">
-                                <a href="{{ route('government-forms.bir-1601c') }}" 
-                                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
-                                    Generate Form
-                                </a>
+                                <span class="inline-flex items-center px-3 py-2 text-sm leading-4 font-medium rounded-md text-gray-500 bg-gray-200 cursor-not-allowed">
+                                    Not Available
+                                </span>
                             </div>
-                            @endcan
                         </div>
 
                         <!-- BIR 2316 -->
@@ -71,8 +68,11 @@
                             </div>
                             @can('generate bir forms')
                             <div class="mt-4">
-                                <a href="{{ route('government-forms.bir-2316') }}" 
-                                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                                <a href="{{ route('government-forms.bir-2316.employees') }}" 
+                                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" clip-rule="evenodd"></path>
+                                    </svg>
                                     Generate Form
                                 </a>
                             </div>
@@ -80,21 +80,18 @@
                         </div>
 
                         <!-- BIR 1604C -->
-                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow opacity-50">
                             <h4 class="font-medium text-gray-900 mb-2">BIR Form 1604-C</h4>
                             <p class="text-sm text-gray-600 mb-3">Annual Information Return of Income Taxes Withheld on Compensation</p>
                             <div class="space-y-2">
                                 <span class="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded">Annual</span>
                                 <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">Summary Report</span>
                             </div>
-                            @can('generate bir forms')
                             <div class="mt-4">
-                                <a href="{{ route('government-forms.bir-1604c') }}" 
-                                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
-                                    Generate Form
-                                </a>
+                                <span class="inline-flex items-center px-3 py-2 text-sm leading-4 font-medium rounded-md text-gray-500 bg-gray-200 cursor-not-allowed">
+                                    Not Available
+                                </span>
                             </div>
-                            @endcan
                         </div>
                     </div>
                 </div>
@@ -116,86 +113,54 @@
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <!-- SSS R-3 -->
-                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow opacity-50">
                             <h4 class="font-medium text-gray-900 mb-2">SSS Form R-3</h4>
                             <p class="text-sm text-gray-600 mb-3">Monthly Remittance Report for Social Security System contributions</p>
                             <div class="space-y-2">
                                 <span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">Monthly</span>
                                 <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">SSS Contributions</span>
                             </div>
-                            @can('generate sss forms')
                             <div class="mt-4">
-                                <a href="{{ route('government-forms.sss-r3') }}" 
-                                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                                    Generate Form
-                                </a>
+                                <span class="inline-flex items-center px-3 py-2 text-sm leading-4 font-medium rounded-md text-gray-500 bg-gray-200 cursor-not-allowed">
+                                    Not Available
+                                </span>
                             </div>
-                            @endcan
                         </div>
 
                         <!-- PhilHealth RF-1 -->
-                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow opacity-50">
                             <h4 class="font-medium text-gray-900 mb-2">PhilHealth RF-1</h4>
                             <p class="text-sm text-gray-600 mb-3">Monthly Remittance Form for PhilHealth premium contributions</p>
                             <div class="space-y-2">
                                 <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Monthly</span>
                                 <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">PhilHealth Premiums</span>
                             </div>
-                            @can('generate philhealth forms')
                             <div class="mt-4">
-                                <a href="{{ route('government-forms.philhealth-rf1') }}" 
-                                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                                    Generate Form
-                                </a>
+                                <span class="inline-flex items-center px-3 py-2 text-sm leading-4 font-medium rounded-md text-gray-500 bg-gray-200 cursor-not-allowed">
+                                    Not Available
+                                </span>
                             </div>
-                            @endcan
                         </div>
 
                         <!-- Pag-IBIG MCRF -->
-                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow opacity-50">
                             <h4 class="font-medium text-gray-900 mb-2">Pag-IBIG MCRF</h4>
                             <p class="text-sm text-gray-600 mb-3">Monthly Collection/Remittance Form for Pag-IBIG Fund contributions</p>
                             <div class="space-y-2">
                                 <span class="inline-block bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded">Monthly</span>
                                 <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">Pag-IBIG Contributions</span>
                             </div>
-                            @can('generate pagibig forms')
                             <div class="mt-4">
-                                <a href="{{ route('government-forms.pagibig-mcrf') }}" 
-                                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500">
-                                    Generate Form
-                                </a>
+                                <span class="inline-flex items-center px-3 py-2 text-sm leading-4 font-medium rounded-md text-gray-500 bg-gray-200 cursor-not-allowed">
+                                    Not Available
+                                </span>
                             </div>
-                            @endcan
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Help Section -->
-            <div class="bg-blue-50 overflow-hidden shadow-sm sm:rounded-lg mt-6">
-                <div class="p-6">
-                    <div class="flex items-start space-x-4">
-                        <div class="flex-shrink-0">
-                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-sm font-medium text-blue-900">Important Notes</h3>
-                            <div class="mt-1 text-sm text-blue-700">
-                                <ul class="list-disc list-inside space-y-1">
-                                    <li>All forms are generated based on your payroll data and use current 2025 rates and formats</li>
-                                    <li>Ensure all employee government IDs (SSS, PhilHealth, Pag-IBIG, TIN) are correctly entered</li>
-                                    <li>Forms can be downloaded as PDF or Excel format for submission or record keeping</li>
-                                    <li>Monthly forms should be generated after payroll processing is complete</li>
-                                    <li>Annual forms (like BIR 2316) are typically generated at the end of the tax year</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+          
         </div>
     </div>
 </x-app-layout>

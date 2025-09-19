@@ -49,6 +49,16 @@ class UserController extends Controller
             })->count(),
         ];
 
+        // Return JSON for AJAX requests
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'users' => $users,
+                'userStats' => $userStats,
+                'html' => view('users.partials.user-list', compact('users'))->render(),
+                'pagination' => view('users.partials.pagination', compact('users'))->render()
+            ]);
+        }
+
         return view('users.index', compact('users', 'userStats'));
     }
 

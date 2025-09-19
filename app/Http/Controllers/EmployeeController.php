@@ -177,6 +177,20 @@ class EmployeeController extends Controller
             'rate_types' => $rateTypeStats,
         ];
 
+        // Return JSON for AJAX requests
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'employees' => $employees,
+                'departments' => $departments,
+                'topPerformers' => $topPerformers,
+                'leastPerformers' => $leastPerformers,
+                'currentMonth' => $currentMonth,
+                'summaryStats' => $summaryStats,
+                'html' => view('employees.partials.employee-list', compact('employees'))->render(),
+                'pagination' => view('employees.partials.pagination', compact('employees'))->render()
+            ]);
+        }
+
         return view('employees.index', compact('employees', 'departments', 'topPerformers', 'leastPerformers', 'currentMonth', 'summaryStats'));
     }
 
