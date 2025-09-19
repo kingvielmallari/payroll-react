@@ -119,27 +119,14 @@
                 </div>
 
                 <div id="pay_settings" style="display: none;">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="pay_percentage" class="block text-sm font-medium text-gray-700 mb-2">Pay Percentage</label>
-                            <select name="pay_percentage" id="pay_percentage" 
-                                    class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <option value="100" {{ old('pay_percentage') == '100' ? 'selected' : '' }}>100% (Full Pay)</option>
-                                <option value="75" {{ old('pay_percentage') == '75' ? 'selected' : '' }}>75%</option>
-                                <option value="50" {{ old('pay_percentage') == '50' ? 'selected' : '' }}>50%</option>
-                                <option value="25" {{ old('pay_percentage') == '25' ? 'selected' : '' }}>25%</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label for="pay_applicable_to" class="block text-sm font-medium text-gray-700 mb-2">Applicable To</label>
-                            <select name="pay_applicable_to" id="pay_applicable_to" 
-                                    class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <option value="all" {{ old('pay_applicable_to') == 'all' ? 'selected' : '' }}>All Employees</option>
-                                <option value="with_benefits" {{ old('pay_applicable_to') == 'with_benefits' ? 'selected' : '' }}>Employees with Benefits Only</option>
-                                <option value="without_benefits" {{ old('pay_applicable_to') == 'without_benefits' ? 'selected' : '' }}>Employees without Benefits Only</option>
-                            </select>
-                        </div>
+                    <div>
+                        <label for="pay_applicable_to" class="block text-sm font-medium text-gray-700 mb-2">Applicable To</label>
+                        <select name="pay_applicable_to" id="pay_applicable_to" 
+                                class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="all" {{ old('pay_applicable_to') == 'all' ? 'selected' : '' }}>All Employees</option>
+                            <option value="with_benefits" {{ old('pay_applicable_to') == 'with_benefits' ? 'selected' : '' }}>Employees with Benefits Only</option>
+                            <option value="without_benefits" {{ old('pay_applicable_to') == 'without_benefits' ? 'selected' : '' }}>Employees without Benefits Only</option>
+                        </select>
                     </div>
                 </div>
             </div>

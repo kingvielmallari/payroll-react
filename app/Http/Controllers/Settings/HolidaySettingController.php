@@ -54,10 +54,22 @@ class HolidaySettingController extends Controller
             'name' => 'required|string|max:255',
             'date' => 'required|date',
             'type' => 'required|in:regular,special_non_working',
+            'is_paid' => 'boolean',
+            'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
         ]);
 
         // Auto-extract year from date
         $validated['year'] = date('Y', strtotime($validated['date']));
+
+        // Handle checkbox value
+        $validated['is_paid'] = $request->has('is_paid') && $request->is_paid;
+
+        // Set pay_applicable_to to null if not paid, or default to 'all' if paid but not specified
+        if (!$validated['is_paid']) {
+            $validated['pay_applicable_to'] = null;
+        } elseif (empty($validated['pay_applicable_to'])) {
+            $validated['pay_applicable_to'] = 'all';
+        }
 
         // Check for duplicates (same date only - each date can only have one holiday)
         $existingHoliday = Holiday::where('date', $validated['date'])->first();
@@ -92,10 +104,22 @@ class HolidaySettingController extends Controller
             'name' => 'required|string|max:255',
             'date' => 'required|date',
             'type' => 'required|in:regular,special_non_working',
+            'is_paid' => 'boolean',
+            'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
         ]);
 
         // Auto-extract year from date
         $validated['year'] = date('Y', strtotime($validated['date']));
+
+        // Handle checkbox value
+        $validated['is_paid'] = $request->has('is_paid') && $request->is_paid;
+
+        // Set pay_applicable_to to null if not paid, or default to 'all' if paid but not specified
+        if (!$validated['is_paid']) {
+            $validated['pay_applicable_to'] = null;
+        } elseif (empty($validated['pay_applicable_to'])) {
+            $validated['pay_applicable_to'] = 'all';
+        }
 
         // Check for duplicates (same date only - each date can only have one holiday) excluding current holiday
         $existingHoliday = Holiday::where('date', $validated['date'])

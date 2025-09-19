@@ -21,7 +21,6 @@ class NoWorkSuspendedSetting extends Model
         'reason',
         'detailed_reason',
         'is_paid',
-        'pay_percentage',
         'pay_applicable_to',
         'status',
     ];
@@ -32,7 +31,6 @@ class NoWorkSuspendedSetting extends Model
         'time_from' => 'datetime:H:i',
         'time_to' => 'datetime:H:i',
         'is_paid' => 'boolean',
-        'pay_percentage' => 'integer',
     ];
 
     /**

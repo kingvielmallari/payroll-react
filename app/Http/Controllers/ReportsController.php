@@ -182,6 +182,20 @@ class ReportsController extends Controller
             ->orderBy('year', 'desc')
             ->pluck('year');
 
+        // Handle AJAX requests by returning JSON with HTML partial
+        if ($request->wantsJson() || $request->ajax()) {
+            $html = view('reports.partials.employer-shares-content', compact(
+                'shareData',
+                'grandTotals'
+            ))->render();
+
+            return response()->json([
+                'html' => $html,
+                'grandTotals' => $grandTotals,
+                'shareData' => $shareData
+            ]);
+        }
+
         return view('reports.employer-shares', compact(
             'shareData',
             'grandTotals',

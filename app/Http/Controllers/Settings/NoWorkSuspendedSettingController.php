@@ -42,7 +42,6 @@ class NoWorkSuspendedSettingController extends Controller
             'type' => 'required|in:suspended,partial_suspension',
             'reason' => 'required|in:weather,system_maintenance,emergency,government_order,other',
             'is_paid' => 'boolean',
-            'pay_percentage' => 'nullable|integer|in:25,50,75,100',
             'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
         ]);
 
@@ -75,7 +74,6 @@ class NoWorkSuspendedSettingController extends Controller
 
         // Set default values for pay settings if not paid
         if (!$validated['is_paid']) {
-            $validated['pay_percentage'] = null;
             $validated['pay_applicable_to'] = null;
         }
 
@@ -112,7 +110,6 @@ class NoWorkSuspendedSettingController extends Controller
             'type' => 'required|in:suspended,partial_suspension',
             'reason' => 'required|in:weather,system_maintenance,emergency,government_order,other',
             'is_paid' => 'boolean',
-            'pay_percentage' => 'nullable|integer|in:25,50,75,100',
             'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
         ]);
 
@@ -135,7 +132,6 @@ class NoWorkSuspendedSettingController extends Controller
 
         // Set default values for pay settings if not provided
         if (!$validated['is_paid']) {
-            $validated['pay_percentage'] = null;
             $validated['pay_applicable_to'] = null;
         }
 

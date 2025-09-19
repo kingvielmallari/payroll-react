@@ -151,7 +151,7 @@
     </div>
 
     <!-- Context Menu -->
-    <div id="contextMenu" class="fixed bg-white rounded-md shadow-xl border border-gray-200 py-1 z-50 hidden min-w-52 backdrop-blur-sm transition-all duration-150 transform opacity-0 scale-95">
+    <div id="contextMenu" class="fixed bg-white rounded-md shadow-xl border border-gray-200 py-1 z-50 hidden min-w-52 backdrop-blur-sm transition-all duration-200 ease-out transform opacity-0 scale-95">
         <div id="contextMenuHeader" class="px-3 py-2 border-b border-gray-100 bg-gray-50 rounded-t-md">
             <div class="text-sm font-medium text-gray-900" id="contextMenuEmployee"></div>
             <div class="text-xs text-gray-500" id="contextMenuYear"></div>
@@ -173,33 +173,57 @@
     </div>
 
     <script>
-        let contextMenu = document.getElementById('contextMenu');
-        let currentEmployeeNumber = null; // This stores employee_number for route binding
+        // Global variables for context menu
+        let contextMenu = null;
+        let currentEmployeeNumber = null;
         let currentYear = null;
         
-        // Hide context menu when clicking outside
-        document.addEventListener('click', function(event) {
-            contextMenu.classList.add('hidden');
-            contextMenu.classList.remove('opacity-100', 'scale-100');
-            contextMenu.classList.add('opacity-0', 'scale-95');
-        });
+        document.addEventListener('DOMContentLoaded', function() {
+            contextMenu = document.getElementById('contextMenu');
+            
+            // Function to hide context menu with smooth animation
+            function hideContextMenu() {
+                if (contextMenu) {
+                    contextMenu.classList.remove('opacity-100', 'scale-100');
+                    contextMenu.classList.add('opacity-0', 'scale-95');
+                    setTimeout(() => {
+                        contextMenu.classList.add('hidden');
+                    }, 200); // Match the transition duration
+                }
+            }
+            
+            // Hide context menu when clicking outside
+            document.addEventListener('click', function(event) {
+                if (!event.target.closest('#contextMenu')) {
+                    hideContextMenu();
+                }
+            });
 
-        // Show context menu
-        function showContextMenu(event, employeeNumber, employeeNumberDuplicate, employeeName, year) {
-            event.preventDefault();
-            event.stopPropagation();
+            // Hide context menu when scrolling (with smooth animation)
+            document.addEventListener('scroll', hideContextMenu);
             
-            console.log('Context menu for:', employeeName, 'Employee Number:', employeeNumber, 'Year:', year);
-            
-            currentEmployeeNumber = employeeNumber; // This is actually employee_number for route binding
-            currentYear = year;
-            
-            // Update menu content
-            document.getElementById('contextMenuEmployee').textContent = employeeName;
-            document.getElementById('contextMenuYear').textContent = 'Tax Year: ' + year;
-            
-            // Update view link (still uses GET)
-            document.getElementById('contextMenuView').href = '/government-forms/bir-2316/' + employeeNumber + '?year=' + year;
+            // Hide context menu on window resize
+            window.addEventListener('resize', hideContextMenu);
+
+            // Show context menu - make it global so inline handlers can access it
+            window.showContextMenu = function(event, employeeNumber, employeeNumberDuplicate, employeeName, year) {
+                event.preventDefault();
+                event.stopPropagation();
+                
+                if (!contextMenu) {
+                    console.error('Context menu element not found!');
+                    return;
+                }
+                
+                currentEmployeeNumber = employeeNumber;
+                currentYear = year;
+                
+                // Update menu content
+                const menuEmployee = document.getElementById('contextMenuEmployee');
+                const menuYear = document.getElementById('contextMenuYear');
+                
+                if (menuEmployee) menuEmployee.textContent = employeeName;
+                if (menuYear) menuYear.textContent = 'Tax Year: ' + year;
             
             // Position and show menu at mouse location
             const menuWidth = 210; // approximate width of context menu
@@ -228,15 +252,16 @@
             contextMenu.classList.remove('hidden');
             contextMenu.classList.remove('opacity-0', 'scale-95');
             contextMenu.classList.add('opacity-100', 'scale-100');
-        }
+            }; // End of showContextMenu function
 
-        // Update per page records
-        function updatePerPage(value) {
-            const url = new URL(window.location);
-            url.searchParams.set('per_page', value);
-            url.searchParams.set('page', 1); // Reset to first page
-            window.location.href = url.toString();
-        }
+            // Update per page records - also make it global
+            window.updatePerPage = function(value) {
+                const url = new URL(window.location);
+                url.searchParams.set('per_page', value);
+                url.searchParams.set('page', 1); // Reset to first page
+                window.location.href = url.toString();
+            };
+        }); // End of DOMContentLoaded
 
         // Filtering functionality
         document.addEventListener('DOMContentLoaded', function() {
@@ -300,6 +325,14 @@
                     const employeeListContainer = document.getElementById('employee-list-container');
                     if (employeeListContainer && data.html) {
                         employeeListContainer.innerHTML = data.html;
+                        
+                        // Verify context menu functionality is preserved after AJAX update
+                        if (typeof window.showContextMenu !== 'function') {
+                            console.error('Context menu function lost after AJAX update');
+                        }
+                        if (!document.getElementById('contextMenu')) {
+                            console.error('Context menu DOM element lost after AJAX update');
+                        }
                     }
                 })
                 .catch(error => {

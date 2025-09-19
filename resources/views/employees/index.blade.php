@@ -10,8 +10,7 @@
             <!-- Filters -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg mb-6">
                 <div class="p-6">
-                    <!-- Filter Controls -->
-                    <div class="flex flex-wrap gap-4 items-end mb-4">
+                 <div class="flex flex-wrap gap-4 items-end mb-4">
                         <div class="flex-1 min-w-48">
                             <label for="search" class="block text-sm font-medium text-gray-700">Search</label>
                             <input type="text" name="search" id="search" value="{{ request('search') }}" 
@@ -345,13 +344,13 @@
             const url = new URL(window.location.origin + window.location.pathname);
             const params = new URLSearchParams();
 
-            // Add filter parameters
-            if (searchInput.value.trim()) params.set('search', searchInput.value.trim());
-            if (departmentSelect.value) params.set('department', departmentSelect.value);
-            if (employmentStatusSelect.value) params.set('employment_status', employmentStatusSelect.value);
-            if (sortNameSelect.value) params.set('sort_name', sortNameSelect.value);
-            if (sortHireDateSelect.value) params.set('sort_hire_date', sortHireDateSelect.value);
-            if (perPageSelect.value && perPageSelect.value !== '10') params.set('per_page', perPageSelect.value);
+            // Add filter parameters with null checks
+            if (searchInput && searchInput.value.trim()) params.set('search', searchInput.value.trim());
+            if (departmentSelect && departmentSelect.value) params.set('department', departmentSelect.value);
+            if (employmentStatusSelect && employmentStatusSelect.value) params.set('employment_status', employmentStatusSelect.value);
+            if (sortNameSelect && sortNameSelect.value) params.set('sort_name', sortNameSelect.value);
+            if (sortHireDateSelect && sortHireDateSelect.value) params.set('sort_hire_date', sortHireDateSelect.value);
+            if (perPageSelect && perPageSelect.value && perPageSelect.value !== '10') params.set('per_page', perPageSelect.value);
 
             // Update URL without page reload
             url.search = params.toString();
@@ -363,54 +362,87 @@
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
                     'Accept': 'application/json',
+                    'Content-Type': 'application/json',
                 },
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 // Update entire employee list container (includes pagination)
-                document.getElementById('employee-list-container').innerHTML = data.html;
+                const container = document.getElementById('employee-list-container');
+                if (container && data.html) {
+                    container.innerHTML = data.html;
+                }
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('Error filtering employees:', error);
             });
         }
 
         // Add event listeners for live filtering
-        searchInput.addEventListener('input', debounce(updateFilters, 500));
-        departmentSelect.addEventListener('change', updateFilters);
-        employmentStatusSelect.addEventListener('change', updateFilters);
-        sortNameSelect.addEventListener('change', updateFilters);
-        sortHireDateSelect.addEventListener('change', updateFilters);
-        perPageSelect.addEventListener('change', updateFilters);
+        if (searchInput) {
+            searchInput.addEventListener('input', debounce(function() {
+                updateFilters();
+            }, 500));
+        }
+        if (departmentSelect) {
+            departmentSelect.addEventListener('change', function() {
+                updateFilters();
+            });
+        }
+        if (employmentStatusSelect) {
+            employmentStatusSelect.addEventListener('change', function() {
+                updateFilters();
+            });
+        }
+        if (sortNameSelect) {
+            sortNameSelect.addEventListener('change', function() {
+                updateFilters();
+            });
+        }
+        if (sortHireDateSelect) {
+            sortHireDateSelect.addEventListener('change', function() {
+                updateFilters();
+            });
+        }
+        if (perPageSelect) {
+            perPageSelect.addEventListener('change', function() {
+                updateFilters();
+            });
+        }
 
         // Reset filters functionality
         document.getElementById('reset_filters').addEventListener('click', function() {
             window.location.href = '{{ route("employees.index") }}';
         });
-    });
 
-    // Export modal functions
-    function openExportModal() {
-        // Copy current filter values to hidden form inputs
-        document.getElementById('export_search').value = document.getElementById('search').value;
-        document.getElementById('export_department').value = document.getElementById('department').value;
-        document.getElementById('export_employment_status').value = document.getElementById('employment_status').value;
-        document.getElementById('export_sort_name').value = document.getElementById('sort_name').value;
-        document.getElementById('export_sort_hire_date').value = document.getElementById('sort_hire_date').value;
-        
-        document.getElementById('exportModal').classList.remove('hidden');
-    }
+        // Export modal functions - move inside DOMContentLoaded
+        window.openExportModal = function() {
+            // Copy current filter values to hidden form inputs
+            document.getElementById('export_search').value = document.getElementById('search').value;
+            document.getElementById('export_department').value = document.getElementById('department').value;
+            document.getElementById('export_employment_status').value = document.getElementById('employment_status').value;
+            document.getElementById('export_sort_name').value = document.getElementById('sort_name').value;
+            document.getElementById('export_sort_hire_date').value = document.getElementById('sort_hire_date').value;
+            
+            document.getElementById('exportModal').classList.remove('hidden');
+        };
 
-    function closeExportModal() {
-        document.getElementById('exportModal').classList.add('hidden');
-    }
+        window.closeExportModal = function() {
+            document.getElementById('exportModal').classList.add('hidden');
+        };
 
-    // Close modal when clicking outside
-    document.getElementById('exportModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeExportModal();
-        }
-    });
+        // Close modal when clicking outside
+        document.getElementById('exportModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeExportModal();
+            }
+        });
+    }); // End of DOMContentLoaded
 </script>
 
     <script>
@@ -578,50 +610,6 @@
             url.searchParams.delete('page'); // Reset to first page
             window.location.href = url.toString();
         }
-
-        // Live filtering functionality
-        const searchInput = document.getElementById('search');
-        const departmentSelect = document.getElementById('department');
-        const employmentStatusSelect = document.getElementById('employment_status');
-        const sortNameSelect = document.getElementById('sort_name');
-        const sortHireDateSelect = document.getElementById('sort_hire_date');
-
-        // Debounce function for search input
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
-
-        // Update URL and reload page with current filter values
-        function updateFilters() {
-            const url = new URL(window.location.origin + window.location.pathname);
-            const params = new URLSearchParams();
-
-            // Add filter parameters
-            if (searchInput.value.trim()) params.set('search', searchInput.value.trim());
-            if (departmentSelect.value) params.set('department', departmentSelect.value);
-            if (employmentStatusSelect.value) params.set('employment_status', employmentStatusSelect.value);
-            if (sortNameSelect.value) params.set('sort_name', sortNameSelect.value);
-            if (sortHireDateSelect.value) params.set('sort_hire_date', sortHireDateSelect.value);
-
-            // Update URL
-            url.search = params.toString();
-            window.location.href = url.toString();
-        }
-
-        // Add event listeners for live filtering
-        searchInput.addEventListener('input', debounce(updateFilters, 500));
-        departmentSelect.addEventListener('change', updateFilters);
-        employmentStatusSelect.addEventListener('change', updateFilters);
-        sortNameSelect.addEventListener('change', updateFilters);
-        sortHireDateSelect.addEventListener('change', updateFilters);
 
         // Auto-hide success and error messages after 2 seconds
         const successMessage = document.getElementById('success-message');

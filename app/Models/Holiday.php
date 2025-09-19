@@ -12,6 +12,8 @@ class Holiday extends Model
         'description',
         'date',
         'type',
+        'is_paid',
+        'pay_applicable_to',
         'rate_multiplier',
         'is_double_pay',
         'double_pay_rate',
@@ -24,6 +26,7 @@ class Holiday extends Model
 
     protected $casts = [
         'date' => 'date',
+        'is_paid' => 'boolean',
         'rate_multiplier' => 'decimal:2',
         'double_pay_rate' => 'decimal:2',
         'is_double_pay' => 'boolean',
@@ -37,6 +40,8 @@ class Holiday extends Model
         'is_active' => true, // Default to active (will be auto-disabled if past date)
         'is_recurring' => false,
         'is_double_pay' => false,
+        'is_paid' => true,
+        'pay_applicable_to' => null,
         'type' => 'regular',
         'rate_multiplier' => 1.00,
         'double_pay_rate' => 2.00,

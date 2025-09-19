@@ -369,6 +369,19 @@
         document.addEventListener('DOMContentLoaded', function() {
             const filterSelects = document.querySelectorAll('.cash-advance-filter');
 
+            // Debounce function to limit API calls
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
             // Function to apply filters via AJAX (no page reload)
             function applyFilters() {
                 const url = new URL(window.location.origin + window.location.pathname);
@@ -421,9 +434,13 @@
 
             // Add event listeners for live filtering
             filterSelects.forEach(select => {
-                select.addEventListener('change', applyFilters);
-                // Also add input event for text inputs (name search)
-                select.addEventListener('input', applyFilters);
+                if (select.type === 'text') {
+                    // Text inputs use debounced 'input' event for live typing
+                    select.addEventListener('input', debounce(applyFilters, 500));
+                } else {
+                    // Select and date inputs use 'change' event
+                    select.addEventListener('change', applyFilters);
+                }
             });
 
             // Reset filters functionality
