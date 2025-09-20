@@ -153,21 +153,38 @@
                                             $isSuspension = $day['is_suspension'] ?? false;
                                             $employeeHasBenefits = $selectedEmployee->benefits_status === 'with_benefits';
                                             
-                                            // Handle suspension auto-fill logic
-                                            if ($isSuspension) {
-                                                if ($isPaidSuspension && $employeeHasBenefits) {
-                                                    // PAID SUSPENSION + WITH BENEFITS: Auto-fill with default schedule times
+                                            // Handle suspension auto-fill logic based on pay_applicable_to setting
+                                            if ($isSuspension && $isPaidSuspension) {
+                                                $payApplicableTo = $suspensionInfo['pay_applicable_to'] ?? 'all';
+                                                $shouldAutoFill = false;
+                                                
+                                                if ($payApplicableTo === 'all') {
+                                                    $shouldAutoFill = true;
+                                                } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
+                                                    $shouldAutoFill = true;
+                                                } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
+                                                    $shouldAutoFill = true;
+                                                }
+                                                
+                                                if ($shouldAutoFill) {
+                                                    // PAID SUSPENSION + APPLICABLE: Auto-fill with default schedule times
                                                     $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
                                                     $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
                                                     $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
                                                     $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
                                                 } else {
-                                                    // UNPAID SUSPENSION OR WITHOUT BENEFITS: Clear all time fields (blank)
+                                                    // PAID SUSPENSION BUT NOT APPLICABLE: Clear all time fields
                                                     $defaultTimeIn = null;
                                                     $defaultTimeOut = null;
                                                     $defaultBreakIn = null;
                                                     $defaultBreakOut = null;
                                                 }
+                                            } elseif ($isSuspension) {
+                                                // UNPAID SUSPENSION: Clear all time fields (blank)
+                                                $defaultTimeIn = null;
+                                                $defaultTimeOut = null;
+                                                $defaultBreakIn = null;
+                                                $defaultBreakOut = null;
                                             } else {
                                                 // NOT SUSPENSION: Use existing data as is
                                                 $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
@@ -197,9 +214,31 @@
                                                 @php
                                                     $isSuspension = ($day['is_suspension'] ?? false);
                                                     $isActiveHoliday = ($day['is_holiday_active'] ?? false);
+                                                    
+                                                    // Holiday pay settings logic
+                                                    $holidayTimeInputDisabled = false;
+                                                    if ($isActiveHoliday) {
+                                                        $holidayIsPaid = $day['holiday_is_paid'] ?? false;
+                                                        $holidayApplicableTo = $day['holiday_pay_applicable_to'] ?? null;
+                                                        $employeeHasBenefits = $selectedEmployee->benefits_status === 'with_benefits';
+                                                        
+                                                        if (!$holidayIsPaid) {
+                                                            // Unpaid holiday - disable time inputs
+                                                            $holidayTimeInputDisabled = true;
+                                                        } elseif ($holidayApplicableTo === 'with_benefits' && !$employeeHasBenefits) {
+                                                            // Holiday pay applies to employees with benefits only, but this employee doesn't have benefits
+                                                            $holidayTimeInputDisabled = true;
+                                                        } elseif ($holidayApplicableTo === 'without_benefits' && $employeeHasBenefits) {
+                                                            // Holiday pay applies to employees without benefits only, but this employee has benefits
+                                                            $holidayTimeInputDisabled = true;
+                                                        }
+                                                        // else: Holiday is paid and applies to this employee - keep time inputs enabled
+                                                    }
+                                                    
                                                     $isDropdownDisabled = $isSuspension || $isActiveHoliday; // Disable dropdown for both suspensions and active holidays
-                                                    $isTimeInputDisabled = $isSuspension; // Only disable time inputs for suspensions
-                                                    $inputClass = $isSuspension ? 'bg-gray-100 cursor-not-allowed' : '';
+                                                    $isTimeInputDisabled = $isSuspension || $holidayTimeInputDisabled; // Disable time inputs for suspensions and applicable holidays
+                                                    $inputClass = ($isSuspension || $holidayTimeInputDisabled) ? 'bg-gray-100 cursor-not-allowed' : '';
+                                                    $disabledAttr = $isTimeInputDisabled ? 'disabled' : '';
                                                 @endphp
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][time_in]" 
@@ -207,7 +246,7 @@
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
                                                        data-row="{{ $index }}"
                                                        onchange="calculateHours({{ $index }})"
-                                                       {{ $isTimeInputDisabled ? 'disabled' : '' }}>
+                                                       {!! $disabledAttr !!}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
@@ -216,28 +255,28 @@
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
                                                        data-row="{{ $index }}"
                                                        onchange="calculateHours({{ $index }})"
-                                                       {{ $isTimeInputDisabled ? 'disabled' : '' }}>
+                                                       {!! $disabledAttr !!}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][break_in]" 
                                                        value="{{ $day['break_in'] ? (is_string($day['break_in']) ? (strlen($day['break_in']) >= 5 ? substr($day['break_in'], 0, 5) : $day['break_in']) : $day['break_in']->format('H:i')) : '' }}"
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
-                                                       {{ $isTimeInputDisabled ? 'disabled' : '' }}>
+                                                       {!! $disabledAttr !!}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][break_out]" 
                                                        value="{{ $day['break_out'] ? (is_string($day['break_out']) ? (strlen($day['break_out']) >= 5 ? substr($day['break_out'], 0, 5) : $day['break_out']) : $day['break_out']->format('H:i')) : '' }}"
                                                        class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
-                                                       {{ $isTimeInputDisabled ? 'disabled' : '' }}>
+                                                       {!! $disabledAttr !!}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <select name="time_logs[{{ $index }}][log_type]" 
                                                         class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $isDropdownDisabled ? 'bg-gray-100 cursor-not-allowed' : '' }} log-type-{{ $index }}"
                                                         data-row="{{ $index }}"
                                                         onchange="handleLogTypeChange({{ $index }})"
-                                                        {{ $isDropdownDisabled ? 'disabled' : '' }}>
+                                                        {!! $isDropdownDisabled ? 'disabled' : '' !!}>
                                                     @foreach($logTypes as $value => $label)
                                                         @php
                                                             $selected = '';
@@ -298,12 +337,24 @@
                                                     <input type="hidden" name="time_logs[{{ $index }}][time_out_hidden]" value="{{ $defaultTimeOut ?? '' }}">
                                                     <input type="hidden" name="time_logs[{{ $index }}][break_in_hidden]" value="{{ $defaultBreakIn ?? '' }}">
                                                     <input type="hidden" name="time_logs[{{ $index }}][break_out_hidden]" value="{{ $defaultBreakOut ?? '' }}">
+                                                    {{-- Add suspension pay settings for JavaScript access --}}
+                                                    <input type="hidden" name="time_logs[{{ $index }}][suspension_pay_applicable_to]" value="{{ $suspensionInfo['pay_applicable_to'] ?? 'all' }}">
                                                 @elseif($isActiveHoliday)
                                                     {{-- For active holidays, add hidden input for log_type since disabled selects won't submit --}}
                                                     @php
                                                         $selectedLogType = $day['log_type'] ?? '';
                                                     @endphp
                                                     <input type="hidden" name="time_logs[{{ $index }}][log_type]" value="{{ $selectedLogType }}">
+                                                    @if($holidayTimeInputDisabled)
+                                                        {{-- Add hidden inputs for holiday days since disabled time inputs won't submit their values --}}
+                                                        <input type="hidden" name="time_logs[{{ $index }}][time_in_hidden]" value="{{ $day['time_in'] ? (is_string($day['time_in']) ? (strlen($day['time_in']) >= 5 ? substr($day['time_in'], 0, 5) : $day['time_in']) : $day['time_in']->format('H:i')) : '' }}">
+                                                        <input type="hidden" name="time_logs[{{ $index }}][time_out_hidden]" value="{{ $day['time_out'] ? (is_string($day['time_out']) ? (strlen($day['time_out']) >= 5 ? substr($day['time_out'], 0, 5) : $day['time_out']) : $day['time_out']->format('H:i')) : '' }}">
+                                                        <input type="hidden" name="time_logs[{{ $index }}][break_in_hidden]" value="{{ $day['break_in'] ? (is_string($day['break_in']) ? (strlen($day['break_in']) >= 5 ? substr($day['break_in'], 0, 5) : $day['break_in']) : $day['break_in']->format('H:i')) : '' }}">
+                                                        <input type="hidden" name="time_logs[{{ $index }}][break_out_hidden]" value="{{ $day['break_out'] ? (is_string($day['break_out']) ? (strlen($day['break_out']) >= 5 ? substr($day['break_out'], 0, 5) : $day['break_out']) : $day['break_out']->format('H:i')) : '' }}">
+                                                    @endif
+                                                    {{-- Add holiday pay settings as hidden inputs for JavaScript access --}}
+                                                    <input type="hidden" name="time_logs[{{ $index }}][holiday_is_paid]" value="{{ $day['holiday_is_paid'] ? '1' : '0' }}">
+                                                    <input type="hidden" name="time_logs[{{ $index }}][holiday_pay_applicable_to]" value="{{ $day['holiday_pay_applicable_to'] ?? '' }}">
                                                 @endif
                                                 @if($day['is_weekend'])
                                                     <input type="hidden" name="time_logs[{{ $index }}][is_rest_day]" value="1">
@@ -499,6 +550,13 @@
                 return;
             }
             
+            // Check if time inputs are disabled (for holidays or other reasons)
+            const timeInInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_in]"]`);
+            if (timeInInput && timeInInput.disabled) {
+                console.log('Skipping time fill for disabled inputs on row:', rowIndex);
+                return;
+            }
+            
             @php
                 // Pass the employee schedule to JavaScript
                 $jsScheduleStart = $selectedEmployee->timeSchedule ? $selectedEmployee->timeSchedule->time_in : '08:00';
@@ -526,7 +584,6 @@
             @endphp
             
             // Set employee's scheduled working hours for a specific row
-            const timeInInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_in]"]`);
             const timeOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_out]"]`);
             const breakInInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_in]"]`);
             const breakOutInput = document.querySelector(`input[name="time_logs[${rowIndex}][break_out]"]`);
@@ -600,19 +657,72 @@
                 // Check if this is an inherent suspension day (from suspension settings)
                 const hasHiddenSuspensionInput = document.querySelector(`input[name="time_logs[${rowIndex}][is_suspension]"][type="hidden"]`);
                 
+                // Check if this is an active holiday day
+                const hasHiddenHolidayInput = document.querySelector(`input[name="time_logs[${rowIndex}][is_holiday_active]"][type="hidden"]`);
+                
+                // Get holiday pay settings
+                const holidayIsPaidInput = document.querySelector(`input[name="time_logs[${rowIndex}][holiday_is_paid]"][type="hidden"]`);
+                const holidayApplicableToInput = document.querySelector(`input[name="time_logs[${rowIndex}][holiday_pay_applicable_to]"][type="hidden"]`);
+                
                 timeInputs.forEach(input => {
-                    if (hasHiddenSuspensionInput) {
-                        // For suspension setting days - check if employee has benefits
-                        if (isPaidSuspension && employeeHasBenefits) {
-                            // Paid suspension + with benefits: preserve auto-filled values
+                    // PRIORITY 1: Active holiday - check pay settings logic
+                    if (hasHiddenHolidayInput) {
+                        const holidayIsPaid = holidayIsPaidInput && holidayIsPaidInput.value === '1';
+                        const holidayApplicableTo = holidayApplicableToInput ? holidayApplicableToInput.value : null;
+                        const employeeHasBenefitsValue = employeeHasBenefits; // Use suspension data for benefit status
+                        
+                        let shouldDisableHolidayInputs = false;
+                        
+                        if (!holidayIsPaid) {
+                            // Unpaid holiday - disable time inputs
+                            shouldDisableHolidayInputs = true;
+                        } else if (holidayApplicableTo === 'with_benefits' && !employeeHasBenefitsValue) {
+                            // Holiday pay applies to employees with benefits only, but this employee doesn't have benefits
+                            shouldDisableHolidayInputs = true;
+                        } else if (holidayApplicableTo === 'without_benefits' && employeeHasBenefitsValue) {
+                            // Holiday pay applies to employees without benefits only, but this employee has benefits
+                            shouldDisableHolidayInputs = true;
+                        }
+                        
+                        if (shouldDisableHolidayInputs) {
+                            input.disabled = true;
+                            input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                            input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
+                        } else {
+                            // Holiday is paid and applies to this employee - enable time inputs
+                            input.disabled = false;
+                            input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                            input.classList.add('focus:ring-indigo-500', 'focus:border-indigo-500');
+                        }
+                    }
+                    // PRIORITY 2: Suspension days
+                    else if (hasHiddenSuspensionInput) {
+                        // For suspension setting days - check pay applicability
+                        const suspensionPayApplicableToInput = document.querySelector(`input[name="time_logs[${rowIndex}][suspension_pay_applicable_to]"][type="hidden"]`);
+                        const suspensionPayApplicableTo = suspensionPayApplicableToInput ? suspensionPayApplicableToInput.value : 'all';
+                        
+                        let shouldAutoFillSuspension = false;
+                        
+                        if (isPaidSuspension) {
+                            if (suspensionPayApplicableTo === 'all') {
+                                shouldAutoFillSuspension = true;
+                            } else if (suspensionPayApplicableTo === 'with_benefits' && employeeHasBenefits) {
+                                shouldAutoFillSuspension = true;
+                            } else if (suspensionPayApplicableTo === 'without_benefits' && !employeeHasBenefits) {
+                                shouldAutoFillSuspension = true;
+                            }
+                        }
+                        
+                        if (shouldAutoFillSuspension) {
+                            // Paid suspension applicable to this employee: disable inputs but preserve auto-filled values
                             input.disabled = true;
                             input.classList.add('bg-gray-100', 'cursor-not-allowed');
                             input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
                             // Keep existing values (already set by PHP)
                         } else {
-                            // Unpaid suspension OR without benefits: disable and clear values
+                            // Unpaid suspension OR not applicable to this employee: disable and clear values
                             input.disabled = true;
-                            input.value = ''; // Clear the input for unpaid suspension or employees without benefits
+                            input.value = ''; // Clear the input
                             input.classList.add('bg-gray-100', 'cursor-not-allowed');
                             input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
                         }

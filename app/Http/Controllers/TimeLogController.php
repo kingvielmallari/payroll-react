@@ -1085,11 +1085,20 @@ class TimeLogController extends Controller
                 } elseif ($isRestDay && $holiday->type === 'special_non_working') {
                     $frontendLogType = 'rest_day_special_holiday';
                 }
-                // For holidays, clear existing times - user should enter manually if needed
-                $frontendTimeIn = null;
-                $frontendTimeOut = null;
-                $frontendBreakIn = null;
-                $frontendBreakOut = null;
+
+                // For holidays, preserve existing time log data if it exists
+                if ($timeLog) {
+                    $frontendTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : null;
+                    $frontendTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : null;
+                    $frontendBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
+                    $frontendBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
+                } else {
+                    // No existing time log - leave times blank for holidays
+                    $frontendTimeIn = null;
+                    $frontendTimeOut = null;
+                    $frontendBreakIn = null;
+                    $frontendBreakOut = null;
+                }
             }
             // PRIORITY 3: No active holiday/suspension - preserve existing data
             else {
@@ -1123,6 +1132,8 @@ class TimeLogController extends Controller
                 'is_holiday' => $holiday ? $holiday->name : null,
                 'holiday_type' => $holiday ? $holiday->type : null, // Add holiday type for auto day type selection
                 'is_holiday_active' => $holiday && $holiday->is_active, // Add flag for active holidays
+                'holiday_is_paid' => $holiday ? $holiday->is_paid : null, // Add holiday pay flag
+                'holiday_pay_applicable_to' => $holiday ? $holiday->pay_applicable_to : null, // Add holiday pay applicability
                 'is_suspension' => $suspensionInfo['is_suspension'],
                 'suspension_info' => $suspensionInfo['info'],
                 'time_log' => $timeLog,

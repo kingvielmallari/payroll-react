@@ -55,20 +55,19 @@
                     <label class="flex items-center">
                         <input type="checkbox" name="is_paid" id="is_paid" value="1" 
                                class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                               onchange="toggleHolidayPaySettings()" {{ old('is_paid', true) ? 'checked' : '' }}>
+                               onchange="toggleHolidayPaySettings()" {{ old('is_paid', false) ? 'checked' : '' }}>
                         <span class="ml-2 text-sm text-gray-700">Paid Holiday</span>
                     </label>
                     <p class="mt-1 text-xs text-gray-500">Check if employees will receive pay for this holiday</p>
                 </div>
 
-                <div id="holiday_pay_settings" style="display: block;">
+                <div id="holiday_pay_settings" style="display: none;">
                     <div>
                         <label for="pay_applicable_to" class="block text-sm font-medium text-gray-700 mb-2">Applicable To</label>
                         <select name="pay_applicable_to" id="pay_applicable_to" 
                                 class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                 onchange="handleHolidayApplicabilityChange()">
-                            <option value="">-- Select Applicability --</option>
-                            <option value="all" {{ old('pay_applicable_to') == 'all' ? 'selected' : '' }}>All Employees</option>
+                            <option value="all" {{ old('pay_applicable_to', 'all') == 'all' ? 'selected' : '' }}>All Employees</option>
                             <option value="with_benefits" {{ old('pay_applicable_to') == 'with_benefits' ? 'selected' : '' }}>Employees with Benefits Only</option>
                             <option value="without_benefits" {{ old('pay_applicable_to') == 'without_benefits' ? 'selected' : '' }}>Employees without Benefits Only</option>
                         </select>

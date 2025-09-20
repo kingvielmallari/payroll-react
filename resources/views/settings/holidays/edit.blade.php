@@ -83,7 +83,6 @@
                         <select name="pay_applicable_to" id="pay_applicable_to" 
                                 class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                 onchange="handleHolidayApplicabilityChange()">
-                            <option value="">-- Select Applicability --</option>
                             <option value="all" {{ old('pay_applicable_to', $holiday->pay_applicable_to ?? 'all') == 'all' ? 'selected' : '' }}>All Employees</option>
                             <option value="with_benefits" {{ old('pay_applicable_to', $holiday->pay_applicable_to ?? 'all') == 'with_benefits' ? 'selected' : '' }}>Employees with Benefits Only</option>
                             <option value="without_benefits" {{ old('pay_applicable_to', $holiday->pay_applicable_to ?? 'all') == 'without_benefits' ? 'selected' : '' }}>Employees without Benefits Only</option>
