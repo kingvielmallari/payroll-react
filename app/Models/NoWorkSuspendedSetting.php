@@ -19,8 +19,8 @@ class NoWorkSuspendedSetting extends Model
         'time_to',
         'type',
         'reason',
-        'detailed_reason',
         'is_paid',
+        'pay_rule',
         'pay_applicable_to',
         'status',
     ];

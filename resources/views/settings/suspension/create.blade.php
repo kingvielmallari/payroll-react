@@ -119,14 +119,26 @@
                 </div>
 
                 <div id="pay_settings" style="display: none;">
-                    <div>
-                        <label for="pay_applicable_to" class="block text-sm font-medium text-gray-700 mb-2">Applicable To</label>
-                        <select name="pay_applicable_to" id="pay_applicable_to" 
-                                class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="all" {{ old('pay_applicable_to') == 'all' ? 'selected' : '' }}>All Employees</option>
-                            <option value="with_benefits" {{ old('pay_applicable_to') == 'with_benefits' ? 'selected' : '' }}>Employees with Benefits Only</option>
-                            <option value="without_benefits" {{ old('pay_applicable_to') == 'without_benefits' ? 'selected' : '' }}>Employees without Benefits Only</option>
-                        </select>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="pay_applicable_to" class="block text-sm font-medium text-gray-700 mb-2">Applicable To</label>
+                            <select name="pay_applicable_to" id="pay_applicable_to" 
+                                    class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="all" {{ old('pay_applicable_to') == 'all' ? 'selected' : '' }}>All Employees</option>
+                                <option value="with_benefits" {{ old('pay_applicable_to') == 'with_benefits' ? 'selected' : '' }}>Employees with Benefits Only</option>
+                                <option value="without_benefits" {{ old('pay_applicable_to') == 'without_benefits' ? 'selected' : '' }}>Employees without Benefits Only</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label for="pay_rule" class="block text-sm font-medium text-gray-700 mb-2">Pay Rule</label>
+                            <select name="pay_rule" id="pay_rule" 
+                                    class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="full" {{ old('pay_rule') == 'full' ? 'selected' : '' }}>Full Daily Rate (100%)</option>
+                                <option value="half" {{ old('pay_rule') == 'half' ? 'selected' : '' }}>Half Daily Rate (50%)</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Amount of daily rate to pay during suspension</p>
+                        </div>
                     </div>
                 </div>
             </div>

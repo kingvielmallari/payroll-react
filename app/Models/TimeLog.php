@@ -18,6 +18,7 @@ class TimeLog extends Model
         'time_out',
         'break_in',
         'break_out',
+        'used_break', // For flexible break checkbox
         'total_hours',
         'regular_hours',
         'night_diff_regular_hours',
@@ -39,6 +40,7 @@ class TimeLog extends Model
         'time_out' => 'datetime:H:i:s',
         'break_in' => 'datetime:H:i:s',
         'break_out' => 'datetime:H:i:s',
+        'used_break' => 'boolean',
         'total_hours' => 'decimal:2',
         'regular_hours' => 'decimal:2',
         'night_diff_regular_hours' => 'decimal:2',

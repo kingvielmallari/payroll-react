@@ -42,12 +42,12 @@ class NoWorkSuspendedSettingController extends Controller
             'type' => 'required|in:suspended,partial_suspension',
             'reason' => 'required|in:weather,system_maintenance,emergency,government_order,other',
             'is_paid' => 'boolean',
+            'pay_rule' => 'nullable|in:full,half',
             'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
         ]);
 
         // Set default values for removed fields
         $validated['code'] = 'SUSP-' . now()->format('Ymd-His'); // Auto-generate code
-        $validated['detailed_reason'] = null;
         $validated['status'] = 'active'; // Default to active
 
         // If date_to is not provided, set it to date_from (single day suspension)
@@ -74,7 +74,13 @@ class NoWorkSuspendedSettingController extends Controller
 
         // Set default values for pay settings if not paid
         if (!$validated['is_paid']) {
+            $validated['pay_rule'] = null;
             $validated['pay_applicable_to'] = null;
+        } else {
+            // Set default pay rule if paid but not specified
+            if (empty($validated['pay_rule'])) {
+                $validated['pay_rule'] = 'full';
+            }
         }
 
         NoWorkSuspendedSetting::create($validated);
@@ -110,6 +116,7 @@ class NoWorkSuspendedSettingController extends Controller
             'type' => 'required|in:suspended,partial_suspension',
             'reason' => 'required|in:weather,system_maintenance,emergency,government_order,other',
             'is_paid' => 'boolean',
+            'pay_rule' => 'nullable|in:full,half',
             'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
         ]);
 
@@ -130,9 +137,15 @@ class NoWorkSuspendedSettingController extends Controller
         // Handle is_paid checkbox (defaults to false if not checked)
         $validated['is_paid'] = $request->has('is_paid') ? true : false;
 
-        // Set default values for pay settings if not provided
+        // Set default values for pay settings if not paid
         if (!$validated['is_paid']) {
+            $validated['pay_rule'] = null;
             $validated['pay_applicable_to'] = null;
+        } else {
+            // Set default pay rule if paid but not specified
+            if (empty($validated['pay_rule'])) {
+                $validated['pay_rule'] = 'full';
+            }
         }
 
         $suspension->update($validated);

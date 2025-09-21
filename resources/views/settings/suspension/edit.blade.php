@@ -88,7 +88,7 @@
                     <label for="time_from" class="block text-sm font-medium text-gray-700 mb-2">Start Time *</label>
                     <input type="time" name="time_from" id="time_from" 
                            class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
-                           value="{{ old('time_from', $suspension->time_from) }}">
+                           value="{{ old('time_from', $suspension->time_from ? \Carbon\Carbon::parse($suspension->time_from)->format('H:i') : '') }}">
                     @error('time_from')
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                     @enderror
@@ -98,7 +98,7 @@
                     <label for="time_to" class="block text-sm font-medium text-gray-700 mb-2">End Time *</label>
                     <input type="time" name="time_to" id="time_to" 
                            class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
-                           value="{{ old('time_to', $suspension->time_to) }}">
+                           value="{{ old('time_to', $suspension->time_to ? \Carbon\Carbon::parse($suspension->time_to)->format('H:i') : '') }}">
                     @error('time_to')
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                     @enderror
@@ -120,14 +120,26 @@
                 </div>
 
                 <div id="pay_settings" style="display: none;">
-                    <div>
-                        <label for="pay_applicable_to" class="block text-sm font-medium text-gray-700 mb-2">Applicable To</label>
-                        <select name="pay_applicable_to" id="pay_applicable_to" 
-                                class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="all" {{ old('pay_applicable_to', $suspension->pay_applicable_to) == 'all' ? 'selected' : '' }}>All Employees</option>
-                            <option value="with_benefits" {{ old('pay_applicable_to', $suspension->pay_applicable_to) == 'with_benefits' ? 'selected' : '' }}>Employees with Benefits Only</option>
-                            <option value="without_benefits" {{ old('pay_applicable_to', $suspension->pay_applicable_to) == 'without_benefits' ? 'selected' : '' }}>Employees without Benefits Only</option>
-                        </select>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="pay_applicable_to" class="block text-sm font-medium text-gray-700 mb-2">Applicable To</label>
+                            <select name="pay_applicable_to" id="pay_applicable_to" 
+                                    class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="all" {{ old('pay_applicable_to', $suspension->pay_applicable_to) == 'all' ? 'selected' : '' }}>All Employees</option>
+                                <option value="with_benefits" {{ old('pay_applicable_to', $suspension->pay_applicable_to) == 'with_benefits' ? 'selected' : '' }}>Employees with Benefits Only</option>
+                                <option value="without_benefits" {{ old('pay_applicable_to', $suspension->pay_applicable_to) == 'without_benefits' ? 'selected' : '' }}>Employees without Benefits Only</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label for="pay_rule" class="block text-sm font-medium text-gray-700 mb-2">Pay Rule</label>
+                            <select name="pay_rule" id="pay_rule" 
+                                    class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="full" {{ old('pay_rule', $suspension->pay_rule) == 'full' ? 'selected' : '' }}>Full Daily Rate (100%)</option>
+                                <option value="half" {{ old('pay_rule', $suspension->pay_rule) == 'half' ? 'selected' : '' }}>Half Daily Rate (50%)</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Amount of daily rate to pay during suspension</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -168,12 +180,10 @@ function toggleDateAndTimeFields() {
             timeFromInput.required = true;
             timeToInput.required = true;
         } else {
-            // Hide time fields for full day suspension and clear their values
+            // Hide time fields for full day suspension but don't clear existing values in edit mode
             timeFields.style.display = 'none';
             timeFromInput.required = false;
             timeToInput.required = false;
-            timeFromInput.value = '';
-            timeToInput.value = '';
         }
     } else {
         // Hide both date and time fields when no type is selected
@@ -185,8 +195,7 @@ function toggleDateAndTimeFields() {
         document.getElementById('date_to').required = false;
         timeFromInput.required = false;
         timeToInput.required = false;
-        timeFromInput.value = '';
-        timeToInput.value = '';
+        // Don't clear values in edit mode - they should be preserved
     }
 }
 

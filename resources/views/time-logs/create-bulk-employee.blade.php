@@ -37,6 +37,11 @@
                             <div>
                                 <span class="font-medium text-gray-700">Employee:</span>
                                 <span class="text-gray-900">{{ $selectedEmployee->first_name }} {{ $selectedEmployee->last_name }}</span>
+                                @if($selectedEmployee->benefits_status)
+                                    <span class=" inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $selectedEmployee->benefits_status === 'with_benefits' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' }}">
+                                        {{ $selectedEmployee->benefits_status === 'with_benefits' ? 'Premium' : 'Basic' }}
+                                    </span>
+                                @endif
                             </div>
                             <div>
                                 <span class="font-medium text-gray-700">Schedule:</span>
@@ -53,8 +58,18 @@
                                 <span class="text-blue-600">₱{{ number_format($selectedEmployee->hourly_rate ?? 0, 2) }}/hr</span>
                             </div>
                             <div>
-                                <span class="font-medium text-gray-700">Pay Date:</span>
-                                <span class="text-gray-900">{{ date('M d, Y', strtotime($periodEnd)) }}</span>
+                                <span class="font-medium text-gray-700">Break Type:</span>
+                                @if($selectedEmployee->timeSchedule)
+                                    @if($selectedEmployee->timeSchedule->break_start && $selectedEmployee->timeSchedule->break_end)
+                                        <span class="text-gray-900">Fixed ({{ \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_start)->format('g:i A') }} - {{ \Carbon\Carbon::parse($selectedEmployee->timeSchedule->break_end)->format('g:i A') }})</span>
+                                    @elseif($selectedEmployee->timeSchedule->break_duration_minutes)
+                                        <span class="text-gray-900">Flexible ({{ $selectedEmployee->timeSchedule->break_duration_minutes }}min)</span>
+                                    @else
+                                        <span class="text-gray-900">No Break</span>
+                                    @endif
+                                @else
+                                    <span class="text-gray-500">N/A</span>
+                                @endif
                             </div>
                             <div>
                                 <span class="font-medium text-gray-700">Period:</span>
@@ -139,8 +154,18 @@
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">DAY</th>
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">TIME IN</th>
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">TIME OUT</th>
-                                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">BREAK IN</th>
-                                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">BREAK OUT</th>
+                                        @php
+                                            $hasFlexibleBreak = $selectedEmployee->timeSchedule && 
+                                                               $selectedEmployee->timeSchedule->break_duration_minutes && 
+                                                               !$selectedEmployee->timeSchedule->break_start && 
+                                                               !$selectedEmployee->timeSchedule->break_end;
+                                        @endphp
+                                        @if($hasFlexibleBreak)
+                                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">BREAK</th>
+                                        @else
+                                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">BREAK IN</th>
+                                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">BREAK OUT</th>
+                                        @endif
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r">TYPE</th>
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ACTION</th>
                                     </tr>
@@ -151,40 +176,51 @@
                                             $suspensionInfo = $day['suspension_info'] ?? null;
                                             $isPaidSuspension = $suspensionInfo && ($suspensionInfo['is_paid'] ?? false);
                                             $isSuspension = $day['is_suspension'] ?? false;
+                                            $isPartialSuspension = $suspensionInfo && ($suspensionInfo['is_partial'] ?? false);
                                             $employeeHasBenefits = $selectedEmployee->benefits_status === 'with_benefits';
                                             
-                                            // Handle suspension auto-fill logic based on pay_applicable_to setting
-                                            if ($isSuspension && $isPaidSuspension) {
-                                                $payApplicableTo = $suspensionInfo['pay_applicable_to'] ?? 'all';
-                                                $shouldAutoFill = false;
-                                                
-                                                if ($payApplicableTo === 'all') {
-                                                    $shouldAutoFill = true;
-                                                } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
-                                                    $shouldAutoFill = true;
-                                                } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
-                                                    $shouldAutoFill = true;
-                                                }
-                                                
-                                                if ($shouldAutoFill) {
-                                                    // PAID SUSPENSION + APPLICABLE: Auto-fill with default schedule times
-                                                    $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
-                                                    $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
-                                                    $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
-                                                    $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
+                                            // Handle suspension auto-fill logic based on new requirements
+                                            if ($isSuspension) {
+                                                if ($isPaidSuspension) {
+                                                    $payApplicableTo = $suspensionInfo['pay_applicable_to'] ?? 'all';
+                                                    $shouldAutoFill = false;
+                                                    
+                                                    if ($payApplicableTo === 'all') {
+                                                        $shouldAutoFill = true;
+                                                    } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
+                                                        $shouldAutoFill = true;
+                                                    } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
+                                                        $shouldAutoFill = true;
+                                                    }
+                                                    
+                                                    if ($shouldAutoFill) {
+                                                        if ($isPartialSuspension) {
+                                                            // PAID PARTIAL SUSPENSION: NO AUTO-FILL - employee can work before suspension starts
+                                                            $defaultTimeIn = null;
+                                                            $defaultTimeOut = null;
+                                                            $defaultBreakIn = null;
+                                                            $defaultBreakOut = null;
+                                                        } else {
+                                                            // PAID FULL DAY SUSPENSION: NO AUTO-FILL - all inputs disabled 
+                                                            $defaultTimeIn = null;
+                                                            $defaultTimeOut = null;
+                                                            $defaultBreakIn = null;
+                                                            $defaultBreakOut = null;
+                                                        }
+                                                    } else {
+                                                        // PAID SUSPENSION BUT NOT APPLICABLE: Clear all time fields
+                                                        $defaultTimeIn = null;
+                                                        $defaultTimeOut = null;
+                                                        $defaultBreakIn = null;
+                                                        $defaultBreakOut = null;
+                                                    }
                                                 } else {
-                                                    // PAID SUSPENSION BUT NOT APPLICABLE: Clear all time fields
+                                                    // UNPAID SUSPENSION (both full and partial): NO AUTO-FILL, disable accordingly
                                                     $defaultTimeIn = null;
                                                     $defaultTimeOut = null;
                                                     $defaultBreakIn = null;
                                                     $defaultBreakOut = null;
                                                 }
-                                            } elseif ($isSuspension) {
-                                                // UNPAID SUSPENSION: Clear all time fields (blank)
-                                                $defaultTimeIn = null;
-                                                $defaultTimeOut = null;
-                                                $defaultBreakIn = null;
-                                                $defaultBreakOut = null;
                                             } else {
                                                 // NOT SUSPENSION: Use existing data as is
                                                 $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
@@ -192,9 +228,31 @@
                                                 $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
                                                 $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
                                             }
+                                            
+                                            // For flexible break employees, determine if break was used
+                                            // Default to true (used) for new entries, or check existing data
+                                            $usedBreak = true; // Default to checked (break is used)
+                                            if ($hasFlexibleBreak) {
+                                                if (isset($day['time_log']) && $day['time_log'] && isset($day['time_log']->used_break)) {
+                                                    // Check the time_log model if it has used_break field
+                                                    $usedBreak = (bool) $day['time_log']->used_break;
+                                                } elseif (isset($day['used_break'])) {
+                                                    // Check day array if it has used_break
+                                                    $usedBreak = (bool) $day['used_break'];
+                                                } elseif ($defaultBreakIn || $defaultBreakOut) {
+                                                    // If there are break times in existing data for flexible break, break was used
+                                                    $usedBreak = true;
+                                                } else {
+                                                    // Default to true for new flexible break entries
+                                                    $usedBreak = true;
+                                                }
+                                            }
                                         @endphp
                                         <tr class="{{ $day['is_weekend'] ? 'bg-gray-100' : '' }}"
                                             data-is-paid-suspension="{{ $isPaidSuspension ? 'true' : 'false' }}"
+                                            data-is-partial-suspension="{{ $isPartialSuspension ? 'true' : 'false' }}"
+                                            data-suspension-start="{{ $isPartialSuspension && $suspensionInfo['time_from'] ? \Carbon\Carbon::parse($suspensionInfo['time_from'])->format('H:i') : '' }}"
+                                            data-suspension-end="{{ $isPartialSuspension && $suspensionInfo['time_to'] ? \Carbon\Carbon::parse($suspensionInfo['time_to'])->format('H:i') : '' }}"
                                             data-employee-has-benefits="{{ $employeeHasBenefits ? 'true' : 'false' }}"
                                             data-time-in-default="{{ $defaultTimeIn }}"
                                             data-time-out-default="{{ $defaultTimeOut }}"
@@ -236,41 +294,80 @@
                                                     }
                                                     
                                                     $isDropdownDisabled = $isSuspension || $isActiveHoliday; // Disable dropdown for both suspensions and active holidays
-                                                    $isTimeInputDisabled = $isSuspension || $holidayTimeInputDisabled; // Disable time inputs for suspensions and applicable holidays
-                                                    $inputClass = ($isSuspension || $holidayTimeInputDisabled) ? 'bg-gray-100 cursor-not-allowed' : '';
-                                                    $disabledAttr = $isTimeInputDisabled ? 'disabled' : '';
+                                                    
+                                                    // NEW SUSPENSION LOGIC:
+                                                    if ($isSuspension) {
+                                                        if ($isPartialSuspension) {
+                                                            // PARTIAL SUSPENSION: Only disable day type dropdown, enable time/break inputs (emp can work before suspension starts)
+                                                            $isTimeInputDisabled = false;
+                                                            $isBreakInputDisabled = false;
+                                                        } else {
+                                                            // FULL DAY SUSPENSION: Disable all inputs (time in/out, break in/out/checkbox, day type)
+                                                            $isTimeInputDisabled = true;
+                                                            $isBreakInputDisabled = true;
+                                                        }
+                                                    } else {
+                                                        // NON-SUSPENSION LOGIC: Consider holiday settings
+                                                        $isTimeInputDisabled = $holidayTimeInputDisabled;
+                                                        $isBreakInputDisabled = $holidayTimeInputDisabled;
+                                                    }
+                                                    
+                                                    $timeInputClass = $isTimeInputDisabled ? 'bg-gray-100 cursor-not-allowed' : '';
+                                                    $breakInputClass = $isBreakInputDisabled ? 'bg-gray-100 cursor-not-allowed' : '';
+                                                    $timeDisabledAttr = $isTimeInputDisabled ? 'disabled' : '';
+                                                    $breakDisabledAttr = $isBreakInputDisabled ? 'disabled' : '';
                                                 @endphp
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][time_in]" 
-                                                       value="{{ $day['time_in'] ? (is_string($day['time_in']) ? (strlen($day['time_in']) >= 5 ? substr($day['time_in'], 0, 5) : $day['time_in']) : $day['time_in']->format('H:i')) : '' }}"
-                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
+                                                       value="{{ $defaultTimeIn ?? '' }}"
+                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $timeInputClass }} time-input-{{ $index }}"
                                                        data-row="{{ $index }}"
                                                        onchange="calculateHours({{ $index }})"
-                                                       {!! $disabledAttr !!}>
+                                                       {!! $timeDisabledAttr !!}>
                                             </td>
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <input type="time" 
                                                        name="time_logs[{{ $index }}][time_out]" 
-                                                       value="{{ $day['time_out'] ? (is_string($day['time_out']) ? (strlen($day['time_out']) >= 5 ? substr($day['time_out'], 0, 5) : $day['time_out']) : $day['time_out']->format('H:i')) : '' }}"
-                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
+                                                       value="{{ $defaultTimeOut ?? '' }}"
+                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $timeInputClass }} time-input-{{ $index }}"
                                                        data-row="{{ $index }}"
                                                        onchange="calculateHours({{ $index }})"
-                                                       {!! $disabledAttr !!}>
+                                                       {!! $timeDisabledAttr !!}>
                                             </td>
-                                            <td class="px-3 py-2 whitespace-nowrap border-r">
-                                                <input type="time" 
-                                                       name="time_logs[{{ $index }}][break_in]" 
-                                                       value="{{ $day['break_in'] ? (is_string($day['break_in']) ? (strlen($day['break_in']) >= 5 ? substr($day['break_in'], 0, 5) : $day['break_in']) : $day['break_in']->format('H:i')) : '' }}"
-                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
-                                                       {!! $disabledAttr !!}>
-                                            </td>
-                                            <td class="px-3 py-2 whitespace-nowrap border-r">
-                                                <input type="time" 
-                                                       name="time_logs[{{ $index }}][break_out]" 
-                                                       value="{{ $day['break_out'] ? (is_string($day['break_out']) ? (strlen($day['break_out']) >= 5 ? substr($day['break_out'], 0, 5) : $day['break_out']) : $day['break_out']->format('H:i')) : '' }}"
-                                                       class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $inputClass }} time-input-{{ $index }}"
-                                                       {!! $disabledAttr !!}>
-                                            </td>
+                                            @if($hasFlexibleBreak)
+                                                <td class="px-8 py-2 whitespace-nowrap border-r">
+                                                    <label class="flex items-center">
+                                                        <!-- Hidden input to ensure unchecked state is submitted -->
+                                                        <input type="hidden" name="time_logs[{{ $index }}][used_break]" value="0">
+                                                        <input type="checkbox" 
+                                                               name="time_logs[{{ $index }}][used_break]" 
+                                                               value="1"
+                                                               class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50 {{ $breakInputClass }}"
+                                                               {{ $usedBreak ? 'checked' : '' }}
+                                                               onchange="handleFlexibleBreakChange({{ $index }})"
+                                                               {!! $breakDisabledAttr !!}>
+                                                        <span class="ml-2 text-sm text-gray-700">{{ $selectedEmployee->timeSchedule->break_duration_minutes ?? 60 }} min</span>
+                                                    </label>
+                                                    <!-- Hidden fields for break time calculation -->
+                                                    <input type="hidden" name="time_logs[{{ $index }}][break_in]" value="">
+                                                    <input type="hidden" name="time_logs[{{ $index }}][break_out]" value="">
+                                                </td>
+                                            @else
+                                                <td class="px-3 py-2 whitespace-nowrap border-r">
+                                                    <input type="time" 
+                                                           name="time_logs[{{ $index }}][break_in]" 
+                                                           value="{{ $defaultBreakIn ?? '' }}"
+                                                           class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $breakInputClass }} time-input-{{ $index }}"
+                                                           {!! $breakDisabledAttr !!}>
+                                                </td>
+                                                <td class="px-3 py-2 whitespace-nowrap border-r">
+                                                    <input type="time" 
+                                                           name="time_logs[{{ $index }}][break_out]" 
+                                                           value="{{ $defaultBreakOut ?? '' }}"
+                                                           class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $breakInputClass }} time-input-{{ $index }}"
+                                                           {!! $breakDisabledAttr !!}>
+                                                </td>
+                                            @endif
                                             <td class="px-3 py-2 whitespace-nowrap border-r">
                                                 <select name="time_logs[{{ $index }}][log_type]" 
                                                         class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 {{ $isDropdownDisabled ? 'bg-gray-100 cursor-not-allowed' : '' }} log-type-{{ $index }}"
@@ -697,6 +794,9 @@
                     }
                     // PRIORITY 2: Suspension days
                     else if (hasHiddenSuspensionInput) {
+                        // Check if this is a partial suspension
+                        const isPartialSuspension = row && row.dataset.isPartialSuspension === 'true';
+                        
                         // For suspension setting days - check pay applicability
                         const suspensionPayApplicableToInput = document.querySelector(`input[name="time_logs[${rowIndex}][suspension_pay_applicable_to]"][type="hidden"]`);
                         const suspensionPayApplicableTo = suspensionPayApplicableToInput ? suspensionPayApplicableToInput.value : 'all';
@@ -713,18 +813,41 @@
                             }
                         }
                         
-                        if (shouldAutoFillSuspension) {
-                            // Paid suspension applicable to this employee: disable inputs but preserve auto-filled values
-                            input.disabled = true;
-                            input.classList.add('bg-gray-100', 'cursor-not-allowed');
-                            input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
-                            // Keep existing values (already set by PHP)
+                        // Get the field type for partial suspension logic
+                        const fieldName = input.name.match(/\[(\w+)\]$/)[1]; // Extract field name (time_in, time_out, break_in, break_out)
+                        const isBreakField = fieldName === 'break_in' || fieldName === 'break_out';
+                        const isTimeField = fieldName === 'time_in' || fieldName === 'time_out';
+                        
+                        if (isPartialSuspension) {
+                            // PARTIAL SUSPENSION LOGIC:
+                            if (isBreakField) {
+                                // Always disable break fields for partial suspension
+                                input.disabled = true;
+                                input.value = ''; // Clear break values
+                                input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                                input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
+                            } else if (isTimeField) {
+                                // Enable time fields for partial suspension (user can edit)
+                                input.disabled = false;
+                                input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                                input.classList.add('focus:ring-indigo-500', 'focus:border-indigo-500');
+                                // Keep existing values from PHP auto-fill
+                            }
                         } else {
-                            // Unpaid suspension OR not applicable to this employee: disable and clear values
-                            input.disabled = true;
-                            input.value = ''; // Clear the input
-                            input.classList.add('bg-gray-100', 'cursor-not-allowed');
-                            input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
+                            // FULL DAY SUSPENSION LOGIC:
+                            if (shouldAutoFillSuspension) {
+                                // Paid suspension applicable to this employee: disable inputs but preserve auto-filled values
+                                input.disabled = true;
+                                input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                                input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
+                                // Keep existing values (already set by PHP)
+                            } else {
+                                // Unpaid suspension OR not applicable to this employee: disable and clear values
+                                input.disabled = true;
+                                input.value = ''; // Clear the input
+                                input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                                input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
+                            }
                         }
                     } else if (isSuspension) {
                         if (isPaidSuspension) {
@@ -780,6 +903,20 @@
                     }
                 }
             });
+        }
+
+        // Function to handle flexible break checkbox changes
+        function handleFlexibleBreakChange(rowIndex) {
+            const checkbox = document.querySelector(`input[name="time_logs[${rowIndex}][used_break]"]`);
+            if (checkbox) {
+                // Trigger hour calculation when break usage changes
+                if (typeof calculateHours === 'function') {
+                    calculateHours(rowIndex);
+                }
+                
+                // Log the change for debugging
+                console.log(`Row ${rowIndex}: Break used = ${checkbox.checked}`);
+            }
         }
 
         // Auto-save functionality (optional)

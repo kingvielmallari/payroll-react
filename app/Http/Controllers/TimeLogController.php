@@ -1055,21 +1055,28 @@ class TimeLogController extends Controller
                 // Auto-fill times for paid suspensions on regular workdays for eligible employees
                 $originalDayType = $isRestDay ? 'rest_day' : 'regular_workday';
                 if ($originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) {
-                    // Auto-fill with employee's regular schedule for eligible employees only
-                    if ($employee->timeSchedule) {
-                        $frontendTimeIn = Carbon::parse($employee->timeSchedule->time_in);
-                        $frontendTimeOut = Carbon::parse($employee->timeSchedule->time_out);
+                    // Check if this is a partial suspension
+                    $isPartialSuspension = $suspensionInfo['info']['is_partial'] ?? false;
 
-                        // Set break times if employee has fixed breaks
-                        if ($employee->timeSchedule->break_start && $employee->timeSchedule->break_end) {
-                            $frontendBreakIn = Carbon::parse($employee->timeSchedule->break_start);
-                            $frontendBreakOut = Carbon::parse($employee->timeSchedule->break_end);
+                    // Only auto-fill for FULL DAY suspensions, not partial
+                    if (!$isPartialSuspension) {
+                        // Auto-fill with employee's regular schedule for eligible employees only
+                        if ($employee->timeSchedule) {
+                            $frontendTimeIn = Carbon::parse($employee->timeSchedule->time_in);
+                            $frontendTimeOut = Carbon::parse($employee->timeSchedule->time_out);
+
+                            // Set break times if employee has fixed breaks
+                            if ($employee->timeSchedule->break_start && $employee->timeSchedule->break_end) {
+                                $frontendBreakIn = Carbon::parse($employee->timeSchedule->break_start);
+                                $frontendBreakOut = Carbon::parse($employee->timeSchedule->break_end);
+                            }
+                        } else {
+                            // Fallback schedule for full day suspension
+                            $frontendTimeIn = Carbon::parse('08:00');
+                            $frontendTimeOut = Carbon::parse('17:00');
                         }
-                    } else {
-                        // Fallback schedule
-                        $frontendTimeIn = Carbon::parse('08:00');
-                        $frontendTimeOut = Carbon::parse('17:00');
                     }
+                    // For partial suspensions: don't auto-fill anything - leave blank for user input
                 }
                 // For unpaid suspensions or non-eligible employees, don't auto-fill times
             }
@@ -1388,6 +1395,7 @@ class TimeLogController extends Controller
             'time_logs.*.time_out_hidden' => 'nullable|date_format:H:i',
             'time_logs.*.break_in_hidden' => 'nullable|date_format:H:i',
             'time_logs.*.break_out_hidden' => 'nullable|date_format:H:i',
+            'time_logs.*.used_break' => 'nullable|boolean',  // Add flexible break checkbox
             'time_logs.*.log_type' => 'required|in:' . implode(',', $availableLogTypes),
             'time_logs.*.is_holiday' => 'boolean',
             'time_logs.*.is_rest_day' => 'boolean',
@@ -1487,19 +1495,34 @@ class TimeLogController extends Controller
                 $undertimeHours = 0;
 
                 if ($timeIn && $timeOut) {
+                    $employee = Employee::with('timeSchedule')->findOrFail($validated['employee_id']);
                     $timeInCarbon = Carbon::createFromFormat('H:i', $timeIn);
                     $timeOutCarbon = Carbon::createFromFormat('H:i', $timeOut);
 
                     $totalMinutes = $timeInCarbon->diffInMinutes($timeOutCarbon);
 
+                    // Handle break time deduction
+                    $breakMinutes = 0;
                     if ($breakIn && $breakOut) {
+                        // Fixed break: calculate actual break time
                         $breakInCarbon = Carbon::createFromFormat('H:i', $breakIn);
                         $breakOutCarbon = Carbon::createFromFormat('H:i', $breakOut);
                         $breakMinutes = $breakInCarbon->diffInMinutes($breakOutCarbon);
-                        $totalMinutes -= $breakMinutes;
+                    } elseif (
+                        $employee->timeSchedule &&
+                        $employee->timeSchedule->break_duration_minutes &&
+                        !$employee->timeSchedule->break_start &&
+                        !$employee->timeSchedule->break_end
+                    ) {
+                        // Flexible break: check if break was used
+                        $usedBreak = isset($logData['used_break']) ? (bool)$logData['used_break'] : true;
+                        if ($usedBreak) {
+                            $breakMinutes = $employee->timeSchedule->break_duration_minutes;
+                        }
                     }
 
-                    $totalHours = $totalMinutes / 60;
+                    $totalMinutes -= $breakMinutes;
+                    $totalHours = max(0, $totalMinutes) / 60; // Ensure non-negative
 
                     $standardHours = 8;
                     if ($totalHours <= $standardHours) {
@@ -1526,6 +1549,7 @@ class TimeLogController extends Controller
                     'time_out' => $timeOut,
                     'break_in' => $breakIn,
                     'break_out' => $breakOut,
+                    'used_break' => isset($logData['used_break']) ? (bool)$logData['used_break'] : null,
                     'total_hours' => $totalHours,
                     'regular_hours' => $regularHours,
                     'overtime_hours' => $overtimeHours,
@@ -1947,18 +1971,83 @@ class TimeLogController extends Controller
     private function calculateDynamicWorkingHours(TimeLog $timeLog)
     {
         // Parse times properly - handle both string and Carbon objects
+        if (!$timeLog->log_date) {
+            throw new \Exception('Time log date is required for calculation');
+        }
         $logDate = $timeLog->log_date instanceof Carbon ? $timeLog->log_date : Carbon::parse($timeLog->log_date);
 
+        // Handle suspension records - check if it's a partial suspension with time logs
+        if ($timeLog->log_type === 'suspension') {
+            // Check if this is a partial suspension with actual time logs
+            $suspensionSetting = \App\Models\NoWorkSuspendedSetting::where('date_from', '<=', $logDate->format('Y-m-d'))
+                ->where('date_to', '>=', $logDate->format('Y-m-d'))
+                ->first();
+
+            if (
+                $suspensionSetting &&
+                $suspensionSetting->type === 'partial_suspension' &&
+                $suspensionSetting->time_from &&
+                $suspensionSetting->time_to &&
+                $timeLog->time_in &&
+                $timeLog->time_out
+            ) {
+
+                // This is a partial suspension with time logs - calculate working hours excluding suspension period
+                // Fall through to normal calculation but with suspension period excluded
+                $isPartialSuspension = true;
+
+                // Parse suspension times properly - they are datetime objects, extract time part
+                if (is_string($suspensionSetting->time_from)) {
+                    $suspensionStartTime = Carbon::parse($logDate->format('Y-m-d') . ' ' . $suspensionSetting->time_from);
+                } else {
+                    $timeOnly = $suspensionSetting->time_from->format('H:i:s');
+                    $suspensionStartTime = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
+                }
+
+                if (is_string($suspensionSetting->time_to)) {
+                    $suspensionEndTime = Carbon::parse($logDate->format('Y-m-d') . ' ' . $suspensionSetting->time_to);
+                } else {
+                    $timeOnly = $suspensionSetting->time_to->format('H:i:s');
+                    $suspensionEndTime = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
+                }
+            } else {
+                // Full day suspension or partial suspension without time logs
+                return [
+                    'total_hours' => 0,
+                    'regular_hours' => 0,
+                    'night_diff_regular_hours' => 0,
+                    'overtime_hours' => 0,
+                    'regular_overtime_hours' => 0,
+                    'night_diff_overtime_hours' => 0,
+                    'late_hours' => 0,
+                    'undertime_hours' => 0,
+                ];
+            }
+        } else {
+            $isPartialSuspension = false;
+            $suspensionStartTime = null;
+            $suspensionEndTime = null;
+        }
+
+        if (!$timeLog->time_in || !$timeLog->time_out) {
+            throw new \Exception('Time in and time out are required for calculation');
+        }
+
+        // Parse time fields - handle both string and datetime objects properly
         if (is_string($timeLog->time_in)) {
             $actualTimeIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->time_in);
         } else {
-            $actualTimeIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->time_in->format('H:i:s'));
+            // time_in is a Carbon datetime object, use only the time part with the correct date
+            $timeOnly = $timeLog->time_in->format('H:i:s');
+            $actualTimeIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
         }
 
         if (is_string($timeLog->time_out)) {
             $actualTimeOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->time_out);
         } else {
-            $actualTimeOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->time_out->format('H:i:s'));
+            // time_out is a Carbon datetime object, use only the time part with the correct date
+            $timeOnly = $timeLog->time_out->format('H:i:s');
+            $actualTimeOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
         }
 
         // Handle next day time out
@@ -2051,10 +2140,16 @@ class TimeLogController extends Controller
             $hasFixedBreak = ($timeSchedule->break_start && $timeSchedule->break_end);
 
             if ($hasFlexibleBreak && !$hasFixedBreak) {
-                // ===== FLEXIBLE BREAK LOGIC (ALWAYS USE DURATION DEDUCTION) =====
-                // Flexible break employees NEVER use actual break logs - always use scheduled duration
+                // ===== FLEXIBLE BREAK LOGIC =====
+                // Check if employee used their break (default to true for backward compatibility)
+                $usedBreak = $timeLog->used_break ?? true;
+
                 $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
-                $totalWorkingMinutes = max(0, $totalWorkingMinutes - $timeSchedule->break_duration_minutes);
+
+                // Only deduct break duration if employee used their break
+                if ($usedBreak) {
+                    $totalWorkingMinutes = max(0, $totalWorkingMinutes - $timeSchedule->break_duration_minutes);
+                }
             } else if ($hasFixedBreak) {
                 // FIXED BREAK: Split calculation around break window
 
@@ -2068,13 +2163,15 @@ class TimeLogController extends Controller
                         if (is_string($timeLog->break_in)) {
                             $empBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
                         } else {
-                            $empBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in->format('H:i:s'));
+                            $timeOnly = $timeLog->break_in->format('H:i:s');
+                            $empBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
                         }
 
                         if (is_string($timeLog->break_out)) {
                             $empBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
                         } else {
-                            $empBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out->format('H:i:s'));
+                            $timeOnly = $timeLog->break_out->format('H:i:s');
+                            $empBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
                         }
 
                         // Calculate time before break (stop at the EARLIER of: scheduled break start OR employee break in)
@@ -2141,13 +2238,15 @@ class TimeLogController extends Controller
                 if (is_string($timeLog->break_in)) {
                     $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
                 } else {
-                    $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in->format('H:i:s'));
+                    $timeOnly = $timeLog->break_in->format('H:i:s');
+                    $breakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
                 }
 
                 if (is_string($timeLog->break_out)) {
                     $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
                 } else {
-                    $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out->format('H:i:s'));
+                    $timeOnly = $timeLog->break_out->format('H:i:s');
+                    $breakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
                 }
 
                 if ($breakOut->gt($breakIn)) {
@@ -2172,6 +2271,64 @@ class TimeLogController extends Controller
         } else {
             // No schedule and no break logs - calculate normal work time
             $totalWorkingMinutes = $workStartTime->diffInMinutes($workEndTime);
+        }
+
+        // NEW: For partial suspensions, we need to subtract only the suspension time that overlaps with actual work time
+        // This should be done AFTER the break calculation to preserve break logic
+        if ($isPartialSuspension && $suspensionStartTime && $suspensionEndTime) {
+            // Log for debugging
+            Log::info('Partial suspension calculation', [
+                'employee_id' => $timeLog->employee_id,
+                'date' => $logDate->format('Y-m-d'),
+                'actual_time_in' => $actualTimeIn->format('H:i'),
+                'actual_time_out' => $actualTimeOut->format('H:i'),
+                'work_start' => $workStartTime->format('H:i'),
+                'work_end' => $workEndTime->format('H:i'),
+                'suspension_start' => $suspensionStartTime->format('H:i'),
+                'suspension_end' => $suspensionEndTime->format('H:i'),
+                'total_working_minutes_before' => $totalWorkingMinutes
+            ]);
+
+            // Calculate how much suspension time overlaps with actual work time (after breaks have been calculated)
+            // We need to subtract from $totalWorkingMinutes only the overlap between suspension period and work periods
+
+            // Find the overlap between suspension period and work period
+            $workPeriodStart = $workStartTime;
+            $workPeriodEnd = $workEndTime;
+
+            // Calculate overlap between suspension and work period
+            $overlapStart = max($suspensionStartTime, $workPeriodStart);
+            $overlapEnd = min($suspensionEndTime, $workPeriodEnd);
+
+            $suspensionOverlapMinutes = 0;
+            if ($overlapStart->lt($overlapEnd)) {
+                // There is overlap between suspension and work period
+                $suspensionOverlapMinutes = $overlapStart->diffInMinutes($overlapEnd);
+
+                // However, if there's a fixed break in the overlap period, we need to exclude the break time
+                // from the suspension overlap since break time wasn't counted in work time anyway
+                if ($timeSchedule && $timeSchedule->break_start && $timeSchedule->break_end) {
+                    $schedBreakStart = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_start->format('H:i'));
+                    $schedBreakEnd = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeSchedule->break_end->format('H:i'));
+
+                    // Check if break period overlaps with suspension overlap
+                    $breakOverlapStart = max($overlapStart, $schedBreakStart);
+                    $breakOverlapEnd = min($overlapEnd, $schedBreakEnd);
+
+                    if ($breakOverlapStart->lt($breakOverlapEnd)) {
+                        $breakOverlapMinutes = $breakOverlapStart->diffInMinutes($breakOverlapEnd);
+                        $suspensionOverlapMinutes = max(0, $suspensionOverlapMinutes - $breakOverlapMinutes);
+                    }
+                }
+            }
+
+            // Subtract the suspension overlap from total working minutes
+            $totalWorkingMinutes = max(0, $totalWorkingMinutes - $suspensionOverlapMinutes);
+
+            Log::info('Suspension overlap calculation', [
+                'suspension_overlap_minutes' => $suspensionOverlapMinutes,
+                'total_working_minutes_after' => $totalWorkingMinutes
+            ]);
         }
 
         // STEP 3: Convert to hours
@@ -2242,13 +2399,15 @@ class TimeLogController extends Controller
                     if (is_string($timeLog->break_in)) {
                         $empBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in);
                     } else {
-                        $empBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_in->format('H:i:s'));
+                        $timeOnly = $timeLog->break_in->format('H:i:s');
+                        $empBreakIn = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
                     }
 
                     if (is_string($timeLog->break_out)) {
                         $empBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out);
                     } else {
-                        $empBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeLog->break_out->format('H:i:s'));
+                        $timeOnly = $timeLog->break_out->format('H:i:s');
+                        $empBreakOut = Carbon::parse($logDate->format('Y-m-d') . ' ' . $timeOnly);
                     }
 
                     $stopCountingAt = min($schedBreakStart, $empBreakIn);
