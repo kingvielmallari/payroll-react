@@ -415,18 +415,8 @@
                                                 @if($isSuspension)
                                                     {{-- For active suspension days, add hidden input for log_type since disabled selects won't submit --}}
                                                     @php
-                                                        $selectedLogType = '';
-                                                        if ($day['log_type']) {
-                                                            $selectedLogType = $day['log_type'];
-                                                        } else {
-                                                            // Find the suspension log type
-                                                            foreach($logTypes as $value => $label) {
-                                                                if (str_contains($label, 'Suspension')) {
-                                                                    $selectedLogType = $value;
-                                                                    break;
-                                                                }
-                                                            }
-                                                        }
+                                                        // Always use the log_type determined by the controller (full_day_suspension or partial_suspension)
+                                                        $selectedLogType = $day['log_type'] ?? 'full_day_suspension';
                                                     @endphp
                                                     <input type="hidden" name="time_logs[{{ $index }}][log_type]" value="{{ $selectedLogType }}">
                                                     {{-- Add hidden inputs for suspension days since disabled time inputs won't submit their values --}}

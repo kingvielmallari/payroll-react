@@ -22,17 +22,31 @@
 
     @php
         $groupedConfigurations = $configurations->groupBy(function($config) {
-            if (str_contains(strtolower($config->display_name), 'regular workday')) return 'regular';
-            if (str_contains(strtolower($config->display_name), 'rest day')) return 'rest_day';
-            if (str_contains(strtolower($config->display_name), 'holiday')) return 'holiday';
+            $typeName = strtolower($config->type_name);
+            
+            // Fixed grouping based on type_name for consistent organization
+            if ($typeName === 'regular_workday') return 'regular';
+            if (str_contains($typeName, 'rest_day')) return 'rest_day';
+            if (str_contains($typeName, 'holiday')) return 'holiday';
+            if (str_contains($typeName, 'suspension')) return 'suspension';
+            
             return 'other';
         });
+        
+        // Define group display names
+        $groupNames = [
+            'regular' => 'Regular',
+            'rest_day' => 'Rest Day', 
+            'holiday' => 'Holiday',
+            'suspension' => 'Suspension',
+            'other' => 'Other'
+        ];
     @endphp
 
     @forelse($groupedConfigurations as $type => $typeConfigurations)
         <div class="bg-white rounded-lg shadow overflow-hidden mb-6">
             <div class="bg-gray-50 px-6 py-3">
-                <h3 class="text-lg font-medium text-gray-900 capitalize">{{ str_replace('_', ' ', $type) }}</h3>
+                <h3 class="text-lg font-medium text-gray-900">{{ $groupNames[$type] ?? ucfirst(str_replace('_', ' ', $type)) }}</h3>
             </div>
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
@@ -55,14 +69,19 @@
                             </td>
                             <td class="px-6 py-4">
                                 <div class="text-sm {{ !$configuration->is_active ? 'text-gray-400' : 'text-gray-500' }}">
-                                    @if(str_contains(strtolower($configuration->display_name), 'regular workday'))
+                                    @php
+                                        $typeName = strtolower($configuration->type_name);
+                                    @endphp
+                                    @if($typeName === 'regular_workday')
                                         Standard working day rates
-                                    @elseif(str_contains(strtolower($configuration->display_name), 'rest day'))
+                                    @elseif(str_contains($typeName, 'rest_day'))
                                         Rest day premium rates
-                                    @elseif(str_contains(strtolower($configuration->display_name), 'regular holiday'))
+                                    @elseif(str_contains($typeName, 'regular_holiday'))
                                         Regular holiday premium rates
-                                    @elseif(str_contains(strtolower($configuration->display_name), 'special'))
+                                    @elseif(str_contains($typeName, 'special'))
                                         Special holiday premium rates
+                                    @elseif(str_contains($typeName, 'suspension'))
+                                        Premium rate configuration
                                     @else
                                         Premium rate configuration
                                     @endif

@@ -1050,7 +1050,9 @@ class TimeLogController extends Controller
 
             // PRIORITY 1: Active suspension takes highest priority
             if ($suspensionInfo['is_suspension']) {
-                $frontendLogType = 'suspension';
+                // Use the actual suspension type instead of generic 'suspension'
+                $suspensionType = $suspensionInfo['info']['type'] ?? 'full_day_suspension';
+                $frontendLogType = $suspensionType;
 
                 // Auto-fill times for paid suspensions on regular workdays for eligible employees
                 $originalDayType = $isRestDay ? 'rest_day' : 'regular_workday';
@@ -1381,6 +1383,12 @@ class TimeLogController extends Controller
         $availableLogTypes = PayrollRateConfiguration::where('is_active', true)
             ->pluck('type_name')
             ->toArray();
+
+        // Debug: Log available types and request data
+        Log::info('Bulk validation debug', [
+            'available_log_types' => $availableLogTypes,
+            'request_time_logs' => $request->input('time_logs')
+        ]);
 
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
@@ -1977,7 +1985,7 @@ class TimeLogController extends Controller
         $logDate = $timeLog->log_date instanceof Carbon ? $timeLog->log_date : Carbon::parse($timeLog->log_date);
 
         // Handle suspension records - check if it's a partial suspension with time logs
-        if ($timeLog->log_type === 'suspension') {
+        if (in_array($timeLog->log_type, ['suspension', 'full_day_suspension', 'partial_suspension'])) {
             // Check if this is a partial suspension with actual time logs
             $suspensionSetting = \App\Models\NoWorkSuspendedSetting::where('date_from', '<=', $logDate->format('Y-m-d'))
                 ->where('date_to', '>=', $logDate->format('Y-m-d'))
@@ -1985,7 +1993,7 @@ class TimeLogController extends Controller
 
             if (
                 $suspensionSetting &&
-                $suspensionSetting->type === 'partial_suspension' &&
+                ($suspensionSetting->type === 'partial_suspension' || $timeLog->log_type === 'partial_suspension') &&
                 $suspensionSetting->time_from &&
                 $suspensionSetting->time_to &&
                 $timeLog->time_in &&

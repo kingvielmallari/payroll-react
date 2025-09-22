@@ -110,6 +110,26 @@ class PayrollRateConfiguration extends Model
                 'is_system' => true,
                 'sort_order' => 6,
             ],
+            [
+                'type_name' => 'full_day_suspension',
+                'display_name' => 'Full Day Suspension',
+                'regular_rate_multiplier' => 1.0000,
+                'overtime_rate_multiplier' => 0.0000,
+                'description' => 'Full day suspension with fixed daily rate',
+                'is_active' => true,
+                'is_system' => true,
+                'sort_order' => 7,
+            ],
+            [
+                'type_name' => 'partial_suspension',
+                'display_name' => 'Partial Suspension',
+                'regular_rate_multiplier' => 1.0000,
+                'overtime_rate_multiplier' => 1.2500,
+                'description' => 'Partial suspension with fixed amount + worked hours',
+                'is_active' => true,
+                'is_system' => true,
+                'sort_order' => 8,
+            ],
         ];
     }
 

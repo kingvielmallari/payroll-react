@@ -3557,6 +3557,14 @@
                                                         $dayType = 'Suspension';
                                                         $dayTypeColor = 'bg-gray-200 text-gray-800';
                                                         break;
+                                                    case 'full_day_suspension':
+                                                        $dayType = 'Full Suspension';
+                                                        $dayTypeColor = 'bg-gray-200 text-gray-800';
+                                                        break;
+                                                    case 'partial_suspension':
+                                                        $dayType = 'Partial Suspension';
+                                                        $dayTypeColor = 'bg-gray-200 text-gray-800';
+                                                        break;
                                                     case 'special_holiday':
                                                         $dayType = 'Special Holiday';
                                                         $dayTypeColor = 'bg-orange-100 text-orange-800';
@@ -3629,7 +3637,7 @@
                                                 {{-- Check if this is a suspension day with paid suspension settings --}}
                                                 @php
                                                     $suspensionPayDisplay = null;
-                                                    if ($logType === 'suspension') {
+                                                    if (in_array($logType, ['suspension', 'full_day_suspension', 'partial_suspension'])) {
                                                         // Get suspension settings for this date
                                                         $suspensionSetting = \App\Models\NoWorkSuspendedSetting::where('date_from', '<=', $date)
                                                             ->where('date_to', '>=', $date)
@@ -3652,7 +3660,7 @@
                                                             
                                                             if ($shouldReceivePay) {
                                                                 $payRule = $suspensionSetting->pay_rule ?? 'full';
-                                                                if ($suspensionSetting->type === 'partial_suspension') {
+                                                                if (in_array($suspensionSetting->type, ['partial_suspension'])) {
                                                                     $suspensionPayDisplay = ($payRule === 'full') ? 'PARTIAL FULL' : 'PARTIAL HALF';
                                                                 } else {
                                                                     $suspensionPayDisplay = ($payRule === 'full') ? 'FULL PAID' : 'HALF PAID';

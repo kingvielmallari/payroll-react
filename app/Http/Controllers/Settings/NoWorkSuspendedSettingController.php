@@ -13,11 +13,16 @@ class NoWorkSuspendedSettingController extends Controller
 {
     public function index()
     {
-        $suspensions = NoWorkSuspendedSetting::orderBy('date_from', 'desc')
-            ->get()
-            ->groupBy('status');
+        // Get all suspensions ordered by date (latest first), maintain this order throughout
+        $allSuspensions = NoWorkSuspendedSetting::orderBy('date_from', 'desc')->get();
 
-        return view('settings.suspension.index', compact('suspensions'));
+        // Group by status but preserve the date ordering within each group
+        $suspensions = $allSuspensions->groupBy('status');
+
+        // For the view, we want a single ordered list (latest dates first, regardless of status)
+        $orderedSuspensions = $allSuspensions;
+
+        return view('settings.suspension.index', compact('suspensions', 'orderedSuspensions'));
     }
 
     public function create()
