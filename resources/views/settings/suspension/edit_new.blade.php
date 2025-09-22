@@ -60,7 +60,7 @@
                             <label for="type" class="block text-sm font-medium text-gray-700 mb-2">Suspension Type</label>
                             <select name="type" id="type" 
                                     class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                                <option value="suspended" {{ old('type', $suspension->type) == 'suspended' ? 'selected' : '' }}>Full Suspension</option>
+                                <option value="full_day_suspension" {{ old('type', $suspension->type) == 'full_day_suspension' ? 'selected' : '' }}>Full Suspension</option>
                                 <option value="partial_suspension" {{ old('type', $suspension->type) == 'partial_suspension' ? 'selected' : '' }}>Partial Suspension</option>
                             </select>
                             @error('type')

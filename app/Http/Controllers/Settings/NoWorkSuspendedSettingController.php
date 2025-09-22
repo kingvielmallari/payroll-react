@@ -44,7 +44,7 @@ class NoWorkSuspendedSettingController extends Controller
             'date_to' => 'nullable|date|after_or_equal:date_from',
             'time_from' => 'nullable|date_format:H:i',
             'time_to' => 'nullable|date_format:H:i|after:time_from',
-            'type' => 'required|in:suspended,partial_suspension',
+            'type' => 'required|in:full_day_suspension,partial_suspension',
             'reason' => 'required|in:weather,system_maintenance,emergency,government_order,other',
             'is_paid' => 'boolean',
             'pay_rule' => 'nullable|in:full,half',
@@ -61,7 +61,7 @@ class NoWorkSuspendedSettingController extends Controller
         }
 
         // For full day suspension, set time fields to null to avoid SQL errors
-        if ($validated['type'] === 'suspended') {
+        if ($validated['type'] === 'full_day_suspension') {
             $validated['time_from'] = null;
             $validated['time_to'] = null;
         }
@@ -118,7 +118,7 @@ class NoWorkSuspendedSettingController extends Controller
             'date_to' => 'required|date|after_or_equal:date_from',
             'time_from' => 'nullable|date_format:H:i',
             'time_to' => 'nullable|date_format:H:i|after:time_from',
-            'type' => 'required|in:suspended,partial_suspension',
+            'type' => 'required|in:full_day_suspension,partial_suspension',
             'reason' => 'required|in:weather,system_maintenance,emergency,government_order,other',
             'is_paid' => 'boolean',
             'pay_rule' => 'nullable|in:full,half',
@@ -126,7 +126,7 @@ class NoWorkSuspendedSettingController extends Controller
         ]);
 
         // For full day suspension, set time fields to null to avoid SQL errors
-        if ($validated['type'] === 'suspended') {
+        if ($validated['type'] === 'full_day_suspension') {
             $validated['time_from'] = null;
             $validated['time_to'] = null;
         }

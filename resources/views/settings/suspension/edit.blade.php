@@ -32,7 +32,7 @@
                             class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
                             onchange="toggleDateAndTimeFields()" required>
                         <option value="">Select Type</option>
-                        <option value="suspended" {{ old('type', $suspension->type) == 'suspended' ? 'selected' : '' }}>Full Day Suspension</option>
+                        <option value="full_day_suspension" {{ old('type', $suspension->type) == 'full_day_suspension' ? 'selected' : '' }}>Full Day Suspension</option>
                         <option value="partial_suspension" {{ old('type', $suspension->type) == 'partial_suspension' ? 'selected' : '' }}>Partial Suspension</option>
                     </select>
                     @error('type')
@@ -165,7 +165,7 @@ function toggleDateAndTimeFields() {
     const timeFromInput = document.getElementById('time_from');
     const timeToInput = document.getElementById('time_to');
     
-    if (typeSelect.value === 'suspended' || typeSelect.value === 'partial_suspension') {
+    if (typeSelect.value === 'full_day_suspension' || typeSelect.value === 'partial_suspension') {
         // Show date fields for both full day and partial suspension
         dateFields.style.display = 'grid';
         

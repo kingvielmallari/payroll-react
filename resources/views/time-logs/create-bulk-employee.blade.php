@@ -810,14 +810,8 @@
                         
                         if (isPartialSuspension) {
                             // PARTIAL SUSPENSION LOGIC:
-                            if (isBreakField) {
-                                // Always disable break fields for partial suspension
-                                input.disabled = true;
-                                input.value = ''; // Clear break values
-                                input.classList.add('bg-gray-100', 'cursor-not-allowed');
-                                input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
-                            } else if (isTimeField) {
-                                // Enable time fields for partial suspension (user can edit)
+                            if (isBreakField || isTimeField) {
+                                // Enable both time and break fields for partial suspension (employee can work before suspension starts)
                                 input.disabled = false;
                                 input.classList.remove('bg-gray-100', 'cursor-not-allowed');
                                 input.classList.add('focus:ring-indigo-500', 'focus:border-indigo-500');
