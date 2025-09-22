@@ -954,128 +954,59 @@
                                                     if (isset($employeeBreakdown[$suspensionType])) {
                                                         $suspensionData = $employeeBreakdown[$suspensionType];
                                                         $suspensionDays = $suspensionData['days'] ?? 0;
-                                                        $suspensionSettings = $suspensionData['suspension_settings'] ?? [];
                                                         $rateConfig = $suspensionData['rate_config'] ?? null;
                                                         
-                                                        if ($suspensionDays > 0 && !empty($suspensionSettings) && $rateConfig) {
-                                                            // Calculate daily rate (8 hours standard)
-                                                            $dailyRate = $hourlyRate * 8;
-                                                            
-                                                            foreach ($suspensionSettings as $date => $setting) {
-                                                                $isPaid = $setting['is_paid'] ?? false;
-                                                                $payRule = $setting['pay_rule'] ?? 'full';
-                                                                $payApplicableTo = $setting['pay_applicable_to'] ?? 'all';
+                                                        if ($suspensionDays > 0 && $rateConfig) {
+                                                            // Calculate daily rate from employee's fixed_rate
+                                                            if ($detail->employee->fixed_rate && $detail->employee->rate_type) {
+                                                                $employeeFixedRate = $detail->employee->fixed_rate;
+                                                                $rateType = $detail->employee->rate_type;
                                                                 
-                                                                // Check if suspension pay applies to this employee
-                                                                $employeeHasBenefits = $detail->employee->benefits_status === 'with_benefits';
-                                                                $shouldReceivePay = false;
-                                                                
-                                                                if ($isPaid) {
-                                                                    if ($payApplicableTo === 'all') {
-                                                                        $shouldReceivePay = true;
-                                                                    } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
-                                                                        $shouldReceivePay = true;
-                                                                    } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
-                                                                        $shouldReceivePay = true;
-                                                                    }
+                                                                // Calculate daily rate based on rate type
+                                                                switch ($rateType) {
+                                                                    case 'daily':
+                                                                        $dailyRate = $employeeFixedRate;
+                                                                        break;
+                                                                    case 'hourly':
+                                                                        $timeSchedule = $detail->employee->timeSchedule;
+                                                                        $dailyHours = $timeSchedule ? $timeSchedule->total_hours : 8;
+                                                                        $dailyRate = $employeeFixedRate * $dailyHours;
+                                                                        break;
+                                                                    case 'monthly':
+                                                                        $dailyRate = $employeeFixedRate / 22; // Assume 22 working days
+                                                                        break;
+                                                                    default:
+                                                                        $dailyRate = $hourlyRate * 8; // Fallback
                                                                 }
-                                                                
-                                                                if ($shouldReceivePay) {
-                                                                    // Calculate fixed daily rate amount
-                                                                    $multiplier = ($payRule === 'full') ? 1.0 : 0.5;
-                                                                    $fixedAmount = round($dailyRate * $multiplier, 2);
-                                                                    
-                                                                    if ($suspensionType === 'partial_suspension') {
-                                                                        // PARTIAL SUSPENSION: Fixed amount + possible time log earnings  
-                                                                        $actualTimeLogHours = $suspensionData['actual_time_log_hours'] ?? 0;
-                                                                        $timeLogAmount = round($actualTimeLogHours * $hourlyRate, 2);
-                                                                        $totalAmount = $fixedAmount + $timeLogAmount;
-                                                                        
-                                                                        $basicBreakdownData['Partial Suspension'] = [
-                                                                            'hours' => 0, // Not based on hours
-                                                                            'rate' => $dailyRate,
-                                                                            'multiplier' => $multiplier,
-                                                                            'fixed_amount' => $fixedAmount,
-                                                                            'time_log_amount' => $timeLogAmount,
-                                                                            'amount' => $totalAmount,
-                                                                        ];
-                                                                        $basicPay += $totalAmount;
-                                                                    } else {
-                                                                        // FULL DAY SUSPENSION: Only fixed amount
-                                                                        $basicBreakdownData['Full Suspension'] = [
-                                                                            'hours' => 0, // Not based on hours
-                                                                            'rate' => $dailyRate,
-                                                                            'multiplier' => $multiplier,
-                                                                            'amount' => $fixedAmount,
-                                                                        ];
-                                                                        $basicPay += $fixedAmount;
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                // Legacy suspension calculation with FIXED DAILY RATES (for backwards compatibility)
-                                                if (isset($employeeBreakdown['suspension'])) {
-                                                    $suspensionData = $employeeBreakdown['suspension'];
-                                                    $suspensionDays = $suspensionData['days'] ?? 0;
-                                                    $suspensionSettings = $suspensionData['suspension_settings'] ?? [];
-                                                    
-                                                    if ($suspensionDays > 0 && !empty($suspensionSettings)) {
-                                                        // Calculate daily rate (8 hours standard)
-                                                        $dailyRate = $hourlyRate * 8;
-                                                        
-                                                        foreach ($suspensionSettings as $date => $setting) {
-                                                            $isPaid = $setting['is_paid'] ?? false;
-                                                            $payRule = $setting['pay_rule'] ?? 'full';
-                                                            $payApplicableTo = $setting['pay_applicable_to'] ?? 'all';
-                                                            $isPartial = $setting['type'] === 'partial_suspension';
-                                                            
-                                                            // Check if suspension pay applies to this employee
-                                                            $employeeHasBenefits = $detail->employee->benefits_status === 'with_benefits';
-                                                            $shouldReceivePay = false;
-                                                            
-                                                            if ($isPaid) {
-                                                                if ($payApplicableTo === 'all') {
-                                                                    $shouldReceivePay = true;
-                                                                } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
-                                                                    $shouldReceivePay = true;
-                                                                } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
-                                                                    $shouldReceivePay = true;
-                                                                }
+                                                            } else {
+                                                                $dailyRate = $hourlyRate * 8; // Fallback calculation
                                                             }
                                                             
-                                                            if ($shouldReceivePay) {
-                                                                // Calculate fixed daily rate amount
-                                                                $multiplier = ($payRule === 'full') ? 1.0 : 0.5;
-                                                                $fixedAmount = round($dailyRate * $multiplier, 2);
+                                                            if ($suspensionType === 'partial_suspension') {
+                                                                // PARTIAL SUSPENSION: Fixed daily rate + time log earnings  
+                                                                $actualTimeLogHours = $suspensionData['actual_time_log_hours'] ?? 0;
+                                                                $timeLogAmount = round($actualTimeLogHours * $hourlyRate, 2);
+                                                                $totalAmount = $dailyRate + $timeLogAmount;
                                                                 
-                                                                if ($isPartial) {
-                                                                    // PARTIAL SUSPENSION: Fixed amount + possible time log earnings
-                                                                    $actualTimeLogHours = $suspensionData['actual_time_log_hours'] ?? 0;
-                                                                    $timeLogAmount = round($actualTimeLogHours * $hourlyRate, 2);
-                                                                    $totalAmount = $fixedAmount + $timeLogAmount;
-                                                                    
-                                                                    $basicBreakdownData['Paid Partial Suspension'] = [
-                                                                        'hours' => 0, // Not based on hours anymore
-                                                                        'rate' => $dailyRate,
-                                                                        'multiplier' => $multiplier,
-                                                                        'fixed_amount' => $fixedAmount,
-                                                                        'time_log_amount' => $timeLogAmount,
-                                                                        'amount' => $totalAmount,
-                                                                    ];
-                                                                    $basicPay += $totalAmount;
-                                                                } else {
-                                                                    // FULL DAY SUSPENSION: Only fixed amount
-                                                                    $basicBreakdownData['Paid Suspension'] = [
-                                                                        'hours' => 0, // Not based on hours anymore
-                                                                        'rate' => $dailyRate,
-                                                                        'multiplier' => $multiplier,
-                                                                        'amount' => $fixedAmount,
-                                                                    ];
-                                                                    $basicPay += $fixedAmount;
-                                                                }
+                                                                $basicBreakdownData['Partial Suspension'] = [
+                                                                    'hours' => $actualTimeLogHours,
+                                                                    'rate' => $dailyRate,
+                                                                    'fixed_amount' => $dailyRate,
+                                                                    'time_log_amount' => $timeLogAmount,
+                                                                    'amount' => $totalAmount,
+                                                                ];
+                                                                $basicPay += $totalAmount;
+                                                            } else {
+                                                                // FULL DAY SUSPENSION: Only fixed daily rate
+                                                                $totalAmount = $dailyRate * $suspensionDays;
+                                                                
+                                                                $basicBreakdownData['Full Suspension'] = [
+                                                                    'hours' => 0,
+                                                                    'rate' => $dailyRate,
+                                                                    'days' => $suspensionDays,
+                                                                    'amount' => $totalAmount,
+                                                                ];
+                                                                $basicPay += $totalAmount;
                                                             }
                                                         }
                                                     }

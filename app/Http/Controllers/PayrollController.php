@@ -7795,70 +7795,38 @@ class PayrollController extends Controller
                     ];
                 }
 
-                // Handle suspension records separately since they don't have time calculations
-                if ($logType === 'suspension') {
-                    // Get suspension settings for this date
-                    $suspensionSetting = \App\Models\NoWorkSuspendedSetting::where('date_from', '<=', $date)
-                        ->where('date_to', '>=', $date)
+                // Handle suspension records - only process actual suspension time logs
+                if (in_array($logType, ['full_day_suspension', 'partial_suspension'])) {
+                    // Process time logs that already have suspension log types
+                    $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
+                    $totalHours = $dynamicCalculation['total_hours'] ?? 0;
+                    $regularHours = $dynamicCalculation['regular_hours'] ?? 0;
+                    $overtimeHours = $dynamicCalculation['overtime_hours'] ?? 0;
+
+                    $employeeBreakdown[$logType]['days']++;
+                    $employeeBreakdown[$logType]['days_count']++;
+
+                    // For partial suspensions, include the work hours
+                    if ($logType === 'partial_suspension' && $totalHours > 0) {
+                        $employeeBreakdown[$logType]['regular_hours'] += $regularHours;
+                        $employeeBreakdown[$logType]['overtime_hours'] += $overtimeHours;
+                        $employeeBreakdown[$logType]['total_hours'] += $totalHours;
+                        $employeeBreakdown[$logType]['actual_time_log_hours'] += $totalHours;
+                    }
+
+                    // Get rate configuration for this suspension type
+                    $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $logType)
+                        ->where('is_active', true)
                         ->first();
 
-                    if ($suspensionSetting) {
-                        // Determine suspension type based on actual work hours
-                        $dynamicCalculation = $this->calculateTimeLogHoursDynamically($timeLog);
-                        $totalHours = $dynamicCalculation['total_hours'] ?? 0;
-                        $regularHours = $dynamicCalculation['regular_hours'] ?? 0;
-                        $overtimeHours = $dynamicCalculation['overtime_hours'] ?? 0;
-
-                        // If employee has work hours, it's partial suspension; otherwise full day
-                        $actualSuspensionType = ($totalHours > 0) ? 'partial_suspension' : 'full_day_suspension';
-
-                        // Initialize breakdown for the actual suspension type
-                        if (!isset($employeeBreakdown[$actualSuspensionType])) {
-                            $employeeBreakdown[$actualSuspensionType] = [
-                                'regular_hours' => 0,
-                                'overtime_hours' => 0,
-                                'regular_overtime_hours' => 0,
-                                'night_diff_overtime_hours' => 0,
-                                'night_diff_regular_hours' => 0,
-                                'total_hours' => 0,
-                                'days' => 0,
-                                'days_count' => 0,
-                                'display_name' => null,
-                                'rate_config' => null,
-                                'suspension_settings' => [],
-                                'actual_time_log_hours' => 0
-                            ];
-                        }
-
-                        $employeeBreakdown[$actualSuspensionType]['days']++;
-                        $employeeBreakdown[$actualSuspensionType]['days_count']++;
-
-                        // Store suspension configuration
-                        $employeeBreakdown[$actualSuspensionType]['suspension_settings'][$date] = [
-                            'is_paid' => $suspensionSetting->is_paid,
-                            'pay_rule' => $suspensionSetting->pay_rule ?? 'full',
-                            'pay_applicable_to' => $suspensionSetting->pay_applicable_to ?? 'all',
-                            'type' => $actualSuspensionType
-                        ];
-
-                        // For partial suspensions, include the work hours
-                        if ($actualSuspensionType === 'partial_suspension' && $totalHours > 0) {
-                            $employeeBreakdown[$actualSuspensionType]['regular_hours'] += $regularHours;
-                            $employeeBreakdown[$actualSuspensionType]['overtime_hours'] += $overtimeHours;
-                            $employeeBreakdown[$actualSuspensionType]['total_hours'] += $totalHours;
-                            $employeeBreakdown[$actualSuspensionType]['actual_time_log_hours'] += $totalHours;
-                        }
-
-                        // Get rate configuration for the actual suspension type
-                        $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $actualSuspensionType)
-                            ->where('is_active', true)
-                            ->first();
-
-                        if ($rateConfig) {
-                            $employeeBreakdown[$actualSuspensionType]['display_name'] = $rateConfig->display_name;
-                            $employeeBreakdown[$actualSuspensionType]['rate_config'] = $rateConfig;
-                        }
+                    if ($rateConfig) {
+                        $employeeBreakdown[$logType]['display_name'] = $rateConfig->display_name;
+                        $employeeBreakdown[$logType]['rate_config'] = $rateConfig;
                     }
+                } elseif ($logType === 'suspension') {
+                    // Legacy suspension type - treat as regular work day for now
+                    // or skip processing since it should use the new suspension types
+                    continue;
                 } else {
                     // Regular time log processing
                     // Use dynamic calculation for draft payroll
@@ -7887,58 +7855,9 @@ class PayrollController extends Controller
                 }
             }
 
-            // Check for suspension settings even if no time log exists for this date
-            if (!$timeLog) {
-                // Check if there's an active suspension setting for this date
-                $suspensionSetting = \App\Models\NoWorkSuspendedSetting::where('date_from', '<=', $date)
-                    ->where('date_to', '>=', $date)
-                    ->where('status', 'active')
-                    ->first();
-
-                if ($suspensionSetting) {
-                    // This is a full day suspension (no time logs at all)
-                    $suspensionType = 'full_day_suspension';
-
-                    // Initialize breakdown for full day suspension
-                    if (!isset($employeeBreakdown[$suspensionType])) {
-                        $employeeBreakdown[$suspensionType] = [
-                            'regular_hours' => 0,
-                            'overtime_hours' => 0,
-                            'regular_overtime_hours' => 0,
-                            'night_diff_overtime_hours' => 0,
-                            'night_diff_regular_hours' => 0,
-                            'total_hours' => 0,
-                            'days' => 0,
-                            'days_count' => 0,
-                            'display_name' => null,
-                            'rate_config' => null,
-                            'suspension_settings' => [],
-                            'actual_time_log_hours' => 0
-                        ];
-                    }
-
-                    $employeeBreakdown[$suspensionType]['days']++;
-                    $employeeBreakdown[$suspensionType]['days_count']++;
-
-                    // Store suspension configuration
-                    $employeeBreakdown[$suspensionType]['suspension_settings'][$date] = [
-                        'is_paid' => $suspensionSetting->is_paid,
-                        'pay_rule' => $suspensionSetting->pay_rule ?? 'full',
-                        'pay_applicable_to' => $suspensionSetting->pay_applicable_to ?? 'all',
-                        'type' => $suspensionType
-                    ];
-
-                    // Get rate configuration for full day suspension
-                    $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $suspensionType)
-                        ->where('is_active', true)
-                        ->first();
-
-                    if ($rateConfig) {
-                        $employeeBreakdown[$suspensionType]['display_name'] = $rateConfig->display_name;
-                        $employeeBreakdown[$suspensionType]['rate_config'] = $rateConfig;
-                    }
-                }
-            }
+            // NOTE: Removed automatic suspension detection based on settings
+            // Suspension pay should only be calculated when there are actual time logs 
+            // with suspension log types (full_day_suspension, partial_suspension)
         }
 
         $timeBreakdowns[$employee->id] = $employeeBreakdown;
