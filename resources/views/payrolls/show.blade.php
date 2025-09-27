@@ -1181,114 +1181,28 @@
                                     </td>
                                     <td class="px-4 py-4 whitespace-nowrap text-sm text-right">
                                         @php 
-                                            $holidayBreakdown = [];
+                                            // Use holiday breakdown data from controller (works for both draft and locked payrolls)
+                                            $employeeHolidayBreakdown = [];
                                             $totalHolidayRegularHours = 0;
-                                            $holidayPay = 0; // Calculate this properly
+                                            $holidayPay = 0;
                                             
-                                            if ($payroll->status === 'draft') {
-                                                // DRAFT: Use timeBreakdowns data like Overtime column
-                                                $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
-                                                $hourlyRate = $detail->hourly_rate ?? 0; // Use calculated hourly rate from detail
-                                                $holidayPay = 0;
+                                            // Use the holidayBreakdown passed from controller
+                                            if (isset($holidayBreakdown) && !empty($holidayBreakdown)) {
+                                                $employeeHolidayBreakdown = $holidayBreakdown;
                                                 
-                                                // Get night differential settings for dynamic rate
-                                                $nightDiffSetting = \App\Models\NightDifferentialSetting::current();
-                                                $nightDiffMultiplier = $nightDiffSetting ? $nightDiffSetting->rate_multiplier : 1.10;
-                                                
-                                                // Process each holiday type
-                                                $holidayTypes = ['special_holiday', 'regular_holiday', 'rest_day_special_holiday', 'rest_day_regular_holiday'];
-                                                foreach ($holidayTypes as $logType) {
-                                                    if (isset($employeeBreakdown[$logType])) {
-                                                        $regularHours = $employeeBreakdown[$logType]['regular_hours'] ?? 0;
-                                                        $nightDiffRegularHours = $employeeBreakdown[$logType]['night_diff_regular_hours'] ?? 0;
-                                                        
-                                                        $rateConfig = $employeeBreakdown[$logType]['rate_config'];
-                                                        $displayName = $rateConfig ? $rateConfig->display_name : 'Holiday';
-                                                        $regularMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.3;
-                                                        
-                                                        // Holiday (without ND)
-                                                        if ($regularHours > 0) {
-                                                            // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
-                                                            $actualMinutes = $regularHours * 60;
-                                                            $roundedMinutes = round($actualMinutes);
-                                                            $adjustedHourlyRate = $hourlyRate * $regularMultiplier;
-                                                            $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
-                                                            $amount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
-                                                            
-                                                            $percentageDisplay = number_format($regularMultiplier * 100, 0) . '%';
-                                                            
-                                                            if (isset($holidayBreakdown[$displayName])) {
-                                                                $holidayBreakdown[$displayName]['hours'] += $regularHours;
-                                                                $holidayBreakdown[$displayName]['amount'] += $amount;
-                                                            } else {
-                                                                $holidayBreakdown[$displayName] = [
-                                                                    'hours' => $regularHours,
-                                                                    'amount' => $amount,
-                                                                    'rate' => $hourlyRate,
-                                                                    'multiplier' => $regularMultiplier,
-                                                                    'percentage' => $percentageDisplay
-                                                                ];
-                                                            }
-                                                            $totalHolidayRegularHours += $regularHours;
-                                                            $holidayPay += $amount;
-                                                        }
-                                                        
-                                                        // Holiday + ND
-                                                        if ($nightDiffRegularHours > 0) {
-                                                            // Combined rate: holiday rate + night differential bonus
-                                                            $combinedMultiplier = $regularMultiplier + ($nightDiffMultiplier - 1);
-                                                            $ndDisplayName = $displayName . '+ND';
-                                                            
-                                                            // Use consistent calculation: hourly rate * multiplier, truncate to 4 decimals, then multiply by minutes
-                                                            $actualMinutes = $nightDiffRegularHours * 60;
-                                                            $roundedMinutes = round($actualMinutes);
-                                                            $adjustedHourlyRate = $hourlyRate * $combinedMultiplier;
-                                                            $ratePerMinute = $adjustedHourlyRate / 60; // Truncate to 4 decimals
-                                                            $ndAmount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
-                                                            
-                                                            $ndPercentageDisplay = number_format($combinedMultiplier * 100, 0) . '%';
-                                                            
-                                                            if (isset($holidayBreakdown[$ndDisplayName])) {
-                                                                $holidayBreakdown[$ndDisplayName]['hours'] += $nightDiffRegularHours;
-                                                                $holidayBreakdown[$ndDisplayName]['amount'] += $ndAmount;
-                                                            } else {
-                                                                $holidayBreakdown[$ndDisplayName] = [
-                                                                    'hours' => $nightDiffRegularHours,
-                                                                    'amount' => $ndAmount,
-                                                                    'rate' => $hourlyRate,
-                                                                    'multiplier' => $combinedMultiplier,
-                                                                    'percentage' => $ndPercentageDisplay
-                                                                ];
-                                                            }
-                                                            $totalHolidayRegularHours += $nightDiffRegularHours;
-                                                            $holidayPay += $ndAmount;
-                                                        }
-                                                    }
+                                                // Calculate totals from controller's breakdown data
+                                                foreach ($holidayBreakdown as $type => $data) {
+                                                    $totalHolidayRegularHours += $data['hours'] ?? 0;
+                                                    $holidayPay += $data['amount'] ?? 0;
                                                 }
                                             } else {
-                                                // PROCESSING/APPROVED: Use breakdown data from snapshot
-                                                $holidayBreakdownData = [];
-                                                if ($employeeSnapshot && $employeeSnapshot->holiday_breakdown) {
-                                                    $holidayBreakdownData = is_string($employeeSnapshot->holiday_breakdown) 
-                                                        ? json_decode($employeeSnapshot->holiday_breakdown, true) 
-                                                        : $employeeSnapshot->holiday_breakdown;
-                                                    
-                                                    foreach ($holidayBreakdownData as $type => $data) {
-                                                        $holidayBreakdown[$type] = [
-                                                            'hours' => $data['hours'],
-                                                            'amount' => $data['amount'],
-                                                            'rate' => $data['rate'],
-                                                            'percentage' => number_format($data['multiplier'] * 100, 0) . '%'
-                                                        ];
-                                                        $totalHolidayRegularHours += $data['hours'];
-                                                        $holidayPay += $data['amount']; // Sum up amounts from snapshot
-                                                    }
-                                                }
+                                                // Fallback: Get holiday pay from payBreakdownByEmployee
+                                                $holidayPay = $payBreakdownByEmployee[$detail->employee_id]['holiday_pay'] ?? 0;
                                             }
                                         @endphp
                                         
                                         <div>
-                                            @if(!empty($holidayBreakdown))
+                                            @if(!empty($employeeHolidayBreakdown))
                                                 <!-- Show individual holiday type breakdowns in consistent order -->
                                                 @php
                                                     // Define consistent display order to match draft mode: Special Holiday first, then Regular Holiday
@@ -1302,12 +1216,12 @@
                                                     // Sort breakdown by the defined order
                                                     $sortedHolidayBreakdown = [];
                                                     foreach ($orderedHolidayTypes as $type) {
-                                                        if (isset($holidayBreakdown[$type])) {
-                                                            $sortedHolidayBreakdown[$type] = $holidayBreakdown[$type];
+                                                        if (isset($employeeHolidayBreakdown[$type])) {
+                                                            $sortedHolidayBreakdown[$type] = $employeeHolidayBreakdown[$type];
                                                         }
                                                     }
                                                     // Add any remaining types not in the ordered list
-                                                    foreach ($holidayBreakdown as $type => $data) {
+                                                    foreach ($employeeHolidayBreakdown as $type => $data) {
                                                         if (!isset($sortedHolidayBreakdown[$type])) {
                                                             $sortedHolidayBreakdown[$type] = $data;
                                                         }
@@ -1315,10 +1229,32 @@
                                                 @endphp
                                                 @foreach($sortedHolidayBreakdown as $type => $data)
                                                     <div class="text-xs text-gray-500 mb-1">
-                                                        <span>{{ $type }}: {{ isset($data['minutes']) ? number_format($data['minutes'], 0) . 'm' : number_format($data['hours'] * 60, 0) . 'm' }}</span>
-                                                        <div class="text-xs text-gray-600">
-                                                            {{ $data['percentage'] }} = ₱{{ number_format($data['amount'], 2) }}
-                                                        </div>
+                                                        @if(isset($data['fixed_amount']) && isset($data['time_log_amount']))
+                                                            <!-- Hybrid Holiday calculation display -->
+                                                            @php
+                                                                $fixedAmount = $data['fixed_amount'] ?? 0;
+                                                                $timeLogAmount = $data['time_log_amount'] ?? 0;
+                                                                $totalAmount = $data['amount'] ?? 0;
+                                                                $minutes = $data['minutes'] ?? ($data['hours'] * 60);
+                                                            @endphp
+                                                            <span>{{ $type }}: {{ number_format($minutes, 0) }}m</span>
+                                                            <div class="text-xs text-gray-600">
+                                                                Total: ₱{{ number_format($totalAmount, 2) }}
+                                                                @if($fixedAmount > 0 && $timeLogAmount > 0)
+                                                                    <br>Fixed: ₱{{ number_format($fixedAmount, 2) }} + Work: ₱{{ number_format($timeLogAmount, 2) }}
+                                                                @elseif($fixedAmount > 0)
+                                                                    <br>Fixed: ₱{{ number_format($fixedAmount, 2) }}
+                                                                @elseif($timeLogAmount > 0)
+                                                                    <br>Work: ₱{{ number_format($timeLogAmount, 2) }}
+                                                                @endif
+                                                            </div>
+                                                        @else
+                                                            <!-- Legacy Holiday calculation display -->
+                                                            <span>{{ $type }}: {{ isset($data['minutes']) ? number_format($data['minutes'], 0) . 'm' : number_format($data['hours'] * 60, 0) . 'm' }}</span>
+                                                            <div class="text-xs text-gray-600">
+                                                                {{ $data['percentage'] ?? 'N/A' }} = ₱{{ number_format($data['amount'], 2) }}
+                                                            </div>
+                                                        @endif
                                                     </div>
                                                 @endforeach
                                                 

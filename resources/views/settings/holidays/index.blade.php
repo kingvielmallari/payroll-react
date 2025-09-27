@@ -32,6 +32,7 @@
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pay Details</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     </tr>
@@ -41,14 +42,60 @@
                         <tr class="hover:bg-gray-50 cursor-pointer {{ !$holiday->is_active ? 'opacity-50 bg-gray-50' : '' }}"
                             data-context-menu
                             oncontextmenu="showHolidayContextMenu(event, {{ $holiday->id }}, {{ json_encode($holiday->name) }}, {{ json_encode($type) }}, {{ $holiday->is_active ? 'true' : 'false' }})">
+                            
+                            <!-- Column 1: Name -->
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm font-medium {{ !$holiday->is_active ? 'text-gray-400' : 'text-gray-900' }}">{{ $holiday->name }}</div>
+                                <div class="text-sm {{ !$holiday->is_active ? 'text-gray-400' : 'text-gray-500' }}">
+                                    {{ ucfirst(str_replace('_', ' ', $holiday->type)) }} Holiday
+                                </div>
                             </td>
+
+                            <!-- Column 2: Pay Details -->
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm {{ !$holiday->is_active ? 'text-gray-400' : 'text-gray-900' }}">
+                                    @if($holiday->is_paid)
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            Paid
+                                        </span>
+                                        @if(isset($holiday->pay_rule) && $holiday->pay_rule === 'half')
+                                            <span class="ml-1 text-xs text-gray-500">(50%)</span>
+                                        @else
+                                            <span class="ml-1 text-xs text-gray-500">(100%)</span>
+                                        @endif
+                                    @else
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            Unpaid
+                                        </span>
+                                    @endif
+                                </div>
+                                @if($holiday->is_paid)
+                                    <div class="text-xs {{ !$holiday->is_active ? 'text-gray-400' : 'text-gray-500' }} mt-1">
+                                        @switch($holiday->pay_applicable_to ?? 'all')
+                                            @case('all')
+                                                All Employees
+                                                @break
+                                            @case('with_benefits')
+                                                With Benefits Only
+                                                @break
+                                            @case('without_benefits')
+                                                Without Benefits Only
+                                                @break
+                                            @default
+                                                {{ ucfirst(str_replace('_', ' ', $holiday->pay_applicable_to)) }}
+                                        @endswitch
+                                    </div>
+                                @endif
+                            </td>
+
+                            <!-- Column 3: Date -->
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium {{ !$holiday->is_active ? 'text-gray-400' : 'text-gray-900' }}">
                                     {{ is_string($holiday->date) ? \Carbon\Carbon::parse($holiday->date)->format('M j, Y') : $holiday->date->format('M j, Y') }}
                                 </div>
                             </td>
+
+                            <!-- Column 4: Status -->
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                     {{ $holiday->is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">

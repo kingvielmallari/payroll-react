@@ -45,7 +45,7 @@ class Holiday extends Model
         'type' => 'regular',
         'rate_multiplier' => 1.00,
         'double_pay_rate' => 2.00,
-        'pay_rule' => 'holiday_rate'
+        'pay_rule' => 'full'
     ];
 
     /**

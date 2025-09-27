@@ -56,6 +56,7 @@ class HolidaySettingController extends Controller
             'type' => 'required|in:regular,special_non_working',
             'is_paid' => 'boolean',
             'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
+            'pay_rule' => 'nullable|in:full,half',
         ]);
 
         // Auto-extract year from date
@@ -69,6 +70,13 @@ class HolidaySettingController extends Controller
             $validated['pay_applicable_to'] = null;
         } elseif (empty($validated['pay_applicable_to'])) {
             $validated['pay_applicable_to'] = 'all';
+        }
+
+        // Handle pay_rule field
+        if (!$validated['is_paid']) {
+            $validated['pay_rule'] = null;
+        } elseif ($validated['is_paid'] && empty($validated['pay_rule'])) {
+            $validated['pay_rule'] = 'full';
         }
 
         // Check for duplicates (same date only - each date can only have one holiday)
@@ -106,6 +114,7 @@ class HolidaySettingController extends Controller
             'type' => 'required|in:regular,special_non_working',
             'is_paid' => 'boolean',
             'pay_applicable_to' => 'nullable|in:all,with_benefits,without_benefits',
+            'pay_rule' => 'nullable|in:full,half',
         ]);
 
         // Auto-extract year from date
@@ -119,6 +128,13 @@ class HolidaySettingController extends Controller
             $validated['pay_applicable_to'] = null;
         } elseif (empty($validated['pay_applicable_to'])) {
             $validated['pay_applicable_to'] = 'all';
+        }
+
+        // Handle pay_rule field
+        if (!$validated['is_paid']) {
+            $validated['pay_rule'] = null;
+        } elseif ($validated['is_paid'] && empty($validated['pay_rule'])) {
+            $validated['pay_rule'] = 'full';
         }
 
         // Check for duplicates (same date only - each date can only have one holiday) excluding current holiday
