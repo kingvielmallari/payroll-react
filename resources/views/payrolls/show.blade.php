@@ -3601,15 +3601,15 @@
                                                             if ($shouldReceivePay) {
                                                                 $payRule = $suspensionSetting->pay_rule ?? 'full';
                                                                 if (in_array($suspensionSetting->type, ['partial_suspension'])) {
-                                                                    $suspensionPayDisplay = ($payRule === 'full') ? 'PARTIAL FULL' : 'PARTIAL HALF';
+                                                                    $suspensionPayDisplay = ($payRule === 'full') ? 'FULL PAID' : 'HALF PAID';
                                                                 } else {
                                                                     $suspensionPayDisplay = ($payRule === 'full') ? 'FULL PAID' : 'HALF PAID';
                                                                 }
                                                             } else {
-                                                                $suspensionPayDisplay = 'UNPAID';
+                                                                $suspensionPayDisplay = 'NOT PAID';
                                                             }
                                                         } else {
-                                                            $suspensionPayDisplay = 'UNPAID';
+                                                            $suspensionPayDisplay = 'NOT PAID';
                                                         }
                                                     }
                                                 @endphp
@@ -3771,19 +3771,21 @@
                                                                     $shouldReceivePay = true;
                                                                 }
                                                                 
-                                                                if ($shouldReceivePay) {
-                                                                    $payRule = $suspensionSetting->pay_rule ?? 'full';
-                                                                    if (in_array($suspensionSetting->type, ['partial_suspension'])) {
-                                                                        $suspensionPayDisplay = ($payRule === 'full') ? 'PARTIAL FULL' : 'PARTIAL HALF';
-                                                                    } else {
-                                                                        $suspensionPayDisplay = ($payRule === 'full') ? 'FULL PAID' : 'HALF PAID';
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    @endphp
-                                                    
-                                                    @if($suspensionPayDisplay)
+                                                if ($shouldReceivePay) {
+                                                    $payRule = $suspensionSetting->pay_rule ?? 'full';
+                                                    if (in_array($suspensionSetting->type, ['partial_suspension'])) {
+                                                        $suspensionPayDisplay = ($payRule === 'full') ? 'FULL PAID' : 'HALF PAID';
+                                                    } else {
+                                                        $suspensionPayDisplay = ($payRule === 'full') ? 'FULL PAID' : 'HALF PAID';
+                                                    }
+                                                } else {
+                                                    $suspensionPayDisplay = 'NOT PAID';
+                                                }
+                                            } else {
+                                                $suspensionPayDisplay = 'NOT PAID';
+                                            }
+                                        }
+                                    @endphp                                                    @if($suspensionPayDisplay)
                                                         <div class="text-blue-600 font-bold text-xs mb-1">{{ $suspensionPayDisplay }}</div>
                                                     @endif
 

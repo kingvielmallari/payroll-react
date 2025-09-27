@@ -691,3 +691,69 @@ AFTER SNAPSHOT CREATED:
 }
 ==================================================
 
+AFTER MAX CALCULATION:
+{
+    "employee_id": 27,
+    "taxable_income_after_max": 8201,
+    "base_taxable_income": 8201,
+    "basic_pay": 6602.5,
+    "holiday_pay": 1598.5,
+    "rest_pay": 0,
+    "overtime_pay": 0,
+    "timestamp": "2025-09-27 16:30:30"
+}
+
+BEFORE SNAPSHOT CREATION:
+{
+    "employee_id": 27,
+    "taxable_income_variable": 8201,
+    "taxable_income_type": "double",
+    "is_null": false,
+    "is_numeric": true,
+    "value_as_string": "8201",
+    "timestamp": "2025-09-27 16:30:30"
+}
+
+AFTER SNAPSHOT CREATED:
+{
+    "snapshot_id": 3715,
+    "stored_taxable_income": "8201.00",
+    "stored_gross_pay": "8201.00",
+    "stored_net_pay": "8201.00",
+    "timestamp": "2025-09-27 16:30:30"
+}
+==================================================
+
+AFTER MAX CALCULATION:
+{
+    "employee_id": 27,
+    "taxable_income_after_max": 8114.13,
+    "base_taxable_income": 8114.13,
+    "basic_pay": 6515.63,
+    "holiday_pay": 1598.5,
+    "rest_pay": 0,
+    "overtime_pay": 0,
+    "timestamp": "2025-09-27 16:56:55"
+}
+
+BEFORE SNAPSHOT CREATION:
+{
+    "employee_id": 27,
+    "taxable_income_variable": 8114.13,
+    "taxable_income_type": "double",
+    "is_null": false,
+    "is_numeric": true,
+    "value_as_string": "8114.13",
+    "timestamp": "2025-09-27 16:56:55"
+}
+
+AFTER SNAPSHOT CREATED:
+{
+    "snapshot_id": 3716,
+    "stored_taxable_income": "8114.13",
+    "stored_gross_pay": "8114.13",
+    "stored_net_pay": "8114.13",
+    "timestamp": "2025-09-27 16:56:55"
+}
+==================================================
+
