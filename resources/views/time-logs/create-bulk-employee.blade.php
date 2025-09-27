@@ -135,13 +135,29 @@
                                     </button>
                                 @endif
                                 
-                                <button type="button" class="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600" onclick="resetAll()">
-                                    Reset All
-                                </button>
+                                @if($isFlexibleBreak)
+                                    {{-- For flexible employees, show Reset Time Only as default (first) --}}
+                                    <button type="button" class="px-3 py-1 bg-orange-500 text-white text-sm rounded hover:bg-orange-600" onclick="resetTimeOnly()">
+                                        Reset Time Only
+                                    </button>
+                                    <button type="button" class="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600" onclick="resetAll()">
+                                        Reset All
+                                    </button>
+                                @else
+                                    {{-- For regular employees, show Reset All as default (first) --}}
+                                 
+                                    <button type="button" class="px-3 py-1 bg-orange-500 text-white text-sm rounded hover:bg-orange-600" onclick="resetTimeOnly()">
+                                        Reset Time Only
+                                    </button>
+                                       <button type="button" class="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600" onclick="resetAll()">
+                                        Reset All
+                                    </button>
+                                @endif
                             </div>
                             {{-- <p class="text-xs text-blue-700 mt-2">
                                 <strong>Fill Time & Break:</strong> Fills empty fields with employee's scheduled work hours and break times.<br>
-                                <strong>Reset All:</strong> Clears all time fields but preserves day types (including suspension days).
+                                <strong>Reset Time Only:</strong> Clears only time fields, preserves current day types.<br>
+                                <strong>Reset All:</strong> Clears all time fields AND resets day types to original defaults (Regular, Holiday, Rest Day, etc.).
                             </p> --}}
                         </div>
 
@@ -256,6 +272,38 @@
                                                     $usedBreak = true;
                                                 }
                                             }
+                                            // Calculate original day type (Priority 2 logic - what it should be by default)
+                                            $originalDayType = 'regular_workday'; // Default fallback
+                                            $isHoliday = $day['is_holiday'] ? true : false;
+                                            $holidayType = $day['holiday_type'] ?? null;
+                                            
+                                            if (($day['is_suspension'] ?? false)) {
+                                                // Suspension days - find the appropriate suspension type
+                                                foreach($logTypes as $value => $label) {
+                                                    if (str_contains($label, 'Suspension')) {
+                                                        $originalDayType = $value;
+                                                        break;
+                                                    }
+                                                }
+                                            } elseif (!$day['is_weekend'] && !$isHoliday) {
+                                                // Regular Workday (default for work days)
+                                                $originalDayType = 'regular_workday';
+                                            } elseif ($day['is_weekend'] && !$isHoliday) {
+                                                // Rest Day (default for rest days) 
+                                                $originalDayType = 'rest_day';
+                                            } elseif ($isHoliday && $holidayType === 'regular' && !$day['is_weekend']) {
+                                                // Regular Holiday (default for active regular holidays on work days)
+                                                $originalDayType = 'regular_holiday';
+                                            } elseif ($isHoliday && $holidayType === 'special_non_working' && !$day['is_weekend']) {
+                                                // Special Holiday (default for active special non-working holidays on work days)
+                                                $originalDayType = 'special_holiday';
+                                            } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'regular') {
+                                                // Rest Day + Regular Holiday (rest day + regular holiday)
+                                                $originalDayType = 'rest_day_regular_holiday';
+                                            } elseif ($day['is_weekend'] && $isHoliday && $holidayType === 'special_non_working') {
+                                                // Rest Day + Special Holiday (rest day + special non-working holiday)
+                                                $originalDayType = 'rest_day_special_holiday';
+                                            }
                                         @endphp
                                         <tr class="{{ $day['is_weekend'] ? 'bg-gray-100' : '' }}"
                                             data-is-paid-suspension="{{ $isPaidSuspension ? 'true' : 'false' }}"
@@ -266,7 +314,13 @@
                                             data-time-in-default="{{ $defaultTimeIn }}"
                                             data-time-out-default="{{ $defaultTimeOut }}"
                                             data-break-in-default="{{ $defaultBreakIn }}"
-                                            data-break-out-default="{{ $defaultBreakOut }}">
+                                            data-break-out-default="{{ $defaultBreakOut }}"
+                                            data-original-day-type="{{ $originalDayType }}"
+                                            data-original-used-break="{{ $hasFlexibleBreak ? 'true' : '' }}"
+                                            data-is-weekend="{{ $day['is_weekend'] ? 'true' : 'false' }}"
+                                            data-is-holiday="{{ $isHoliday ? 'true' : 'false' }}"
+                                            data-holiday-type="{{ $holidayType ?? '' }}"
+                                            data-is-suspension="{{ ($day['is_suspension'] ?? false) ? 'true' : 'false' }}">
                                             <td class="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900 border-r">
                                                 {{ $day['date']->format('M d') }}
                                                 <input type="hidden" name="time_logs[{{ $index }}][log_date]" value="{{ $day['date']->format('Y-m-d') }}">
@@ -614,8 +668,8 @@
             });
         }
 
-        function resetAll() {
-            // Clear all time fields but preserve day types (especially suspension days)
+        function resetTimeOnly() {
+            // Clear only time fields, preserve ALL day types (including suspension days)
             const timeInputs = document.querySelectorAll('input[name*="[time_in]"], input[name*="[time_out]"], input[name*="[break_in]"], input[name*="[break_out]"]');
             timeInputs.forEach(input => {
                 // Only clear if not disabled (suspension days should keep their values)
@@ -624,10 +678,60 @@
                 }
             });
 
-            // Don't reset log types - preserve current selections including suspension days
-            // Just update the time input states based on current log types
+            // For flexible break employees, reset break checkbox to checked (default state)
             const rows = document.querySelectorAll('tbody tr');
             rows.forEach((row, index) => {
+                // Reset flexible break checkbox to checked (default state) for flexible employees
+                const breakCheckbox = row.querySelector(`input[type="checkbox"][name="time_logs[${index}][used_break]"]`);
+                if (breakCheckbox && !breakCheckbox.disabled) {
+                    breakCheckbox.checked = true;
+                }
+                
+                // Trigger handleLogTypeChange for each row to ensure proper input states
+                handleLogTypeChange(index);
+            });
+        }
+
+        function resetAll() {
+            // Clear all time fields AND reset day types to original defaults
+            const timeInputs = document.querySelectorAll('input[name*="[time_in]"], input[name*="[time_out]"], input[name*="[break_in]"], input[name*="[break_out]"]');
+            timeInputs.forEach(input => {
+                // Only clear if not disabled (suspension days should keep their values)
+                if (!input.disabled) {
+                    input.value = '';
+                }
+            });
+
+            // Reset all log types to their original day types
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach((row, index) => {
+                const logTypeSelect = row.querySelector(`select[name="time_logs[${index}][log_type]"]`);
+                if (logTypeSelect && !logTypeSelect.disabled) {
+                    // Get the original day type from data attribute
+                    const originalDayType = row.getAttribute('data-original-day-type');
+                    
+                    if (originalDayType) {
+                        // Find and select the original day type option
+                        for (let i = 0; i < logTypeSelect.options.length; i++) {
+                            if (logTypeSelect.options[i].value === originalDayType) {
+                                logTypeSelect.selectedIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Reset flexible break checkbox to original state (default: checked for flexible employees)
+                const breakCheckbox = row.querySelector(`input[type="checkbox"][name="time_logs[${index}][used_break]"]`);
+                if (breakCheckbox && !breakCheckbox.disabled) {
+                    const originalUsedBreak = row.getAttribute('data-original-used-break');
+                    if (originalUsedBreak === 'true') {
+                        breakCheckbox.checked = true;
+                    } else if (originalUsedBreak === 'false') {
+                        breakCheckbox.checked = false;
+                    }
+                }
+                
                 // Trigger handleLogTypeChange for each row to ensure proper input states
                 handleLogTypeChange(index);
             });

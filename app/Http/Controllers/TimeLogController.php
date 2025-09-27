@@ -2464,9 +2464,13 @@ class TimeLogController extends Controller
                 // No break logs OR flexible break - simple calculation
                 $overtimeStartTime = $workStartTime->copy()->addMinutes($regularHoursBoundaryMinutes);
 
-                // For flexible break, add the break duration
+                // For flexible break, add the break duration ONLY if employee used their break
                 if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0 && !($timeSchedule->break_start && $timeSchedule->break_end)) {
-                    $overtimeStartTime->addMinutes($timeSchedule->break_duration_minutes);
+                    // Check if employee used their break (default to true for backward compatibility)
+                    $usedBreak = $timeLog->used_break ?? true;
+                    if ($usedBreak) {
+                        $overtimeStartTime->addMinutes($timeSchedule->break_duration_minutes);
+                    }
                 }
             }
 

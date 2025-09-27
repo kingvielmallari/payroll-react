@@ -86,12 +86,38 @@ class TimeLog extends Model
 
         $totalMinutes = $timeOut->diffInMinutes($timeIn);
 
-        // Subtract break time if available
-        if ($this->break_in && $this->break_out) {
-            $breakIn = \Carbon\Carbon::parse($this->break_in);
-            $breakOut = \Carbon\Carbon::parse($this->break_out);
-            $breakMinutes = $breakOut->diffInMinutes($breakIn);
-            $totalMinutes -= $breakMinutes;
+        // Handle break time deduction based on break type
+        $employee = $this->employee;
+        $timeSchedule = $employee ? $employee->timeSchedule : null;
+
+        if ($timeSchedule) {
+            // Check if employee has flexible break (break_duration_minutes without fixed times)
+            $isFlexibleBreak = $timeSchedule->break_duration_minutes &&
+                $timeSchedule->break_duration_minutes > 0 &&
+                !($timeSchedule->break_start && $timeSchedule->break_end);
+
+            if ($isFlexibleBreak) {
+                // For flexible break employees: only deduct break time if used_break checkbox is checked
+                if ($this->used_break) {
+                    $totalMinutes -= $timeSchedule->break_duration_minutes;
+                }
+            } else {
+                // For fixed break employees: deduct actual break time if break_in and break_out are recorded
+                if ($this->break_in && $this->break_out) {
+                    $breakIn = \Carbon\Carbon::parse($this->break_in);
+                    $breakOut = \Carbon\Carbon::parse($this->break_out);
+                    $breakMinutes = $breakOut->diffInMinutes($breakIn);
+                    $totalMinutes -= $breakMinutes;
+                }
+            }
+        } else {
+            // Fallback for employees without time schedule: use recorded break times if available
+            if ($this->break_in && $this->break_out) {
+                $breakIn = \Carbon\Carbon::parse($this->break_in);
+                $breakOut = \Carbon\Carbon::parse($this->break_out);
+                $breakMinutes = $breakOut->diffInMinutes($breakIn);
+                $totalMinutes -= $breakMinutes;
+            }
         }
 
         return round($totalMinutes / 60, 2);
@@ -365,10 +391,13 @@ class TimeLog extends Model
         // Calculate overtime start time
         $overtimeStartTime = $workStart->copy()->addHours($overtimeThreshold);
 
-        // For flexible break, also add break duration to the overtime start time
-        // (this matches the logic in TimeLogController)
+        // For flexible break, only add break duration to overtime start time if employee used the break
+        // (this matches the updated logic with used_break checkbox)
         if ($timeSchedule && $timeSchedule->break_duration_minutes && $timeSchedule->break_duration_minutes > 0 && !($timeSchedule->break_start && $timeSchedule->break_end)) {
-            $overtimeStartTime->addMinutes($timeSchedule->break_duration_minutes);
+            // Only add break duration if the employee used the break (checkbox is checked)
+            if ($this->used_break) {
+                $overtimeStartTime->addMinutes($timeSchedule->break_duration_minutes);
+            }
         }
 
         // Get night differential settings

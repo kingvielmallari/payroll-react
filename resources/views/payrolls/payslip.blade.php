@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payslip - {{ $payroll->payroll_number }}</title>
     
-    <!-- Include Tailwind CSS -->
-    <link rel="stylesheet" href="{{ asset('build/assets/app-BBnAiJRu.css') }}">
+    <!-- Include CSS and JS assets using Vite -->
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
     
     <!-- Fallback CDN Tailwind CSS for payslip styling -->
     {{-- <script src="https://cdn.tailwindcss.com"></script> --}}
