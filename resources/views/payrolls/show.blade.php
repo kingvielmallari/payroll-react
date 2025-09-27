@@ -1213,17 +1213,16 @@
                                                             @endphp
                                                             <span>{{ $type }}: {{ number_format($minutes, 0) }}m</span>
                                                             <div class="text-xs text-gray-600">
-                                                                Total: ₱{{ number_format($totalAmount, 2) }}
                                                                 @php
                                                                     $dynamicMultiplier = $data['dynamic_multiplier'] ?? 1.0;
                                                                     $displayMultiplier = ($dynamicMultiplier * 100);
                                                                 @endphp
                                                                 @if($fixedAmount > 0 && $timeLogAmount > 0)
-                                                                    <br>{{ number_format($displayMultiplier, 0) }}% = ₱{{ number_format($timeLogAmount, 2) }} + ₱{{ number_format($fixedAmount, 2) }}
+                                                                    {{ number_format($displayMultiplier, 0) }}% = ₱{{ number_format($timeLogAmount, 2) }} + ₱{{ number_format($fixedAmount, 2) }}
                                                                 @elseif($fixedAmount > 0)
-                                                                    <br>{{ number_format($displayMultiplier, 0) }}% = ₱0.00 + ₱{{ number_format($fixedAmount, 2) }}
+                                                                    {{ number_format($displayMultiplier, 0) }}% = ₱0.00 + ₱{{ number_format($fixedAmount, 2) }}
                                                                 @elseif($timeLogAmount > 0)
-                                                                    <br>{{ number_format($displayMultiplier, 0) }}% = ₱{{ number_format($timeLogAmount, 2) }} + ₱0.00
+                                                                    {{ number_format($displayMultiplier, 0) }}% = ₱{{ number_format($timeLogAmount, 2) }} + ₱0.00
                                                                 @endif
                                                             </div>
                                                         @else
@@ -3618,8 +3617,48 @@
                                                     {{-- Display suspension pay status instead of N/A --}}
                                                     <div class="text-blue-600 font-bold">{{ $suspensionPayDisplay }}</div>
                                                 @else
-                                                    {{-- Display N/A when both time_in and time_out are missing for non-suspension days --}}
-                                                    <div class="text-gray-600 font-bold">N/A</div>
+                                                    {{-- Check if it's a holiday to display holiday pay status --}}
+                                                    @php
+                                                        $holidayPayDisplay = null;
+                                                        if (in_array($logType, ['regular_holiday', 'special_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                                                            // Get holiday settings for this date
+                                                            $holidaySetting = \App\Models\Holiday::where('date', $date)
+                                                                ->where('is_active', true)
+                                                                ->first();
+                                                                
+                                                            if ($holidaySetting && $holidaySetting->is_paid) {
+                                                                // Check if this employee is eligible for paid holiday
+                                                                $employeeHasBenefits = $detail->employee->benefits_status === 'with_benefits';
+                                                                $payApplicableTo = $holidaySetting->pay_applicable_to ?? 'all';
+                                                                $shouldReceivePay = false;
+                                                                
+                                                                if ($payApplicableTo === 'all') {
+                                                                    $shouldReceivePay = true;
+                                                                } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
+                                                                    $shouldReceivePay = true;
+                                                                } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
+                                                                    $shouldReceivePay = true;
+                                                                }
+                                                                
+                                                                if ($shouldReceivePay) {
+                                                                    $payRule = $holidaySetting->pay_rule ?? 'full';
+                                                                    $holidayPayDisplay = ($payRule === 'full') ? 'FULL PAID' : 'HALF PAID';
+                                                                } else {
+                                                                    $holidayPayDisplay = 'NOT PAID';
+                                                                }
+                                                            } else {
+                                                                $holidayPayDisplay = 'NOT PAID';
+                                                            }
+                                                        }
+                                                    @endphp
+                                                    
+                                                    @if($holidayPayDisplay)
+                                                        {{-- Display holiday pay status instead of N/A --}}
+                                                        <div class="text-blue-600 font-bold">{{ $holidayPayDisplay }}</div>
+                                                    @else
+                                                        {{-- Display N/A when both time_in and time_out are missing for non-holiday/non-suspension days --}}
+                                                        <div class="text-gray-600 font-bold">N/A</div>
+                                                    @endif
                                                 @endif
                                             @elseif($showINC)
                                                 {{-- Display INC for incomplete records (only one time missing or explicitly marked incomplete) --}}
@@ -3785,11 +3824,52 @@
                                                 $suspensionPayDisplay = 'NOT PAID';
                                             }
                                         }
-                                    @endphp                                                    @if($suspensionPayDisplay)
-                                                        <div class="text-blue-600 font-bold text-xs mb-1">{{ $suspensionPayDisplay }}</div>
-                                                    @endif
+                                    @endphp
+                                    
+                                    @php
+                                        // Check if this is a holiday day and display holiday pay rule
+                                        $holidayPayDisplay = null;
+                                        if (in_array($logType, ['regular_holiday', 'special_holiday', 'rest_day_regular_holiday', 'rest_day_special_holiday'])) {
+                                            // Get holiday settings for this date
+                                            $holidaySetting = \App\Models\Holiday::where('date', $date)
+                                                ->where('is_active', true)
+                                                ->first();
+                                                
+                                            if ($holidaySetting && $holidaySetting->is_paid) {
+                                                // Check if this employee is eligible for paid holiday
+                                                $employeeHasBenefits = $detail->employee->benefits_status === 'with_benefits';
+                                                $payApplicableTo = $holidaySetting->pay_applicable_to ?? 'all';
+                                                $shouldReceivePay = false;
+                                                
+                                                if ($payApplicableTo === 'all') {
+                                                    $shouldReceivePay = true;
+                                                } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
+                                                    $shouldReceivePay = true;
+                                                } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
+                                                    $shouldReceivePay = true;
+                                                }
+                                                
+                                                if ($shouldReceivePay) {
+                                                    $payRule = $holidaySetting->pay_rule ?? 'full';
+                                                    $holidayPayDisplay = ($payRule === 'full') ? 'FULL PAID' : 'HALF PAID';
+                                                } else {
+                                                    $holidayPayDisplay = 'NOT PAID';
+                                                }
+                                            } else {
+                                                $holidayPayDisplay = 'NOT PAID';
+                                            }
+                                        }
+                                    @endphp
 
-                                                    <div class="text-green-600 font-medium">
+                                    @if($suspensionPayDisplay)
+                                        <div class="text-blue-600 font-bold text-xs mb-1">{{ $suspensionPayDisplay }}</div>
+                                    @endif
+                                    
+                                    @if($holidayPayDisplay)
+                                        <div class="text-blue-600 font-bold text-xs mb-1">{{ $holidayPayDisplay }}</div>
+                                    @endif
+
+                                    <div class="text-green-600 font-medium">
                                                         @php
                                                             // FOR DTR SUMMARY: Display actual time periods based on employee's time in/out and ND boundaries
                                                             $regularStart = $timeLog->time_in ? \Carbon\Carbon::parse($timeLog->time_in)->format('g:i A') : 'N/A';

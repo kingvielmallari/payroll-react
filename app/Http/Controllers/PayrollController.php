@@ -8454,6 +8454,7 @@ class PayrollController extends Controller
                         'rate' => $hourlyRate,
                         'rate_per_minute' => $ratePerMinute ?? 0,
                         'multiplier' => $multiplier,
+                        'dynamic_multiplier' => $multiplier, // Use rate config multiplier for display
                         'fixed_amount' => $fixedAmount,
                         'time_log_amount' => $timeLogAmount,
                         'amount' => $totalAmount,
@@ -8490,6 +8491,7 @@ class PayrollController extends Controller
                             'rate' => $hourlyRate,
                             'rate_per_minute' => $ratePerMinute,
                             'multiplier' => $combinedMultiplier,
+                            'dynamic_multiplier' => $combinedMultiplier, // Use combined multiplier for display
                             'fixed_amount' => $ndFixedAmount,
                             'time_log_amount' => $ndTimeLogAmount,
                             'amount' => $ndTotalAmount,
@@ -8584,6 +8586,82 @@ class PayrollController extends Controller
                             'description' => $ndDescription
                         ];
                     }
+                }
+            }
+        }
+
+        // ADDITIONAL LOGIC: Process paid holidays that have NO time logs but still need fixed amount display
+        // This ensures paid holidays show breakdown even when time_log_amount = 0
+        foreach ($holidays as $holiday) {
+            $holidayType = null;
+            $holidayName = null;
+
+            // Map holiday type to breakdown key
+            if ($holiday->type === 'regular') {
+                $holidayType = 'regular_holiday';
+                $holidayName = 'Regular Holiday';
+            } elseif ($holiday->type === 'special_non_working') {
+                $holidayType = 'special_holiday';
+                $holidayName = 'Special Holiday';
+            }
+
+            // Only process if this holiday type doesn't already exist in breakdown
+            if ($holidayType && $holidayName && !isset($breakdown[$holidayName])) {
+                // Check if employee is eligible for this holiday pay
+                $employeeHasBenefits = $employee->benefits_status === 'with_benefits';
+                $payApplicableTo = $holiday->pay_applicable_to ?? 'all';
+                $shouldReceivePay = false;
+
+                if ($payApplicableTo === 'all') {
+                    $shouldReceivePay = true;
+                } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
+                    $shouldReceivePay = true;
+                } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
+                    $shouldReceivePay = true;
+                }
+
+                // Get rate config for this holiday type (needed for both paid and unpaid)
+                $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $holidayType)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($rateConfig) {
+                    $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+
+                    // For holidays with no time logs: fixed amount calculation
+                    $timeLogAmount = 0; // No time logs
+                    $payRule = $holiday->pay_rule ?? 'full';
+
+                    if ($shouldReceivePay) {
+                        // PAID HOLIDAY: Calculate actual fixed amount
+                        if ($payRule === 'half') {
+                            $fixedAmount = round($dailyRate * 0.5, 2);
+                        } else {
+                            $fixedAmount = round($dailyRate, 2);
+                        }
+                    } else {
+                        // UNPAID HOLIDAY: Show ₱0.00 but still display breakdown structure
+                        $fixedAmount = 0;
+                    }
+
+                    $totalAmount = $fixedAmount + $timeLogAmount;
+
+                    // Always show breakdown for ALL holidays (paid/unpaid), just like partial suspension
+                    // This ensures transparency - users can see if holiday is paid or not
+                    $description = "Holiday Pay: ₱" . number_format($fixedAmount, 2) . " (fixed) + ₱" . number_format($timeLogAmount, 2) . " (worked)";
+
+                    $breakdown[$holidayName] = [
+                        'hours' => 0, // No time logs
+                        'minutes' => 0, // No time logs
+                        'rate' => $hourlyRate,
+                        'rate_per_minute' => 0,
+                        'multiplier' => $multiplier,
+                        'dynamic_multiplier' => $multiplier,
+                        'fixed_amount' => $fixedAmount,
+                        'time_log_amount' => $timeLogAmount,
+                        'amount' => $totalAmount,
+                        'description' => $description
+                    ];
                 }
             }
         }

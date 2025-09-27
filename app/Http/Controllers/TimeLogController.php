@@ -1054,14 +1054,27 @@ class TimeLogController extends Controller
                 $suspensionType = $suspensionInfo['info']['type'] ?? 'full_day_suspension';
                 $frontendLogType = $suspensionType;
 
-                // Auto-fill times for paid suspensions on regular workdays for eligible employees
-                $originalDayType = $isRestDay ? 'rest_day' : 'regular_workday';
-                if ($originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) {
-                    // Check if this is a partial suspension
-                    $isPartialSuspension = $suspensionInfo['info']['is_partial'] ?? false;
+                // Check if this is a partial suspension first (applies to both paid and unpaid)
+                $isPartialSuspension = $suspensionInfo['info']['is_partial'] ?? false;
 
-                    // Only auto-fill for FULL DAY suspensions, not partial
-                    if (!$isPartialSuspension) {
+                if ($isPartialSuspension) {
+                    // For ALL partial suspensions (paid/unpaid): preserve existing time logs if available, otherwise leave blank for user input
+                    if ($timeLog) {
+                        $frontendTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : null;
+                        $frontendTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : null;
+                        $frontendBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
+                        $frontendBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
+                    } else {
+                        // No existing time log - leave times blank for partial suspension user input
+                        $frontendTimeIn = null;
+                        $frontendTimeOut = null;
+                        $frontendBreakIn = null;
+                        $frontendBreakOut = null;
+                    }
+                } else {
+                    // Handle FULL DAY suspensions
+                    $originalDayType = $isRestDay ? 'rest_day' : 'regular_workday';
+                    if ($originalDayType === 'regular_workday' && $suspensionInfo['info']['is_paid']) {
                         // Auto-fill with employee's regular schedule for eligible employees only
                         if ($employee->timeSchedule) {
                             $frontendTimeIn = Carbon::parse($employee->timeSchedule->time_in);
@@ -1078,21 +1091,8 @@ class TimeLogController extends Controller
                             $frontendTimeOut = Carbon::parse('17:00');
                         }
                     }
-                    // For partial suspensions: preserve existing time logs if available, otherwise leave blank for user input
-                    if ($timeLog) {
-                        $frontendTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : null;
-                        $frontendTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : null;
-                        $frontendBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
-                        $frontendBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
-                    } else {
-                        // No existing time log - leave times blank for partial suspension user input
-                        $frontendTimeIn = null;
-                        $frontendTimeOut = null;
-                        $frontendBreakIn = null;
-                        $frontendBreakOut = null;
-                    }
+                    // For unpaid full day suspensions or non-eligible employees, don't auto-fill times
                 }
-                // For unpaid suspensions or non-eligible employees, don't auto-fill times
             }
             // PRIORITY 2: Active holiday (if no suspension)
             elseif ($holiday && $holiday->is_active) {
@@ -1107,18 +1107,47 @@ class TimeLogController extends Controller
                     $frontendLogType = 'rest_day_special_holiday';
                 }
 
-                // For holidays, preserve existing time log data if it exists
-                if ($timeLog) {
-                    $frontendTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : null;
-                    $frontendTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : null;
-                    $frontendBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
-                    $frontendBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
+                // For holidays, check if paid or not paid to determine time field handling
+                $isPaidHoliday = $holiday->is_paid ?? true;
+
+                if ($isPaidHoliday) {
+                    // Paid holidays: auto-fill with existing time logs or preserve existing data
+                    if ($timeLog) {
+                        $frontendTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : null;
+                        $frontendTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : null;
+                        $frontendBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
+                        $frontendBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
+                    } else {
+                        // Auto-fill with employee's regular schedule for paid holidays
+                        if ($employee->timeSchedule) {
+                            $frontendTimeIn = Carbon::parse($employee->timeSchedule->time_in);
+                            $frontendTimeOut = Carbon::parse($employee->timeSchedule->time_out);
+
+                            // Set break times if employee has fixed breaks
+                            if ($employee->timeSchedule->break_start && $employee->timeSchedule->break_end) {
+                                $frontendBreakIn = Carbon::parse($employee->timeSchedule->break_start);
+                                $frontendBreakOut = Carbon::parse($employee->timeSchedule->break_end);
+                            }
+                        } else {
+                            // Fallback schedule for paid holidays
+                            $frontendTimeIn = Carbon::parse('08:00');
+                            $frontendTimeOut = Carbon::parse('17:00');
+                        }
+                    }
                 } else {
-                    // No existing time log - leave times blank for holidays
-                    $frontendTimeIn = null;
-                    $frontendTimeOut = null;
-                    $frontendBreakIn = null;
-                    $frontendBreakOut = null;
+                    // Unpaid holidays: preserve existing time logs if available, otherwise leave blank for manual input
+                    if ($timeLog) {
+                        $frontendTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : null;
+                        $frontendTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : null;
+                        $frontendBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
+                        $frontendBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
+                    } else {
+                        // No existing time log - leave times blank for unpaid holidays (manual input)
+                        $frontendTimeIn = null;
+                        $frontendTimeOut = null;
+                        $frontendBreakIn = null;
+                        $frontendBreakOut = null;
+                    }
                 }
             }
             // PRIORITY 3: No active holiday/suspension - preserve existing data
@@ -1155,6 +1184,15 @@ class TimeLogController extends Controller
                 'is_holiday_active' => $holiday && $holiday->is_active, // Add flag for active holidays
                 'holiday_is_paid' => $holiday ? $holiday->is_paid : null, // Add holiday pay flag
                 'holiday_pay_applicable_to' => $holiday ? $holiday->pay_applicable_to : null, // Add holiday pay applicability
+                'holiday_info' => $holiday ? [
+                    'name' => $holiday->name,
+                    'type' => $holiday->type,
+                    'is_paid' => $holiday->is_paid,
+                    'pay_applicable_to' => $holiday->pay_applicable_to,
+                    'pay_rule' => $holiday->pay_rule,
+                    'rate_multiplier' => $holiday->rate_multiplier,
+                    'is_active' => $holiday->is_active
+                ] : null,
                 'is_suspension' => $suspensionInfo['is_suspension'],
                 'suspension_info' => $suspensionInfo['info'],
                 'time_log' => $timeLog,

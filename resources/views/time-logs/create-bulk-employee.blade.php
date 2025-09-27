@@ -246,8 +246,46 @@
                                                         $defaultBreakOut = null;
                                                     }
                                                 }
+                                            } elseif ($day['is_holiday_active'] ?? false) {
+                                                // HOLIDAY LOGIC: Check if holiday is paid or unpaid
+                                                $holidayInfo = $day['holiday_info'] ?? null;
+                                                $isPaidHoliday = $holidayInfo && ($holidayInfo['is_paid'] ?? false);
+                                                $employeeHasBenefits = $selectedEmployee->benefits_status === 'with_benefits';
+                                                
+                                                if ($isPaidHoliday) {
+                                                    $payApplicableTo = $holidayInfo['pay_applicable_to'] ?? 'all';
+                                                    $shouldAutoFill = false;
+                                                    
+                                                    if ($payApplicableTo === 'all') {
+                                                        $shouldAutoFill = true;
+                                                    } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
+                                                        $shouldAutoFill = true;
+                                                    } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
+                                                        $shouldAutoFill = true;
+                                                    }
+                                                    
+                                                    if ($shouldAutoFill) {
+                                                        // PAID HOLIDAY: Preserve existing time logs or use auto-fill
+                                                        $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
+                                                        $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
+                                                        $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
+                                                        $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
+                                                    } else {
+                                                        // PAID HOLIDAY BUT NOT APPLICABLE: Clear all time fields
+                                                        $defaultTimeIn = null;
+                                                        $defaultTimeOut = null;
+                                                        $defaultBreakIn = null;
+                                                        $defaultBreakOut = null;
+                                                    }
+                                                } else {
+                                                    // UNPAID HOLIDAY: Preserve existing time logs for manual input
+                                                    $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
+                                                    $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
+                                                    $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
+                                                    $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
+                                                }
                                             } else {
-                                                // NOT SUSPENSION: Use existing data as is
+                                                // NOT SUSPENSION OR HOLIDAY: Use existing data as is
                                                 $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
                                                 $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
                                                 $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
@@ -336,25 +374,9 @@
                                                     $isSuspension = ($day['is_suspension'] ?? false);
                                                     $isActiveHoliday = ($day['is_holiday_active'] ?? false);
                                                     
-                                                    // Holiday pay settings logic
+                                                    // Holiday pay settings logic - ALWAYS allow time inputs for holidays (paid/unpaid)
+                                                    // Users should be able to enter time logs regardless of holiday pay status
                                                     $holidayTimeInputDisabled = false;
-                                                    if ($isActiveHoliday) {
-                                                        $holidayIsPaid = $day['holiday_is_paid'] ?? false;
-                                                        $holidayApplicableTo = $day['holiday_pay_applicable_to'] ?? null;
-                                                        $employeeHasBenefits = $selectedEmployee->benefits_status === 'with_benefits';
-                                                        
-                                                        if (!$holidayIsPaid) {
-                                                            // Unpaid holiday - disable time inputs
-                                                            $holidayTimeInputDisabled = true;
-                                                        } elseif ($holidayApplicableTo === 'with_benefits' && !$employeeHasBenefits) {
-                                                            // Holiday pay applies to employees with benefits only, but this employee doesn't have benefits
-                                                            $holidayTimeInputDisabled = true;
-                                                        } elseif ($holidayApplicableTo === 'without_benefits' && $employeeHasBenefits) {
-                                                            // Holiday pay applies to employees without benefits only, but this employee has benefits
-                                                            $holidayTimeInputDisabled = true;
-                                                        }
-                                                        // else: Holiday is paid and applies to this employee - keep time inputs enabled
-                                                    }
                                                     
                                                     $isDropdownDisabled = $isSuspension || $isActiveHoliday; // Disable dropdown for both suspensions and active holidays
                                                     
@@ -738,23 +760,53 @@
         }
 
         function setRegularHours(rowIndex) {
-            // Check if this row is set to suspension type
+            // Check if time inputs are disabled (this will catch paid full suspensions, etc.)
+            const timeInInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_in]"]`);
+            if (timeInInput && timeInInput.disabled) {
+                console.log('Skipping time fill for disabled inputs on row:', rowIndex);
+                return;
+            }
+            
+            // Additional check: Allow auto-fill for partial suspensions and unpaid suspensions
+            // Only block if it's a PAID full-day suspension (which would have disabled inputs above)
             const logTypeSelect = document.querySelector(`select[name="time_logs[${rowIndex}][log_type]"]`);
             const selectedOption = logTypeSelect ? logTypeSelect.options[logTypeSelect.selectedIndex] : null;
             const selectedText = selectedOption ? selectedOption.text : '';
             const isSuspension = selectedText.toLowerCase().includes('suspension');
             
-            // Don't fill times if it's a suspension day
             if (isSuspension) {
-                console.log('Skipping time fill for suspension day on row:', rowIndex);
-                return;
-            }
-            
-            // Check if time inputs are disabled (for holidays or other reasons)
-            const timeInInput = document.querySelector(`input[name="time_logs[${rowIndex}][time_in]"]`);
-            if (timeInInput && timeInInput.disabled) {
-                console.log('Skipping time fill for disabled inputs on row:', rowIndex);
-                return;
+                // Get suspension details to determine if auto-fill should be allowed
+                const row = document.querySelector(`[data-row="${rowIndex}"]`).closest('tr');
+                const isPartialSuspension = row && row.dataset.isPartialSuspension === 'true';
+                const isPaidSuspension = row && row.dataset.isPaidSuspension === 'true';
+                const employeeHasBenefits = row && row.dataset.employeeHasBenefits === 'true';
+                
+                // Get suspension pay settings
+                const suspensionPayApplicableToInput = document.querySelector(`input[name="time_logs[${rowIndex}][suspension_pay_applicable_to]"][type="hidden"]`);
+                const suspensionPayApplicableTo = suspensionPayApplicableToInput ? suspensionPayApplicableToInput.value : 'all';
+                
+                // Check if this employee should receive paid suspension
+                let shouldReceivePaidSuspension = false;
+                if (isPaidSuspension) {
+                    if (suspensionPayApplicableTo === 'all') {
+                        shouldReceivePaidSuspension = true;
+                    } else if (suspensionPayApplicableTo === 'with_benefits' && employeeHasBenefits) {
+                        shouldReceivePaidSuspension = true;
+                    } else if (suspensionPayApplicableTo === 'without_benefits' && !employeeHasBenefits) {
+                        shouldReceivePaidSuspension = true;
+                    }
+                }
+                
+                // Allow auto-fill for:
+                // 1. Partial suspensions (always need time inputs)
+                // 2. Unpaid suspensions (where user can manually enter time)
+                // Block auto-fill ONLY for paid full-day suspensions
+                if (!isPartialSuspension && shouldReceivePaidSuspension) {
+                    console.log('Skipping time fill for paid full-day suspension on row:', rowIndex);
+                    return;
+                } else {
+                    console.log('Allowing time fill for suspension (partial or unpaid) on row:', rowIndex);
+                }
             }
             
             @php
@@ -871,29 +923,10 @@
                         const holidayApplicableTo = holidayApplicableToInput ? holidayApplicableToInput.value : null;
                         const employeeHasBenefitsValue = employeeHasBenefits; // Use suspension data for benefit status
                         
-                        let shouldDisableHolidayInputs = false;
-                        
-                        if (!holidayIsPaid) {
-                            // Unpaid holiday - disable time inputs
-                            shouldDisableHolidayInputs = true;
-                        } else if (holidayApplicableTo === 'with_benefits' && !employeeHasBenefitsValue) {
-                            // Holiday pay applies to employees with benefits only, but this employee doesn't have benefits
-                            shouldDisableHolidayInputs = true;
-                        } else if (holidayApplicableTo === 'without_benefits' && employeeHasBenefitsValue) {
-                            // Holiday pay applies to employees without benefits only, but this employee has benefits
-                            shouldDisableHolidayInputs = true;
-                        }
-                        
-                        if (shouldDisableHolidayInputs) {
-                            input.disabled = true;
-                            input.classList.add('bg-gray-100', 'cursor-not-allowed');
-                            input.classList.remove('focus:ring-indigo-500', 'focus:border-indigo-500');
-                        } else {
-                            // Holiday is paid and applies to this employee - enable time inputs
-                            input.disabled = false;
-                            input.classList.remove('bg-gray-100', 'cursor-not-allowed');
-                            input.classList.add('focus:ring-indigo-500', 'focus:border-indigo-500');
-                        }
+                        // ALWAYS allow time inputs for holidays (paid/unpaid) - users should be able to enter time logs
+                        input.disabled = false;
+                        input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                        input.classList.add('focus:ring-indigo-500', 'focus:border-indigo-500');
                     }
                     // PRIORITY 2: Suspension days
                     else if (hasHiddenSuspensionInput) {

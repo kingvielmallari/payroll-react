@@ -19,10 +19,10 @@ use App\Http\Controllers\DayScheduleController;
 use App\Http\Controllers\ReportsController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::get('/', [AuthenticatedSessionController::class, 'create'])
+    ->middleware('guest');
 
 // Dashboard
 Route::get('/dashboard', [DashboardController::class, 'index'])
