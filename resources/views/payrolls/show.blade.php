@@ -948,67 +948,30 @@
                                                     }
                                                 }
                                                 
-                                                // Process new suspension types (full_day_suspension, partial_suspension)
-                                                $suspensionTypes = ['full_day_suspension', 'partial_suspension'];
-                                                foreach ($suspensionTypes as $suspensionType) {
-                                                    if (isset($employeeBreakdown[$suspensionType])) {
-                                                        $suspensionData = $employeeBreakdown[$suspensionType];
-                                                        $suspensionDays = $suspensionData['days'] ?? 0;
-                                                        $rateConfig = $suspensionData['rate_config'] ?? null;
+                                                // Use suspension breakdowns from controller (with proper suspension settings logic)
+                                                if (isset($suspensionBreakdown) && !empty($suspensionBreakdown)) {
+                                                    foreach ($suspensionBreakdown as $type => $data) {
+                                                        $suspensionHours = $data['hours'] ?? 0;
+                                                        $suspensionMinutes = $data['minutes'] ?? 0;
                                                         
-                                                        if ($suspensionDays > 0 && $rateConfig) {
-                                                            // Calculate daily rate from employee's fixed_rate
-                                                            if ($detail->employee->fixed_rate && $detail->employee->rate_type) {
-                                                                $employeeFixedRate = $detail->employee->fixed_rate;
-                                                                $rateType = $detail->employee->rate_type;
-                                                                
-                                                                // Calculate daily rate based on rate type
-                                                                switch ($rateType) {
-                                                                    case 'daily':
-                                                                        $dailyRate = $employeeFixedRate;
-                                                                        break;
-                                                                    case 'hourly':
-                                                                        $timeSchedule = $detail->employee->timeSchedule;
-                                                                        $dailyHours = $timeSchedule ? $timeSchedule->total_hours : 8;
-                                                                        $dailyRate = $employeeFixedRate * $dailyHours;
-                                                                        break;
-                                                                    case 'monthly':
-                                                                        $dailyRate = $employeeFixedRate / 22; // Assume 22 working days
-                                                                        break;
-                                                                    default:
-                                                                        $dailyRate = $hourlyRate * 8; // Fallback
-                                                                }
-                                                            } else {
-                                                                $dailyRate = $hourlyRate * 8; // Fallback calculation
-                                                            }
-                                                            
-                                                            if ($suspensionType === 'partial_suspension') {
-                                                                // PARTIAL SUSPENSION: Fixed daily rate + time log earnings  
-                                                                $actualTimeLogHours = $suspensionData['actual_time_log_hours'] ?? 0;
-                                                                $timeLogAmount = round($actualTimeLogHours * $hourlyRate, 2);
-                                                                $totalAmount = $dailyRate + $timeLogAmount;
-                                                                
-                                                                $basicBreakdownData['Partial Suspension'] = [
-                                                                    'hours' => $actualTimeLogHours,
-                                                                    'rate' => $dailyRate,
-                                                                    'fixed_amount' => $dailyRate,
-                                                                    'time_log_amount' => $timeLogAmount,
-                                                                    'amount' => $totalAmount,
-                                                                ];
-                                                                $basicPay += $totalAmount;
-                                                            } else {
-                                                                // FULL DAY SUSPENSION: Only fixed daily rate
-                                                                $totalAmount = $dailyRate * $suspensionDays;
-                                                                
-                                                                $basicBreakdownData['Full Suspension'] = [
-                                                                    'hours' => 0,
-                                                                    'rate' => $dailyRate,
-                                                                    'days' => $suspensionDays,
-                                                                    'amount' => $totalAmount,
-                                                                ];
-                                                                $basicPay += $totalAmount;
-                                                            }
+                                                        // Convert minutes to hours if hours is 0 (for suspension calculations)
+                                                        if ($suspensionHours == 0 && $suspensionMinutes > 0) {
+                                                            $suspensionHours = $suspensionMinutes / 60;
                                                         }
+                                                        
+                                                        $basicBreakdownData[$type] = [
+                                                            'hours' => $suspensionHours,
+                                                            'rate' => $data['rate'] ?? 0,
+                                                            'days' => $data['days'] ?? 0,
+                                                            'minutes' => $suspensionMinutes, // Include minutes for display
+                                                            'dynamic_multiplier' => $data['dynamic_multiplier'] ?? 1.0, // Include dynamic multiplier
+                                                            'multiplier' => $data['multiplier'] ?? 1.0, // Include pay rule multiplier
+                                                            'fixed_amount' => $data['fixed_amount'] ?? 0,
+                                                            'time_log_amount' => $data['time_log_amount'] ?? 0,
+                                                            'amount' => $data['amount'] ?? 0,
+                                                        ];
+                                                        $basicRegularHours += $suspensionHours; // Add suspension hours to total
+                                                        $basicPay += $data['amount'] ?? 0;
                                                     }
                                                 }
                                             } else {
@@ -1026,6 +989,10 @@
                                                             'amount' => $data['amount'],
                                                             'rate' => $data['rate'] ?? 0,
                                                             'multiplier' => $data['multiplier'] ?? 1.0,
+                                                            'minutes' => $data['minutes'] ?? 0, // Include minutes for display
+                                                            'dynamic_multiplier' => $data['dynamic_multiplier'] ?? 1.0, // Include dynamic multiplier
+                                                            'fixed_amount' => $data['fixed_amount'] ?? 0, // Include fixed amount for partial suspension
+                                                            'time_log_amount' => $data['time_log_amount'] ?? 0, // Include time log amount for partial suspension
                                                             'percentage' => isset($data['multiplier']) ? number_format($data['multiplier'] * 100, 0) . '%' : (isset($data['percentage']) ? $data['percentage'] : '100%')
                                                         ];
                                                     }
@@ -1088,23 +1055,29 @@
                                                             @endphp
                                                             
                                                             <div class="mb-1">
-                                                                <span>Full Suspension: ₱{{ number_format($amount, 2) }}</span>
+                                                                <span >Full Suspension: <span class="text-xs text-gray-600">₱{{ number_format($amount, 2) }}
+                                                                    </span></span>
                                                             </div>
                                                         @elseif($type == 'Partial Suspension')
-                                                            <!-- New handling for Partial Suspension with fixed daily rate -->
+                                                            <!-- New handling for Partial Suspension with minutes and dynamic rate multiplier -->
                                                             @php
                                                                 $fixedAmount = $data['fixed_amount'] ?? 0;
                                                                 $timeLogAmount = $data['time_log_amount'] ?? 0;
                                                                 $totalAmount = $data['amount'] ?? 0;
+                                                                $minutes = $data['minutes'] ?? 0;
+                                                                $dynamicMultiplier = $data['dynamic_multiplier'] ?? 1.0;
+                                                                $payRuleMultiplier = $data['multiplier'] ?? 1.0;
+                                                                $hourlyRate = $data['rate'] ?? 0; // Now using hourly rate directly from controller
+                                                                $displayMultiplier = ($dynamicMultiplier * 100);
                                                             @endphp
                                                             
                                                             <div class="mb-1">
-                                                                <span>Partial Suspension: ₱{{ number_format($totalAmount, 2) }}</span>
-                                                                @if($fixedAmount > 0 && $timeLogAmount > 0)
-                                                                    <div class="text-xs text-gray-600">
-                                                                        Fixed: ₱{{ number_format($fixedAmount, 2) }} + Work: ₱{{ number_format($timeLogAmount, 2) }}
-                                                                    </div>
-                                                                @endif
+                                                                <span>Partial Suspension: {{ $minutes }}m</span>
+                                                                <div class="text-xs text-gray-600">
+                                                                    {{ number_format($displayMultiplier, 0) }}% = ₱{{ number_format($timeLogAmount, 2) }} + ₱{{ number_format($fixedAmount, 2) }}
+                                                                </div>
+                                                                <!-- Hidden element for basic pay total calculation -->
+                                                                <div class="basic-pay-amount" data-basic-amount="{{ $totalAmount }}" style="display: none;"></div>
                                                             </div>
                                                         @elseif(isset($data['description']) && str_contains($data['description'], 'Regular Suspension'))
                                                             <!-- Legacy handling for combined Regular Workday + Suspension (should not be used with new logic) -->
@@ -1240,12 +1213,16 @@
                                                             <span>{{ $type }}: {{ number_format($minutes, 0) }}m</span>
                                                             <div class="text-xs text-gray-600">
                                                                 Total: ₱{{ number_format($totalAmount, 2) }}
+                                                                @php
+                                                                    $dynamicMultiplier = $data['dynamic_multiplier'] ?? 1.0;
+                                                                    $displayMultiplier = ($dynamicMultiplier * 100);
+                                                                @endphp
                                                                 @if($fixedAmount > 0 && $timeLogAmount > 0)
-                                                                    <br>Fixed: ₱{{ number_format($fixedAmount, 2) }} + Work: ₱{{ number_format($timeLogAmount, 2) }}
+                                                                    <br>{{ number_format($displayMultiplier, 0) }}% = ₱{{ number_format($timeLogAmount, 2) }} + ₱{{ number_format($fixedAmount, 2) }}
                                                                 @elseif($fixedAmount > 0)
-                                                                    <br>Fixed: ₱{{ number_format($fixedAmount, 2) }}
+                                                                    <br>{{ number_format($displayMultiplier, 0) }}% = ₱0.00 + ₱{{ number_format($fixedAmount, 2) }}
                                                                 @elseif($timeLogAmount > 0)
-                                                                    <br>Work: ₱{{ number_format($timeLogAmount, 2) }}
+                                                                    <br>{{ number_format($displayMultiplier, 0) }}% = ₱{{ number_format($timeLogAmount, 2) }} + ₱0.00
                                                                 @endif
                                                             </div>
                                                         @else
@@ -3769,6 +3746,46 @@
                                                         }
                                                     @endphp
                                                     
+                                                    @php
+                                                        // Check if this is a suspension day and display suspension pay rule
+                                                        $suspensionPayDisplay = null;
+                                                        if (in_array($logType, ['suspension', 'full_day_suspension', 'partial_suspension'])) {
+                                                            // Get suspension settings for this date
+                                                            $suspensionSetting = \App\Models\NoWorkSuspendedSetting::where('date_from', '<=', $date)
+                                                                ->where('date_to', '>=', $date)
+                                                                ->where('status', 'active')
+                                                                ->first();
+                                                                
+                                                            if ($suspensionSetting && $suspensionSetting->is_paid) {
+                                                                // Check if this employee is eligible for paid suspension
+                                                                $employeeHasBenefits = $detail->employee->benefits_status === 'with_benefits';
+                                                                $payApplicableTo = $suspensionSetting->pay_applicable_to ?? 'all';
+                                                                $shouldReceivePay = false;
+                                                                
+                                                                if ($payApplicableTo === 'all') {
+                                                                    $shouldReceivePay = true;
+                                                                } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
+                                                                    $shouldReceivePay = true;
+                                                                } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
+                                                                    $shouldReceivePay = true;
+                                                                }
+                                                                
+                                                                if ($shouldReceivePay) {
+                                                                    $payRule = $suspensionSetting->pay_rule ?? 'full';
+                                                                    if (in_array($suspensionSetting->type, ['partial_suspension'])) {
+                                                                        $suspensionPayDisplay = ($payRule === 'full') ? 'PARTIAL FULL' : 'PARTIAL HALF';
+                                                                    } else {
+                                                                        $suspensionPayDisplay = ($payRule === 'full') ? 'FULL PAID' : 'HALF PAID';
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    @endphp
+                                                    
+                                                    @if($suspensionPayDisplay)
+                                                        <div class="text-blue-600 font-bold text-xs mb-1">{{ $suspensionPayDisplay }}</div>
+                                                    @endif
+
                                                     <div class="text-green-600 font-medium">
                                                         @php
                                                             // FOR DTR SUMMARY: Display actual time periods based on employee's time in/out and ND boundaries

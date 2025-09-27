@@ -195,11 +195,11 @@
                                                     
                                                     if ($shouldAutoFill) {
                                                         if ($isPartialSuspension) {
-                                                            // PAID PARTIAL SUSPENSION: NO AUTO-FILL - employee can work before suspension starts
-                                                            $defaultTimeIn = null;
-                                                            $defaultTimeOut = null;
-                                                            $defaultBreakIn = null;
-                                                            $defaultBreakOut = null;
+                                                            // PAID PARTIAL SUSPENSION: Preserve existing time logs if available, otherwise allow manual input
+                                                            $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
+                                                            $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
+                                                            $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
+                                                            $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
                                                         } else {
                                                             // PAID FULL DAY SUSPENSION: NO AUTO-FILL - all inputs disabled 
                                                             $defaultTimeIn = null;
@@ -215,11 +215,20 @@
                                                         $defaultBreakOut = null;
                                                     }
                                                 } else {
-                                                    // UNPAID SUSPENSION (both full and partial): NO AUTO-FILL, disable accordingly
-                                                    $defaultTimeIn = null;
-                                                    $defaultTimeOut = null;
-                                                    $defaultBreakIn = null;
-                                                    $defaultBreakOut = null;
+                                                    // UNPAID SUSPENSION: Preserve existing time logs for partial, clear for full
+                                                    if ($isPartialSuspension) {
+                                                        // UNPAID PARTIAL SUSPENSION: Preserve existing time logs if available
+                                                        $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
+                                                        $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
+                                                        $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
+                                                        $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
+                                                    } else {
+                                                        // UNPAID FULL DAY SUSPENSION: NO AUTO-FILL, disable accordingly
+                                                        $defaultTimeIn = null;
+                                                        $defaultTimeOut = null;
+                                                        $defaultBreakIn = null;
+                                                        $defaultBreakOut = null;
+                                                    }
                                                 }
                                             } else {
                                                 // NOT SUSPENSION: Use existing data as is

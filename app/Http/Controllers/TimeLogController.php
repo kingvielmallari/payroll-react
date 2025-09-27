@@ -1078,7 +1078,19 @@ class TimeLogController extends Controller
                             $frontendTimeOut = Carbon::parse('17:00');
                         }
                     }
-                    // For partial suspensions: don't auto-fill anything - leave blank for user input
+                    // For partial suspensions: preserve existing time logs if available, otherwise leave blank for user input
+                    if ($timeLog) {
+                        $frontendTimeIn = $timeLog->time_in ? Carbon::parse($timeLog->time_in) : null;
+                        $frontendTimeOut = $timeLog->time_out ? Carbon::parse($timeLog->time_out) : null;
+                        $frontendBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
+                        $frontendBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
+                    } else {
+                        // No existing time log - leave times blank for partial suspension user input
+                        $frontendTimeIn = null;
+                        $frontendTimeOut = null;
+                        $frontendBreakIn = null;
+                        $frontendBreakOut = null;
+                    }
                 }
                 // For unpaid suspensions or non-eligible employees, don't auto-fill times
             }

@@ -1532,11 +1532,17 @@ class PayrollController extends Controller
                 continue;
             }
 
+            // CRITICAL: Skip suspension pay calculation here - let breakdown methods handle it properly
+            // TimeLog->calculatePayAmount() doesn't have access to suspension settings context
+            if ($isSuspensionLog) {
+                continue; // Don't add suspension pay to gross pay here
+            }
+
             // Calculate pay for this time log using rate configuration
             $payAmounts = $timeLog->calculatePayAmount($hourlyRate);
             $totalGrossPay += $payAmounts['total_amount'];
 
-            // Add to hour totals
+            // Add to hour totals (suspension logs already skipped above)
             $regularHours += $timeLog->regular_hours ?? 0;
             $overtimeHours += $timeLog->overtime_hours ?? 0;
 
@@ -1659,6 +1665,12 @@ class PayrollController extends Controller
 
             if (!$isSuspensionLog && $timeLog->total_hours <= 0) {
                 continue;
+            }
+
+            // CRITICAL: Skip suspension pay calculation here - let breakdown methods handle it properly
+            // TimeLog->calculatePayAmount() doesn't have access to suspension settings context
+            if ($isSuspensionLog) {
+                continue; // Don't add suspension pay to gross pay here
             }
 
             // Calculate pay for this time log using rate configuration
@@ -5647,7 +5659,8 @@ class PayrollController extends Controller
                     $employeeBreakdown[$logType]['days_count']++;
 
                     // NEW: Handle suspension specific data (same as draft mode)
-                    if ($logType === 'suspension') {
+                    // Support all suspension types: suspension, full_day_suspension, partial_suspension
+                    if (in_array($logType, ['suspension', 'full_day_suspension', 'partial_suspension'])) {
                         $employeeBreakdown[$logType]['days']++;
 
                         // Get suspension settings for this date
@@ -5859,6 +5872,28 @@ class PayrollController extends Controller
             $restBreakdown = $this->createRestPayBreakdown($employeeTimeBreakdown, $employee, $payroll->period_start, $payroll->period_end);
             $suspensionBreakdown = $this->createSuspensionPayBreakdown($employeeTimeBreakdown, $employee, $payroll->period_start, $payroll->period_end);
             $overtimeBreakdown = $this->createOvertimePayBreakdown($employeeTimeBreakdown, $employee, $payroll->period_start, $payroll->period_end);
+
+            // DEBUG: Log breakdown details for employee
+            Log::info("Snapshot breakdown debug for employee {$employee->id}", [
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'time_breakdown_keys' => array_keys($employeeTimeBreakdown),
+                'basic_breakdown' => $basicBreakdown,
+                'suspension_breakdown' => $suspensionBreakdown,
+                'suspension_breakdown_empty' => empty($suspensionBreakdown),
+                'basic_breakdown_before_merge' => $basicBreakdown
+            ]);
+
+            // CRITICAL: Merge suspension breakdown into basic breakdown for REGULAR column display
+            // This ensures suspension amounts appear in REGULAR column in processing/approved payrolls
+            // Same as dynamic/draft payroll behavior (source of truth)
+            if (!empty($suspensionBreakdown)) {
+                $basicBreakdown = array_merge($basicBreakdown, $suspensionBreakdown);
+                Log::info("Merged suspension breakdown into basic breakdown for employee {$employee->id}", [
+                    'basic_breakdown_after_merge' => $basicBreakdown
+                ]);
+            } else {
+                Log::info("No suspension breakdown to merge for employee {$employee->id}");
+            }
 
             // Use the SAME calculated amounts from the draft mode display logic
             // This ensures 100% consistency between draft and processing/locked payroll displays
@@ -8028,8 +8063,10 @@ class PayrollController extends Controller
                 // Legacy suspension handling - should not happen with new logic
                 $basicPay += $regularPay;
             } elseif (in_array($logType, ['full_day_suspension', 'partial_suspension'])) {
-                // New suspension types using rate configurations
-                $basicPay += $regularPay; // Use calculated pay from rate multipliers
+                // CRITICAL: Do NOT add suspension pay here! 
+                // Suspension pay must be calculated by breakdown methods with proper suspension settings
+                // This was causing UNPAID suspensions to show amounts in REGULAR column
+                // $basicPay += $regularPay; // REMOVED - let breakdown methods handle suspension pay
             }
         }
 
@@ -8270,14 +8307,21 @@ class PayrollController extends Controller
                     }
 
                     if ($shouldReceivePay) {
+                        // Get rate configuration for dynamic multiplier
+                        $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', 'partial_suspension')
+                            ->where('is_active', true)
+                            ->first();
+                        $dynamicMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.1;
+
                         // Calculate fixed daily rate amount
                         $multiplier = ($payRule === 'full') ? 1.0 : 0.5;
                         $amount = round($dailyRate * $multiplier, 2);
 
                         if ($isPartial) {
-                            // PARTIAL SUSPENSION: Fixed amount + possible time log earnings
+                            // PARTIAL SUSPENSION: Fixed amount + possible time log earnings WITH DYNAMIC RATE
                             $actualTimeLogHours = $suspensionData['actual_time_log_hours'] ?? 0;
-                            $timeLogAmount = round($actualTimeLogHours * $hourlyRate, 2);
+                            $adjustedHourlyRate = $hourlyRate * $dynamicMultiplier;
+                            $timeLogAmount = round($actualTimeLogHours * $adjustedHourlyRate, 2);
                             $totalAmount = $amount + $timeLogAmount;
 
                             $description = "Partial Suspension: ₱" . number_format($amount, 2) . " (fixed) + ₱" . number_format($timeLogAmount, 2) . " (worked)";
@@ -8572,29 +8616,115 @@ class PayrollController extends Controller
                     // Manual time log updates without settings should NOT generate breakdowns
 
                     if ($type === 'full_day_suspension') {
-                        // Only create breakdown if there are active suspension settings
+                        // Initialize accumulated totals for multiple days
+                        $totalFixedAmount = 0;
+                        $totalTimeLogAmount = 0;
+                        $totalDays = 0;
+                        $totalHours = 0;
+                        $totalMinutesSum = 0;
+                        $avgMultiplier = 0;
+                        $avgDynamicMultiplier = 0;
+                        $dailyRate = $hourlyRate * 8; // Calculate daily rate once
+
+                        // Only calculate payment if there are active suspension settings
                         if (!empty($suspensionSettings)) {
-                            // Full day suspensions are UNPAID by default (₱0.00)
-                            $breakdown['Full Suspension'] = [
-                                'hours' => 0,
-                                'days' => $suspensionDays,
-                                'rate' => $dailyRate,
-                                'multiplier' => 0,
-                                'amount' => 0, // Always ₱0.00 for full suspension
-                                'workday_hours' => 0,
-                                'suspension_hours' => 0
-                            ];
+                            foreach ($suspensionSettings as $date => $setting) {
+                                $isPaid = $setting['is_paid'] ?? false;
+                                $payRule = $setting['pay_rule'] ?? 'full';
+                                $payApplicableTo = $setting['pay_applicable_to'] ?? 'all';
+                                $settingType = $setting['type'] ?? '';
+
+                                // Only process full day suspension settings
+                                $isFullDay = $settingType === 'full_day_suspension';
+
+                                // Skip if this is not a full day suspension setting
+                                if (!$isFullDay) {
+                                    continue;
+                                }
+
+                                // Check if suspension pay applies to this employee
+                                $employeeHasBenefits = $employee->benefits_status === 'with_benefits';
+                                $shouldReceivePay = false;
+
+                                if ($isPaid) {
+                                    if ($payApplicableTo === 'all') {
+                                        $shouldReceivePay = true;
+                                    } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
+                                        $shouldReceivePay = true;
+                                    } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
+                                        $shouldReceivePay = true;
+                                    }
+                                }
+
+                                if ($shouldReceivePay) {
+                                    // Get rate configuration for dynamic multiplier first
+                                    // Map the time breakdown type to the proper PayrollRateConfiguration type_name
+                                    $rateConfigTypeName = $type === 'partial_suspension' ? 'partial_suspension' : ($type === 'full_day_suspension' ? 'full_day_suspension' : $type);
+
+                                    $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $rateConfigTypeName)
+                                        ->where('is_active', true)
+                                        ->first();
+
+                                    $dynamicMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.0;
+
+                                    // Calculate fixed daily rate amount per day
+                                    $multiplier = ($payRule === 'full') ? 1.0 : 0.5;
+                                    $dailyFixedAmount = round($dailyRate * $multiplier, 2);
+
+                                    // FULL DAY SUSPENSION: Fixed amount + possible time log earnings (if any)
+                                    $actualTimeLogHours = $suspensionData['actual_time_log_hours'] ?? 0;
+                                    $adjustedHourlyRate = $hourlyRate * $dynamicMultiplier;
+                                    $dayTimeLogAmount = round($actualTimeLogHours * $adjustedHourlyRate, 2);
+
+                                    // For full day suspension with no time logs, only fixed amount applies
+                                    if ($actualTimeLogHours == 0) {
+                                        $dayTimeLogAmount = 0;
+                                    }
+
+                                    // Accumulate totals across multiple days
+                                    $totalFixedAmount += $dailyFixedAmount;
+                                    $totalTimeLogAmount += $dayTimeLogAmount;
+                                    $totalDays++;
+                                    $totalHours += $actualTimeLogHours;
+                                    $totalMinutesSum += round($actualTimeLogHours * 60);
+                                    $avgMultiplier = $multiplier; // Use the same across all days (should be consistent)
+                                    $avgDynamicMultiplier = $dynamicMultiplier; // Use the same across all days
+                                }
+                            }
+
+                            // CRITICAL: Only create breakdown entry if there's actual payment across all days
+                            // UNPAID suspensions should NOT appear in breakdown at all
+                            $grandTotal = $totalFixedAmount + $totalTimeLogAmount;
+                            if ($grandTotal > 0) {
+                                $breakdown['Full Suspension'] = [
+                                    'hours' => $totalHours,
+                                    'days' => $totalDays, // Proper count of suspension days
+                                    'minutes' => $totalMinutesSum, // Add minutes for display
+                                    'rate' => $dailyRate,
+                                    'multiplier' => $avgMultiplier, // Average multiplier across all days
+                                    'dynamic_multiplier' => $avgDynamicMultiplier, // Average dynamic multiplier across all days
+                                    'fixed_amount' => $totalFixedAmount, // Total fixed amount across all days
+                                    'time_log_amount' => $totalTimeLogAmount, // Total time log amount across all days
+                                    'amount' => $grandTotal, // Total amount across all days
+                                    'workday_hours' => 0,
+                                    'suspension_hours' => 0
+                                ];
+                            }
                         }
                     }
 
                     if ($type === 'partial_suspension') {
-                        // Calculate potential payment (could still be ₱0.00)
-                        $fixedAmount = 0;
-                        $timeLogAmount = 0;
-                        $totalAmount = 0;
+                        // Initialize accumulated totals for multiple days
+                        $totalFixedAmount = 0;
+                        $totalTimeLogAmount = 0;
+                        $totalDays = 0;
+                        $totalHours = 0;
+                        $totalMinutesSum = 0;
+                        $avgMultiplier = 0;
+                        $avgDynamicMultiplier = 0;
 
-                        // Only calculate payment if there are settings AND actual work hours
-                        if (!empty($suspensionSettings) && $actualTimeLogHours > 0) {
+                        // Calculate payment if there are suspension settings (fixed amount doesn't require time logs)
+                        if (!empty($suspensionSettings)) {
                             // Calculate daily rate
                             $dailyRate = $hourlyRate * 8;
 
@@ -8627,37 +8757,70 @@ class PayrollController extends Controller
                                 }
 
                                 if ($shouldReceivePay) {
-                                    // Calculate fixed daily rate amount
+                                    // Get rate configuration for dynamic multiplier FIRST
+                                    // Map the time breakdown type to the proper PayrollRateConfiguration type_name
+                                    $rateConfigTypeName = $type === 'partial_suspension' ? 'partial_suspension' : ($type === 'full_day_suspension' ? 'full_day_suspension' : $type);
+
+                                    $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $rateConfigTypeName)
+                                        ->where('is_active', true)
+                                        ->first();
+
+                                    $dynamicMultiplier = $rateConfig ? $rateConfig->regular_rate_multiplier : 1.1; // Default to 1.1 (110%) for partial suspension
+
+                                    // Calculate fixed daily rate amount per day
                                     $multiplier = ($payRule === 'full') ? 1.0 : 0.5;
-                                    $fixedAmount = round($dailyRate * $multiplier, 2);
+                                    $dailyFixedAmount = round($dailyRate * $multiplier, 2);
 
-                                    // PARTIAL SUSPENSION: Fixed amount + possible time log earnings
+                                    // PARTIAL SUSPENSION: Fixed amount + possible time log earnings WITH DYNAMIC RATE
+                                    // Use same calculation method as regular workday for consistency
                                     $actualTimeLogHours = $suspensionData['actual_time_log_hours'] ?? 0;
-                                    $timeLogAmount = round($actualTimeLogHours * $hourlyRate, 2);
-
-                                    // CRITICAL: For manual partial suspension entries (no actual work hours), 
-                                    // only the fixed amount should be paid, not additional time log amount
+                                    // Also check for regular_hours if actual_time_log_hours is 0
                                     if ($actualTimeLogHours == 0) {
-                                        $timeLogAmount = 0; // No time log earnings for manual entries
+                                        $actualTimeLogHours = $suspensionData['regular_hours'] ?? 0;
+                                    }
+                                    // If still 0, try to get from all available hours data
+                                    if ($actualTimeLogHours == 0) {
+                                        $actualTimeLogHours = ($suspensionData['hours'] ?? 0) + ($suspensionData['overtime_hours'] ?? 0);
+                                    }
+                                    $dayMinutes = round($actualTimeLogHours * 60); // Convert hours to minutes
+
+                                    // Calculate time log amount using same method as regular workday per day
+                                    $dayTimeLogAmount = 0;
+                                    if ($actualTimeLogHours > 0) {
+                                        $adjustedHourlyRate = $hourlyRate * $dynamicMultiplier;
+                                        $ratePerMinute = $adjustedHourlyRate / 60;
+                                        $dayTimeLogAmount = round($ratePerMinute * $dayMinutes, 2);
                                     }
 
-                                    $totalAmount = $fixedAmount + $timeLogAmount;
-
-                                    // Only create breakdown if there's actual pay
-                                    if ($totalAmount > 0) {
-                                        $breakdown['Partial Suspension'] = [
-                                            'hours' => 0,
-                                            'days' => 1,
-                                            'rate' => $dailyRate,
-                                            'multiplier' => $multiplier,
-                                            'fixed_amount' => $fixedAmount,
-                                            'time_log_amount' => $timeLogAmount,
-                                            'amount' => $totalAmount,
-                                            'workday_hours' => 0,
-                                            'suspension_hours' => 0
-                                        ];
-                                    }
+                                    // Accumulate totals across multiple days
+                                    $totalFixedAmount += $dailyFixedAmount;
+                                    $totalTimeLogAmount += $dayTimeLogAmount;
+                                    $totalDays++;
+                                    $totalHours += $actualTimeLogHours;
+                                    $totalMinutesSum += $dayMinutes;
+                                    $avgMultiplier = $multiplier; // Use the same across all days (should be consistent)
+                                    $avgDynamicMultiplier = $dynamicMultiplier; // Use the same across all days
                                 }
+                            }
+
+                            // Only create breakdown if there's actual payment across all days
+                            $grandTotal = $totalFixedAmount + $totalTimeLogAmount;
+                            if ($grandTotal > 0) {
+                                $breakdown['Partial Suspension'] = [
+                                    'hours' => $totalHours,
+                                    'days' => $totalDays, // Proper count of suspension days
+                                    'minutes' => $totalMinutesSum, // Add minutes for display
+                                    'rate' => $hourlyRate, // Use hourly rate like regular workday
+                                    'rate_per_minute' => $totalHours > 0 ? ($hourlyRate * $avgDynamicMultiplier) / 60 : 0,
+                                    'multiplier' => $avgMultiplier, // This is pay rule multiplier (0.5 or 1.0)
+                                    'dynamic_multiplier' => $avgDynamicMultiplier, // This is rate config multiplier
+                                    'fixed_amount' => $totalFixedAmount, // Total fixed amount across all days
+                                    'time_log_amount' => $totalTimeLogAmount, // Total time log amount across all days
+                                    'amount' => $grandTotal, // Total amount across all days
+                                    'workday_hours' => 0,
+                                    'suspension_hours' => 0,
+                                    'include_in_basic_total' => true // Flag to include in basic pay total
+                                ];
                             }
                         }
                     }

@@ -67,9 +67,9 @@
                                         <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                             Paid
                                         </span>
-                                        @if($suspension->type === 'partial_suspension' && $suspension->pay_rule === 'half')
+                                        @if($suspension->pay_rule === 'half')
                                             <span class="ml-1 text-xs text-gray-500">(50%)</span>
-                                        @elseif($suspension->type === 'full_day_suspension')
+                                        @elseif($suspension->pay_rule === 'full')
                                             <span class="ml-1 text-xs text-gray-500">(100%)</span>
                                         @endif
                                     @else
