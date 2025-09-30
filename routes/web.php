@@ -21,15 +21,22 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 
-Route::get('/', [AuthenticatedSessionController::class, 'create'])
-    ->middleware('guest');
+Route::get('/', function () {
+    // Check if license exists
+    $license = \App\Models\SystemLicense::current();
+    if (!$license) {
+        return redirect()->route('license.activate');
+    }
+    // Show login page directly instead of redirecting
+    return app(\App\Http\Controllers\Auth\AuthenticatedSessionController::class)->create();
+})->name('login');
 
 // Dashboard
 Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth', 'verified', 'license'])
     ->name('dashboard');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', 'license'])->group(function () {
     // Profile routes
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

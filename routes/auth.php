@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Http\Controllers\LicenseController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -17,10 +18,8 @@ Route::middleware('guest')->group(function () {
 
     Route::post('register', [RegisteredUserController::class, 'store']);
 
-    Route::get('login', [AuthenticatedSessionController::class, 'create'])
-        ->name('login');
-
-    Route::post('login', [AuthenticatedSessionController::class, 'store']);
+    Route::post('login', [AuthenticatedSessionController::class, 'store'])
+        ->name('login.store');
 
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
@@ -33,6 +32,11 @@ Route::middleware('guest')->group(function () {
 
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->name('password.store');
+
+    // License activation routes (accessible without login)
+    Route::get('/license/activate', [LicenseController::class, 'showActivation'])->name('license.activate');
+    Route::post('/license/activate', [LicenseController::class, 'activate'])->name('license.activate.store');
+    Route::get('/license/status', [LicenseController::class, 'showStatus'])->name('license.status');
 });
 
 Route::middleware('auth')->group(function () {
@@ -56,4 +60,15 @@ Route::middleware('auth')->group(function () {
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
+
+    // License management routes (require login)
+    Route::prefix('license')->name('license.')->group(function () {
+        Route::get('status', [LicenseController::class, 'status'])->name('status');
+        Route::get('manage', [LicenseController::class, 'manage'])->name('manage');
+    });
 });
+
+// License validation routes (accessible to all)
+Route::get('license/expired', [LicenseController::class, 'expired'])->name('license.expired');
+Route::get('license/invalid', [LicenseController::class, 'invalid'])->name('license.invalid');
+Route::get('license/limit-exceeded', [LicenseController::class, 'limitExceeded'])->name('license.limit-exceeded');
