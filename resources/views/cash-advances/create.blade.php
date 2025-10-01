@@ -11,6 +11,56 @@
         </div>
     </x-slot>
 
+    <!-- Custom styles for employee dropdown -->
+    <style>
+        .employee-option {
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .employee-option:last-child {
+            border-bottom: none;
+        }
+        
+        .employee-option:hover {
+            background-color: #eef2ff !important;
+            color: #312e81 !important;
+        }
+        
+        #employee_dropdown {
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        #employee_list {
+            max-height: 240px; /* Exactly 5 items at ~48px each */
+        }
+        
+        #employee_dropdown::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        #employee_dropdown::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 3px;
+        }
+        
+        #employee_dropdown::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        
+        #employee_dropdown::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        .employee-search-container {
+            position: relative;
+        }
+        
+
+    </style>
+
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
@@ -78,15 +128,50 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label for="employee_id" class="block text-sm font-medium text-gray-700">Employee *</label>
-                                <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('employee_id') border-red-300 @enderror" 
-                                        id="employee_id" name="employee_id" required onchange="loadEmployeePayrollPeriods()">
-                                    <option value="">Select Employee</option>
-                                    @foreach($employees as $emp)
-                                    <option value="{{ $emp->id }}" {{ old('employee_id') == $emp->id ? 'selected' : '' }}>
-                                        {{ $emp->full_name }} ({{ $emp->employee_number }})
-                                    </option>
-                                    @endforeach
-                                </select>
+                                
+                                <!-- Hidden input for form submission -->
+                                <input type="hidden" id="employee_id" name="employee_id" value="{{ old('employee_id') }}" required>
+                                
+                                <!-- Custom searchable dropdown -->
+                                <div class="relative mt-1">
+                                    <input type="text" 
+                                           id="employee_search" 
+                                           class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('employee_id') border-red-300 @enderror" 
+                                           placeholder="Type to search employees..." 
+                                           autocomplete="off"
+                                           onclick="toggleEmployeeDropdown()"
+                                           onkeyup="filterEmployees()"
+                                           onblur="setTimeout(hideEmployeeDropdown, 200)">
+                                    
+                                    <!-- Dropdown arrow -->
+                                    <div class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </div>
+                                    
+                                    <!-- Dropdown list -->
+                                    <div id="employee_dropdown" 
+                                         class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto hidden">
+                                        <div id="employee_list">
+                                            @foreach($employees->sortBy('full_name') as $emp)
+                                            <div class="employee-option cursor-pointer px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-900" 
+                                                 data-value="{{ $emp->id }}" 
+                                                 data-text="{{ $emp->full_name }} ({{ $emp->employee_number }})"
+                                                 onclick="selectEmployee({{ $emp->id }}, '{{ $emp->full_name }} ({{ $emp->employee_number }})')">
+                                                <div class="font-medium">{{ $emp->full_name }}</div>
+                                                <div class="text-gray-500 text-xs">{{ $emp->employee_number }}</div>
+                                            </div>
+                                            @endforeach
+                                        </div>
+                                        
+                                        <!-- No results message -->
+                                        <div id="no_results" class="px-3 py-2 text-sm text-gray-500 hidden">
+                                            No employees found
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 @error('employee_id')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
@@ -728,5 +813,184 @@
             submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     }
+
+    // Employee dropdown functionality
+    let allEmployees = [];
+    let isDropdownOpen = false;
+    let isEmployeeSelected = false;
+
+    // Initialize employee data on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Store all employee options for filtering
+        const employeeOptions = document.querySelectorAll('.employee-option');
+        employeeOptions.forEach(option => {
+            allEmployees.push({
+                id: option.dataset.value,
+                text: option.dataset.text,
+                element: option.cloneNode(true)
+            });
+        });
+        
+        // Sort employees alphabetically by name
+        allEmployees.sort((a, b) => a.text.localeCompare(b.text));
+
+        // Set initial value if there's an old value
+        const hiddenInput = document.getElementById('employee_id');
+        if (hiddenInput.value) {
+            const selectedEmployee = allEmployees.find(emp => emp.id == hiddenInput.value);
+            if (selectedEmployee) {
+                document.getElementById('employee_search').value = selectedEmployee.text;
+                isEmployeeSelected = true;
+            }
+        }
+
+        // Apply initial display limit
+        limitDisplayedEmployees();
+
+        // Add keydown event listener for backspace handling
+        const searchInput = document.getElementById('employee_search');
+        searchInput.addEventListener('keydown', handleKeyDown);
+    });
+
+    function toggleEmployeeDropdown() {
+        const dropdown = document.getElementById('employee_dropdown');
+        if (isDropdownOpen) {
+            hideEmployeeDropdown();
+        } else {
+            showEmployeeDropdown();
+        }
+    }
+
+    function showEmployeeDropdown() {
+        const dropdown = document.getElementById('employee_dropdown');
+        dropdown.classList.remove('hidden');
+        isDropdownOpen = true;
+        limitDisplayedEmployees();
+    }
+
+    function hideEmployeeDropdown() {
+        const dropdown = document.getElementById('employee_dropdown');
+        dropdown.classList.add('hidden');
+        isDropdownOpen = false;
+    }
+
+    function selectEmployee(employeeId, employeeText) {
+        const searchInput = document.getElementById('employee_search');
+        
+        document.getElementById('employee_id').value = employeeId;
+        searchInput.value = employeeText;
+        isEmployeeSelected = true;
+        
+        hideEmployeeDropdown();
+        
+        // Trigger change event for other functions that might depend on it
+        loadEmployeePayrollPeriods();
+    }
+
+    function handleKeyDown(event) {
+        const searchInput = document.getElementById('employee_search');
+        
+        // Handle backspace for selected employee
+        if (event.key === 'Backspace' && isEmployeeSelected) {
+            event.preventDefault();
+            clearEmployeeSelection();
+            return;
+        }
+        
+        // Handle other keys
+        if (event.key === 'Escape') {
+            hideEmployeeDropdown();
+        }
+    }
+
+    function clearEmployeeSelection() {
+        const searchInput = document.getElementById('employee_search');
+        
+        document.getElementById('employee_id').value = '';
+        searchInput.value = '';
+        isEmployeeSelected = false;
+        
+        // Clear any active advance warning
+        clearActiveAdvanceWarning();
+        
+        // Show all employees again
+        filterEmployees();
+        showEmployeeDropdown();
+    }
+
+    function filterEmployees() {
+        const searchValue = document.getElementById('employee_search').value.toLowerCase();
+        const employeeList = document.getElementById('employee_list');
+        const noResults = document.getElementById('no_results');
+        
+        // If user is typing after selecting an employee, clear the selection
+        if (isEmployeeSelected && searchValue !== '') {
+            isEmployeeSelected = false;
+            document.getElementById('employee_id').value = '';
+        }
+        
+        // Clear current list
+        employeeList.innerHTML = '';
+        
+        // Filter employees based on search and sort alphabetically
+        const filteredEmployees = allEmployees.filter(employee => 
+            employee.text.toLowerCase().includes(searchValue)
+        ).sort((a, b) => a.text.localeCompare(b.text));
+        
+        if (filteredEmployees.length === 0) {
+            noResults.classList.remove('hidden');
+        } else {
+            noResults.classList.add('hidden');
+            
+            // Add filtered employees to list
+            filteredEmployees.forEach(employee => {
+                employeeList.appendChild(employee.element.cloneNode(true));
+            });
+            
+            // Apply display limit
+            limitDisplayedEmployees();
+        }
+        
+        // Show dropdown if hidden
+        if (!isDropdownOpen) {
+            showEmployeeDropdown();
+        }
+        
+        // Check for exact match
+        const exactMatch = filteredEmployees.find(emp => emp.text.toLowerCase() === searchValue.toLowerCase());
+        if (exactMatch && !isEmployeeSelected) {
+            document.getElementById('employee_id').value = exactMatch.id;
+        } else if (!exactMatch && !isEmployeeSelected) {
+            document.getElementById('employee_id').value = '';
+        }
+    }
+
+    function limitDisplayedEmployees() {
+        const employeeList = document.getElementById('employee_list');
+        const employeeOptions = document.querySelectorAll('#employee_list .employee-option');
+        const maxDisplay = 5;
+        
+        // Always show all options but limit the container height
+        employeeOptions.forEach(option => {
+            option.style.display = 'block';
+        });
+        
+        // Set fixed height for exactly 5 items (each item is about 48px)
+        const itemHeight = 48; // Approximate height per employee option
+        const maxHeight = itemHeight * maxDisplay;
+        
+        employeeList.style.maxHeight = maxHeight + 'px';
+        employeeList.style.overflowY = employeeOptions.length > maxDisplay ? 'auto' : 'hidden';
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        const searchInput = document.getElementById('employee_search');
+        const dropdown = document.getElementById('employee_dropdown');
+        
+        if (!searchInput.contains(event.target) && !dropdown.contains(event.target)) {
+            hideEmployeeDropdown();
+        }
+    });
     </script>
 </x-app-layout>

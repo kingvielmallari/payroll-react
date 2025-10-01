@@ -462,10 +462,8 @@
         </div>
     </div>
 
-    @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('✅ Edit form loaded - rate fields are now direct form inputs');
 
             // ===== INPUT FORMATTING FUNCTIONS =====
             
@@ -584,9 +582,16 @@
                         positionSelect.innerHTML = '<option value="">Select Position</option>';
                         
                         if (selectedDeptId) {
+                            const fetchUrl = `{{ url('/') }}/departments/${selectedDeptId}/positions`;
+                            
                             // Fetch positions for the selected department
-                            fetch(`{{ url('/') }}/departments/${selectedDeptId}/positions`)
-                                .then(response => response.json())
+                            fetch(fetchUrl)
+                                .then(response => {
+                                    if (!response.ok) {
+                                        throw new Error(`HTTP error! status: ${response.status}`);
+                                    }
+                                    return response.json();
+                                })
                                 .then(positions => {
                                     positions.forEach(position => {
                                         const option = document.createElement('option');
@@ -605,8 +610,6 @@
                                     if (currentSelection && positionSelect.querySelector(`option[value="${currentSelection}"]`)) {
                                         positionSelect.value = currentSelection;
                                     }
-                                    
-                                    console.log('Positions loaded, current position ID:', currentPositionId, 'Selected:', positionSelect.value);
                                 })
                                 .catch(error => {
                                     console.error('Error fetching positions:', error);
@@ -614,6 +617,7 @@
                         }
                     }
                     
+                    // Add event listener for department changes
                     departmentSelect.addEventListener('change', filterPositions);
                     
                     // Initial load if department is already selected - this is crucial for edit view
@@ -635,16 +639,12 @@
                 employmentTypeSelect.addEventListener('change', function() {
                     const selectedOption = this.options[this.selectedIndex];
                     
-                    console.log('Employment type changed:', {
-                        selectedValue: this.value,
-                        selectedText: selectedOption ? selectedOption.text : 'none',
-                        hasBenefitsData: selectedOption ? selectedOption.getAttribute('data-has-benefits') : 'none'
-                    });
+                 
                     
                     if (selectedOption && selectedOption.value) {
                         const hasBenefits = selectedOption.getAttribute('data-has-benefits') === '1';
                         
-                        console.log('Setting benefits status to:', hasBenefits ? 'with_benefits' : 'without_benefits');
+                       
                         
                         if (hasBenefits) {
                             benefitsStatusSelect.value = 'with_benefits';
@@ -655,7 +655,6 @@
                         // Trigger change event for any other listeners
                         benefitsStatusSelect.dispatchEvent(new Event('change'));
                         
-                        console.log('Benefits status now set to:', benefitsStatusSelect.value);
                     }
                 });
                 
@@ -665,46 +664,5 @@
                 }
             }
         });
-
-        // Employment type auto-selection for benefits status
-        function setupEmploymentTypeBenefitsAutoSelection() {
-            const employmentTypeSelect = document.getElementById('employment_type_id');
-            const benefitsStatusSelect = document.getElementById('benefits_status');
-            
-            if (employmentTypeSelect && benefitsStatusSelect) {
-                employmentTypeSelect.addEventListener('change', function() {
-                    const selectedOption = this.options[this.selectedIndex];
-                    
-                    console.log('Employment type changed (Edit view):', {
-                        selectedValue: this.value,
-                        selectedText: selectedOption ? selectedOption.text : 'none',
-                        hasBenefitsData: selectedOption ? selectedOption.getAttribute('data-has-benefits') : 'none'
-                    });
-                    
-                    if (selectedOption && selectedOption.value) {
-                        const hasBenefits = selectedOption.getAttribute('data-has-benefits') === '1';
-                        
-                        console.log('Setting benefits status to (Edit view):', hasBenefits ? 'with_benefits' : 'without_benefits');
-                        
-                        if (hasBenefits) {
-                            benefitsStatusSelect.value = 'with_benefits';
-                        } else {
-                            benefitsStatusSelect.value = 'without_benefits';
-                        }
-                        
-                        // Trigger change event for any other listeners
-                        benefitsStatusSelect.dispatchEvent(new Event('change'));
-                        
-                        console.log('Benefits status now set to (Edit view):', benefitsStatusSelect.value);
-                    }
-                });
-                
-                // Also trigger on page load if there's a selected employment type
-                if (employmentTypeSelect.value) {
-                    employmentTypeSelect.dispatchEvent(new Event('change'));
-                }
-            }
-        }
     </script>
-    @endpush
 </x-app-layout>

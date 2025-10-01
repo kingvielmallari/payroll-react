@@ -239,12 +239,8 @@
             // Set up action URLs
             let baseUrl = '{{ route("payrolls.index") }}';
             
-            // Use new automation URL for automated payrolls with single employee
-            if (payrollType === 'automated' && employeeId) {
-                document.getElementById('contextMenuView').href = '{{ url("/payrolls/automation") }}/' + paySchedule + '/' + employeeId;
-            } else {
-                document.getElementById('contextMenuView').href = baseUrl + '/' + payrollId;
-            }
+            // Use automation URL pattern with payroll ID for all payroll types
+            document.getElementById('contextMenuView').href = '{{ url("/payrolls/automation") }}/' + paySchedule + '/' + payrollId;
             
             document.getElementById('contextMenuEdit').href = baseUrl + '/' + payrollId + '/edit';
             

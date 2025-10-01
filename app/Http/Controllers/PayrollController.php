@@ -7580,11 +7580,10 @@ class PayrollController extends Controller
     /**
      * Show unified payroll view (handles draft, processing, approved statuses)
      */
-    public function showUnifiedPayroll(Request $request, $schedule, $employee)
+    public function showUnifiedPayroll(Request $request, $schedule, $id)
     {
         $this->authorize('view payrolls');
 
-        $employee = Employee::with(['timeSchedule', 'daySchedule'])->findOrFail($employee);
         $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
             ->where('code', $schedule)
             ->first();
@@ -7594,9 +7593,35 @@ class PayrollController extends Controller
                 ->with('error', 'Invalid pay schedule selected.');
         }
 
+        // First, check if this ID is a payroll ID (for saved/historical payrolls)
+        $payroll = Payroll::with(['payrollDetails.employee', 'creator', 'approver'])
+            ->where('id', $id)
+            ->where('pay_schedule', $schedule)
+            ->first();
+
+        if ($payroll) {
+            // This is a saved payroll - show historical data
+            $firstDetail = $payroll->payrollDetails->first();
+            if (!$firstDetail) {
+                return redirect()->route('payrolls.index')
+                    ->with('error', 'Payroll has no employee details.');
+            }
+
+            $employee = $firstDetail->employee;
+            return $this->showSavedPayroll($payroll, $schedule, $employee->id);
+        }
+
+        // If not a payroll ID, treat it as an employee ID (for current period/draft payrolls)
+        $employee = Employee::with(['timeSchedule', 'daySchedule'])->find($id);
+
+        if (!$employee) {
+            return redirect()->route('payrolls.automation.index')
+                ->with('error', 'Employee or payroll not found.');
+        }
+
         $currentPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
 
-        // Check if a saved payroll exists for this employee and period
+        // Check if a saved payroll exists for this employee and current period
         $existingPayroll = Payroll::whereHas('payrollDetails', function ($query) use ($employee) {
             $query->where('employee_id', $employee->id);
         })
@@ -7607,8 +7632,11 @@ class PayrollController extends Controller
             ->first();
 
         if ($existingPayroll) {
-            // Show saved payroll (processing or approved)
-            return $this->showSavedPayroll($existingPayroll, $schedule, $employee->id);
+            // Redirect to the payroll ID URL instead of employee ID
+            return redirect()->route('payrolls.automation.show', [
+                'schedule' => $schedule,
+                'id' => $existingPayroll->id
+            ]);
         } else {
             // Show draft payroll (dynamic calculations)
             return $this->showDraftPayrollUnified($schedule, $employee, $currentPeriod);
@@ -7618,11 +7646,11 @@ class PayrollController extends Controller
     /**
      * Process unified payroll (draft to processing)
      */
-    public function processUnifiedPayroll(Request $request, $schedule, $employee)
+    public function processUnifiedPayroll(Request $request, $schedule, $id)
     {
         $this->authorize('create payrolls');
 
-        $employee = Employee::with(['timeSchedule', 'daySchedule'])->findOrFail($employee);
+        $employee = Employee::with(['timeSchedule', 'daySchedule'])->findOrFail($id);
         $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
             ->where('code', $schedule)
             ->first();
@@ -7656,15 +7684,16 @@ class PayrollController extends Controller
             $employees = collect([$employee]);
             $createdPayroll = $this->autoCreatePayrollForPeriod($selectedSchedule, $currentPeriod, $employees, 'processing');
 
+            // Redirect to payroll ID URL instead of employee ID
             return redirect()->route('payrolls.automation.show', [
                 'schedule' => $schedule,
-                'employee' => $employee->id
+                'id' => $createdPayroll->id
             ])->with('success', 'Payroll processed and saved to database with data snapshot.');
         } catch (\Exception $e) {
             Log::error('Failed to process unified payroll: ' . $e->getMessage());
             return redirect()->route('payrolls.automation.show', [
                 'schedule' => $schedule,
-                'employee' => $employee->id
+                'id' => $employee->id
             ])->with('error', 'Failed to process payroll: ' . $e->getMessage());
         }
     }
@@ -7672,11 +7701,11 @@ class PayrollController extends Controller
     /**
      * Back to draft from unified payroll
      */
-    public function backToUnifiedDraft(Request $request, $schedule, $employee)
+    public function backToUnifiedDraft(Request $request, $schedule, $id)
     {
         $this->authorize('edit payrolls');
 
-        $employee = Employee::findOrFail($employee);
+        $employee = Employee::findOrFail($id);
         $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
             ->where('code', $schedule)
             ->first();
@@ -7714,14 +7743,14 @@ class PayrollController extends Controller
 
             return redirect()->route('payrolls.automation.show', [
                 'schedule' => $schedule,
-                'employee' => $employee->id
+                'id' => $employee->id
             ])->with('success', 'Successfully deleted saved payroll. Returned to draft mode.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Failed to return unified payroll to draft: ' . $e->getMessage());
             return redirect()->route('payrolls.automation.show', [
                 'schedule' => $schedule,
-                'employee' => $employee->id
+                'id' => $employee->id
             ])->with('error', 'Failed to return to draft: ' . $e->getMessage());
         }
     }
@@ -7729,11 +7758,11 @@ class PayrollController extends Controller
     /**
      * Approve unified payroll
      */
-    public function approveUnifiedPayroll(Request $request, $schedule, $employee)
+    public function approveUnifiedPayroll(Request $request, $schedule, $id)
     {
         $this->authorize('approve payrolls');
 
-        $employee = Employee::findOrFail($employee);
+        $employee = Employee::findOrFail($id);
         $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
             ->where('code', $schedule)
             ->first();
@@ -7758,7 +7787,7 @@ class PayrollController extends Controller
         if (!$payroll) {
             return redirect()->route('payrolls.automation.show', [
                 'schedule' => $schedule,
-                'employee' => $employee->id
+                'id' => $employee->id
             ])->with('error', 'No payroll found to approve.');
         }
 
@@ -7770,13 +7799,13 @@ class PayrollController extends Controller
 
             return redirect()->route('payrolls.automation.show', [
                 'schedule' => $schedule,
-                'employee' => $employee->id
+                'id' => $payroll->id
             ])->with('success', 'Payroll approved successfully.');
         } catch (\Exception $e) {
             Log::error('Failed to approve unified payroll: ' . $e->getMessage());
             return redirect()->route('payrolls.automation.show', [
                 'schedule' => $schedule,
-                'employee' => $employee->id
+                'id' => $payroll->id ?? $employee->id
             ])->with('error', 'Failed to approve payroll: ' . $e->getMessage());
         }
     }

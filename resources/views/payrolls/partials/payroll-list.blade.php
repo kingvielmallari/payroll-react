@@ -21,7 +21,7 @@
             @foreach($payrolls as $payroll)
             <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
                oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $payroll->payroll_type }}', '{{ $payroll->pay_schedule }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : '' }}')"
-               onclick="window.open('@if($payroll->payroll_type === 'automated' && $payroll->payrollDetails->count() === 1){{ route('payrolls.automation.show', ['schedule' => $payroll->pay_schedule, 'employee' => $payroll->payrollDetails->first()->employee_id]) }}@else{{ route('payrolls.show', $payroll) }}@endif', '_blank')"
+               onclick="window.open('{{ route('payrolls.automation.show', ['schedule' => $payroll->pay_schedule, 'id' => $payroll->id]) }}', '_blank')"
                title="Click to open in new tab, Right-click for actions">
                
                 <!-- Payroll Number Column -->

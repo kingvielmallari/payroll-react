@@ -577,7 +577,7 @@
                         <div class="mt-6 flex justify-between">
                             <div>
                                 @if($payrollId && isset($schedule))
-                                    <a href="{{ route('payrolls.automation.show', ['schedule' => $schedule, 'employee' => $selectedEmployee->id]) }}" 
+                                    <a href="{{ route('payrolls.automation.show', ['schedule' => $schedule, 'id' => $selectedEmployee->id]) }}" 
                                        class="inline-flex items-center px-4 py-2 bg-gray-300 border border-transparent rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest hover:bg-gray-400 focus:bg-gray-400 active:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150">
                                         ← Back to Payroll
                                     </a>
