@@ -151,7 +151,7 @@
 
         function openEditModal(departmentId) {
             // Fetch department data
-            fetch(`/departments/${departmentId}`)
+            fetch(`{{ url('/') }}/departments/${departmentId}`)
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('modalTitle').textContent = 'Edit Department';

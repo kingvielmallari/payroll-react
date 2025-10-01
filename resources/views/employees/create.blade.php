@@ -908,7 +908,7 @@
                         
                         if (selectedDeptId) {
                             // Fetch positions for the selected department
-                            fetch(`/departments/${selectedDeptId}/positions`)
+                            fetch(`{{ url('/') }}/departments/${selectedDeptId}/positions`)
                                 .then(response => response.json())
                                 .then(positions => {
                                     positions.forEach(position => {

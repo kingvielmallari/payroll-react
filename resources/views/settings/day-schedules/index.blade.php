@@ -193,7 +193,7 @@
 
         function openEditModal(scheduleId) {
             // Fetch schedule data
-            fetch(`/day-schedules/${scheduleId}`)
+            fetch(`{{ url('/') }}/day-schedules/${scheduleId}`)
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('modalTitle').textContent = 'Edit Day Schedule';

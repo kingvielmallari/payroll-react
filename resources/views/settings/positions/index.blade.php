@@ -151,7 +151,7 @@
 
         function openEditModal(positionId) {
             // Fetch position data
-            fetch(`/positions/${positionId}`)
+            fetch(`{{ url('/') }}/positions/${positionId}`)
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('modalTitle').textContent = 'Edit Position';
