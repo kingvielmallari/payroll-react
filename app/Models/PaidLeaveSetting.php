@@ -13,6 +13,15 @@ class PaidLeaveSetting extends Model
         'name',
         'code',
         'description',
+        // Simplified fields
+        'total_days',
+        'limit_quantity',
+        'limit_period',
+        'applicable_to',
+        'pay_percentage',
+        'pay_rule',
+        'pay_applicable_to',
+        // Original fields for backward compatibility
         'days_per_year',
         'accrual_method',
         'accrual_rate',
@@ -38,6 +47,9 @@ class PaidLeaveSetting extends Model
     ];
 
     protected $casts = [
+        'pay_percentage' => 'decimal:2',
+        'pay_rule' => 'string',
+        'pay_applicable_to' => 'string',
         'accrual_rate' => 'decimal:4',
         'cash_conversion_rate' => 'decimal:4',
         'applicable_gender' => 'array',
@@ -68,23 +80,23 @@ class PaidLeaveSetting extends Model
         if ($this->applicable_gender && !in_array($employee->gender, $this->applicable_gender)) {
             return false;
         }
-        
+
         // Check employment type eligibility
         if ($this->applicable_employment_types && !in_array($employee->employment_type, $this->applicable_employment_types)) {
             return false;
         }
-        
+
         // Check employment status eligibility
         if ($this->applicable_employment_status && !in_array($employee->employment_status, $this->applicable_employment_status)) {
             return false;
         }
-        
+
         // Check minimum service requirement
         $monthsOfService = $employee->hire_date->diffInMonths(now());
         if ($monthsOfService < $this->minimum_service_months) {
             return false;
         }
-        
+
         return true;
     }
 
@@ -96,16 +108,16 @@ class PaidLeaveSetting extends Model
         if (!$this->isEmployeeEligible($employee)) {
             return 0;
         }
-        
+
         $year = $year ?: date('Y');
         $entitlement = $this->days_per_year;
-        
+
         // If prorated in first year
         if ($this->prorated_first_year && $employee->hire_date->year == $year) {
             $monthsWorked = 12 - $employee->hire_date->month + 1;
             $entitlement = ($this->days_per_year / 12) * $monthsWorked;
         }
-        
+
         return round($entitlement, 2);
     }
 
@@ -117,19 +129,19 @@ class PaidLeaveSetting extends Model
         if (!$this->isEmployeeEligible($employee)) {
             return 0;
         }
-        
+
         switch ($this->accrual_method) {
             case 'yearly':
                 // Accrual happens once per year, usually on hire anniversary or calendar year
                 return 0; // Would be calculated separately in yearly accrual process
-                
+
             case 'monthly':
                 $months = $periodStart->diffInMonths($periodEnd) + 1;
                 return $this->accrual_rate * $months;
-                
+
             case 'per_payroll':
                 return $this->accrual_rate;
-                
+
             default:
                 return 0;
         }
@@ -143,11 +155,11 @@ class PaidLeaveSetting extends Model
         if (!$this->can_convert_to_cash || $days <= 0) {
             return 0;
         }
-        
-        $convertibleDays = $this->max_convertible_days > 0 
-            ? min($days, $this->max_convertible_days) 
+
+        $convertibleDays = $this->max_convertible_days > 0
+            ? min($days, $this->max_convertible_days)
             : $days;
-            
+
         return $dailyRate * $convertibleDays * $this->cash_conversion_rate;
     }
 
@@ -159,10 +171,10 @@ class PaidLeaveSetting extends Model
         if (!$this->expires_annually) {
             return false;
         }
-        
+
         $year = $year ?: date('Y');
         $currentMonth = date('n');
-        
+
         return $currentMonth >= $this->expiry_month;
     }
 
@@ -174,7 +186,7 @@ class PaidLeaveSetting extends Model
         if ($this->benefit_eligibility === 'both') {
             return true;
         }
-        
+
         return $this->benefit_eligibility === $employee->benefits_status;
     }
 
@@ -185,7 +197,7 @@ class PaidLeaveSetting extends Model
     {
         return $query->where(function ($q) use ($benefitStatus) {
             $q->where('benefit_eligibility', 'both')
-              ->orWhere('benefit_eligibility', $benefitStatus);
+                ->orWhere('benefit_eligibility', $benefitStatus);
         });
     }
 }

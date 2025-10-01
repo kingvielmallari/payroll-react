@@ -1219,3 +1219,36 @@ AFTER SNAPSHOT CREATED:
 }
 ==================================================
 
+AFTER MAX CALCULATION:
+{
+    "employee_id": 24,
+    "taxable_income_after_max": 0,
+    "base_taxable_income": 0,
+    "basic_pay": 0,
+    "holiday_pay": 0,
+    "rest_pay": 0,
+    "overtime_pay": 0,
+    "timestamp": "2025-10-02 01:41:01"
+}
+
+BEFORE SNAPSHOT CREATION:
+{
+    "employee_id": 24,
+    "taxable_income_variable": 0,
+    "taxable_income_type": "integer",
+    "is_null": false,
+    "is_numeric": true,
+    "value_as_string": "0",
+    "timestamp": "2025-10-02 01:41:01"
+}
+
+AFTER SNAPSHOT CREATED:
+{
+    "snapshot_id": 3734,
+    "stored_taxable_income": "0.00",
+    "stored_gross_pay": "0.00",
+    "stored_net_pay": "0.00",
+    "timestamp": "2025-10-02 01:41:01"
+}
+==================================================
+

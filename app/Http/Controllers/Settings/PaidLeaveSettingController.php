@@ -24,30 +24,25 @@ class PaidLeaveSettingController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:10|unique:paid_leave_settings,code',
-            'description' => 'nullable|string',
-            'days_per_year' => 'required|integer|min:0|max:365',
-            'accrual_method' => 'required|in:yearly,monthly,per_payroll',
-            'accrual_rate' => 'required|numeric|min:0',
-            'minimum_service_months' => 'required|integer|min:0|max:120',
-            'prorated_first_year' => 'boolean',
-            'minimum_days_usage' => 'required|integer|min:1',
-            'maximum_days_usage' => 'nullable|integer|min:0',
-            'notice_days_required' => 'required|integer|min:0',
-            'can_carry_over' => 'boolean',
-            'max_carry_over_days' => 'nullable|integer|min:0',
-            'expires_annually' => 'boolean',
-            'expiry_month' => 'required|integer|between:1,12',
-            'can_convert_to_cash' => 'boolean',
-            'cash_conversion_rate' => 'nullable|numeric|min:0|max:2',
-            'max_convertible_days' => 'nullable|integer|min:0',
-            'applicable_gender' => 'nullable|array',
-            'applicable_employment_types' => 'nullable|array',
-            'applicable_employment_status' => 'nullable|array',
-            'is_active' => 'boolean',
-            'sort_order' => 'nullable|integer',
-            'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
+            'total_days' => 'required|integer|min:1|max:365',
+            'limit_quantity' => 'required|integer|min:1',
+            'limit_period' => 'required|in:monthly,quarterly,annually',
+            'pay_rule' => 'required|in:full,half',
+            'pay_applicable_to' => 'required|in:all,with_benefits,without_benefits',
         ]);
+
+        // Generate a unique code from the name
+        $code = strtoupper(substr(str_replace(' ', '', $validated['name']), 0, 10));
+        $originalCode = $code;
+        $counter = 1;
+
+        while (PaidLeaveSetting::where('code', $code)->exists()) {
+            $code = $originalCode . $counter;
+            $counter++;
+        }
+
+        $validated['code'] = $code;
+        $validated['is_active'] = true; // Always active by default
 
         PaidLeaveSetting::create($validated);
 
@@ -69,29 +64,14 @@ class PaidLeaveSettingController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'days_per_year' => 'required|integer|min:0|max:365',
-            'accrual_method' => 'required|in:yearly,monthly,per_payroll',
-            'accrual_rate' => 'required|numeric|min:0',
-            'minimum_service_months' => 'required|integer|min:0|max:120',
-            'prorated_first_year' => 'boolean',
-            'minimum_days_usage' => 'required|integer|min:1',
-            'maximum_days_usage' => 'nullable|integer|min:0',
-            'notice_days_required' => 'required|integer|min:0',
-            'can_carry_over' => 'boolean',
-            'max_carry_over_days' => 'nullable|integer|min:0',
-            'expires_annually' => 'boolean',
-            'expiry_month' => 'required|integer|between:1,12',
-            'can_convert_to_cash' => 'boolean',
-            'cash_conversion_rate' => 'nullable|numeric|min:0|max:2',
-            'max_convertible_days' => 'nullable|integer|min:0',
-            'applicable_gender' => 'nullable|array',
-            'applicable_employment_types' => 'nullable|array',
-            'applicable_employment_status' => 'nullable|array',
-            'is_active' => 'boolean',
-            'sort_order' => 'nullable|integer',
-            'benefit_eligibility' => 'required|in:both,with_benefits,without_benefits',
+            'total_days' => 'required|integer|min:1|max:365',
+            'limit_quantity' => 'required|integer|min:1',
+            'limit_period' => 'required|in:monthly,quarterly,annually',
+            'pay_rule' => 'required|in:full,half',
+            'pay_applicable_to' => 'required|in:all,with_benefits,without_benefits',
         ]);
+
+        $validated['is_active'] = true; // Always active by default
 
         $leave->update($validated);
 

@@ -57,7 +57,7 @@ Route::middleware(['auth', 'verified'])->prefix('settings')->name('settings.')->
         ->name('allowances.calculate-preview');
 
     // Paid Leave Settings
-    Route::resource('leaves', PaidLeaveSettingController::class);
+    Route::resource('leaves', PaidLeaveSettingController::class)->parameters(['leaves' => 'leave']);
     Route::patch('leaves/{leave}/toggle', [PaidLeaveSettingController::class, 'toggle'])
         ->name('leaves.toggle');
     Route::post('leaves/calculate-preview', [PaidLeaveSettingController::class, 'calculatePreview'])

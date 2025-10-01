@@ -10,6 +10,7 @@ use App\Http\Controllers\GovernmentFormsController;
 use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\PayrollScheduleSettingsController;
 use App\Http\Controllers\CashAdvanceController;
+use App\Http\Controllers\PaidLeaveController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\PositionController;
@@ -233,6 +234,44 @@ Route::middleware(['auth', 'verified', 'license'])->group(function () {
         Route::post('cash-advances/{cashAdvance}/reject', [CashAdvanceController::class, 'reject'])
             ->name('cash-advances.reject')
             ->middleware('can:approve cash advances');
+    });
+
+    // Paid Leave Management
+    Route::middleware(['auth', 'verified'])->group(function () {
+        // AJAX route for checking employee eligibility - must come before resource routes
+        Route::get('paid-leaves/check-eligibility', [PaidLeaveController::class, 'checkEligibility'])
+            ->name('paid-leaves.check-eligibility');
+
+        // AJAX route for getting employee payroll periods
+        Route::post('paid-leaves/employee-periods', [PaidLeaveController::class, 'getEmployeePayrollPeriods'])
+            ->name('paid-leaves.employee-periods');
+
+        // AJAX route for getting employee pay schedule
+        Route::post('paid-leaves/employee-schedule', [PaidLeaveController::class, 'getEmployeePaySchedule'])
+            ->name('paid-leaves.employee-schedule');
+
+        // AJAX route for checking employee active paid leaves
+        Route::post('paid-leaves/check-active', [PaidLeaveController::class, 'checkEmployeeActiveLeaves'])
+            ->name('paid-leaves.check-active');
+
+        // Paid leave summary generation
+        Route::post('paid-leaves/generate-summary', [PaidLeaveController::class, 'generateSummary'])
+            ->name('paid-leaves.generate-summary')
+            ->middleware('can:view paid leaves');
+
+        // Get employee leave balances
+        Route::post('paid-leaves/employee-balances', [PaidLeaveController::class, 'getEmployeeLeaveBalances'])
+            ->name('paid-leaves.employee-balances');
+
+        Route::resource('paid-leaves', PaidLeaveController::class);
+
+        // Additional paid leave routes
+        Route::post('paid-leaves/{paidLeave}/approve', [PaidLeaveController::class, 'approve'])
+            ->name('paid-leaves.approve')
+            ->middleware('can:approve paid leaves');
+        Route::post('paid-leaves/{paidLeave}/reject', [PaidLeaveController::class, 'reject'])
+            ->name('paid-leaves.reject')
+            ->middleware('can:approve paid leaves');
     });
 
     // DTR (Daily Time Record) Management
