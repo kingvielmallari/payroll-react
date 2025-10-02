@@ -228,11 +228,13 @@ class PaidLeaveController extends Controller
             return back()->withErrors(['end_date' => "This leave type allows only {$leaveSetting->total_days} day(s) per request."]);
         }
 
-        // Get employee's daily rate and calculate amount based on pay rule
-        $dailyRate = $employee->basic_salary ? ($employee->basic_salary / 22) : 0; // Assuming 22 working days per month
+        // Get employee's daily rate using the same logic as the API endpoint
+        $dailyRate = $this->calculateEmployeeDailyRate($employee);
+
+        // Apply pay rule (full or half pay) and round properly
         $payPercentage = $leaveSetting->pay_rule === 'full' ? 100 : 50;
-        $payRate = ($payPercentage / 100) * $dailyRate;
-        $totalAmount = $payRate * $totalDays;
+        $payRate = round(($payPercentage / 100) * $dailyRate, 2);
+        $totalAmount = round($payRate * $totalDays, 2);
 
         $paidLeaveData = array_merge($validatedData, [
             'leave_type' => strtolower(str_replace(' ', '_', $leaveSetting->name)), // Convert name to snake_case
@@ -250,7 +252,7 @@ class PaidLeaveController extends Controller
 
         $paidLeave = PaidLeave::create($paidLeaveData);
 
-        return redirect()->route('paid-leaves.index')->with('success', 'Paid leave request submitted successfully.');
+        return redirect()->route('paid-leaves.show', $paidLeave)->with('success', 'Paid leave request submitted successfully.');
     }
 
     /**
@@ -387,28 +389,38 @@ class PaidLeaveController extends Controller
      */
     public function edit(PaidLeave $paidLeave)
     {
+        $this->authorize('edit paid leaves');
+
         // Only allow editing pending requests
         if ($paidLeave->status !== 'pending') {
             return redirect()->route('paid-leaves.show', $paidLeave)
                 ->with('error', 'Only pending paid leave requests can be edited.');
         }
 
-        $employees = collect();
         $employee = null;
 
-        if (Auth::user()->can('manage employees')) {
-            $employees = Employee::select('id', 'first_name', 'middle_name', 'last_name', 'employee_number')
-                ->where('employment_status', 'active')
-                ->get()
-                ->transform(function ($emp) {
-                    $emp->setAttribute('full_name', trim($emp->first_name . ' ' . ($emp->middle_name ? $emp->middle_name . ' ' : '') . $emp->last_name));
-                    return $emp;
-                });
-        } else {
-            $employee = $paidLeave->employee;
+        // If employee user, get their employee record
+        if (Auth::user()->hasRole('Employee')) {
+            $employee = Auth::user()->employee;
+            if (!$employee) {
+                return redirect()->back()->with('error', 'Employee profile not found.');
+            }
+
+            // Check if the employee is editing their own request
+            if ($paidLeave->employee_id !== $employee->id) {
+                return redirect()->route('paid-leaves.index')
+                    ->with('error', 'You can only edit your own paid leave requests.');
+            }
         }
 
-        return view('paid-leaves.edit', compact('paidLeave', 'employees', 'employee'));
+        $employees = Employee::active()->orderBy('last_name')->get();
+
+        // Get active leave settings
+        $leaveSettings = \App\Models\PaidLeaveSetting::active()
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'total_days', 'limit_quantity', 'limit_period', 'pay_rule', 'pay_applicable_to']);
+
+        return view('paid-leaves.edit', compact('paidLeave', 'employees', 'employee', 'leaveSettings'));
     }
 
     /**
@@ -416,6 +428,8 @@ class PaidLeaveController extends Controller
      */
     public function update(Request $request, PaidLeave $paidLeave)
     {
+        $this->authorize('edit paid leaves');
+
         // Only allow updating pending requests
         if ($paidLeave->status !== 'pending') {
             return redirect()->route('paid-leaves.show', $paidLeave)
@@ -424,25 +438,59 @@ class PaidLeaveController extends Controller
 
         $validatedData = $request->validate([
             'employee_id' => 'required|exists:employees,id',
-            'leave_type' => 'required|in:sick_leave,vacation_leave,emergency_leave,maternity_leave,paternity_leave,bereavement_leave',
-            'start_date' => 'required|date',
+            'leave_setting_id' => 'required|exists:paid_leave_settings,id',
+            'start_date' => 'required|date|after_or_equal:today',
             'end_date' => 'required|date|after_or_equal:start_date',
             'reason' => 'required|string|max:500',
             'supporting_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048',
         ]);
 
-        // Recalculate totals
+        // Get leave setting and employee
+        $leaveSetting = \App\Models\PaidLeaveSetting::findOrFail($validatedData['leave_setting_id']);
+        $employee = Employee::findOrFail($validatedData['employee_id']);
+
+        // Verify employee is eligible for this leave type
+        if (!$this->isEmployeeEligibleForLeave($employee, $leaveSetting)) {
+            return back()->withErrors(['leave_setting_id' => 'Employee is not eligible for this leave type.']);
+        }
+
+        // Calculate total days
         $startDate = \Carbon\Carbon::parse($validatedData['start_date']);
         $endDate = \Carbon\Carbon::parse($validatedData['end_date']);
         $totalDays = $startDate->diffInDays($endDate) + 1;
 
-        $employee = Employee::findOrFail($validatedData['employee_id']);
-        $dailyRate = $employee->basic_salary ? ($employee->basic_salary / 22) : 0;
-        $totalAmount = $dailyRate * $totalDays;
+        // Verify total days matches leave setting
+        if ($totalDays != $leaveSetting->total_days) {
+            return back()->withErrors(['end_date' => "This leave type allows only {$leaveSetting->total_days} day(s) per request."]);
+        }
+
+        // Check if employee has sufficient leave balance (exclude current request from calculation)
+        $usedLeaves = PaidLeave::where('employee_id', $employee->id)
+            ->whereHas('leaveSetting', function ($q) use ($leaveSetting) {
+                $q->where('id', $leaveSetting->id);
+            })
+            ->where('id', '!=', $paidLeave->id) // Exclude current request
+            ->where('status', '!=', 'rejected')
+            ->sum('total_days');
+
+        $availableLeaves = $leaveSetting->limit_quantity - $usedLeaves;
+
+        if ($availableLeaves < 1) {
+            return back()->withErrors(['leave_setting_id' => 'Insufficient leave balance for this leave type.']);
+        }
+
+        // Get employee's daily rate
+        $dailyRate = $this->calculateEmployeeDailyRate($employee);
+
+        // Apply pay rule (full or half pay) and round properly
+        $payPercentage = $leaveSetting->pay_rule === 'full' ? 100 : 50;
+        $payRate = round(($payPercentage / 100) * $dailyRate, 2);
+        $totalAmount = round($payRate * $totalDays, 2);
 
         $updateData = array_merge($validatedData, [
+            'leave_type' => strtolower(str_replace(' ', '_', $leaveSetting->name)), // Convert name to snake_case
             'total_days' => $totalDays,
-            'daily_rate' => $dailyRate,
+            'daily_rate' => $payRate, // Use the adjusted rate based on pay percentage
             'total_amount' => $totalAmount,
         ]);
 
@@ -462,6 +510,8 @@ class PaidLeaveController extends Controller
      */
     public function destroy(PaidLeave $paidLeave)
     {
+        $this->authorize('delete paid leaves');
+
         // Only allow deleting pending requests
         if ($paidLeave->status !== 'pending') {
             return redirect()->back()
@@ -472,5 +522,138 @@ class PaidLeaveController extends Controller
 
         return redirect()->route('paid-leaves.index')
             ->with('success', 'Paid leave request deleted successfully.');
+    }
+
+    /**
+     * Get employee daily rate calculation info using actual schedule data
+     */
+    public function getEmployeeDailyRate(Request $request)
+    {
+        $employee = Employee::with(['timeSchedule', 'daySchedule'])->find($request->employee_id);
+        if (!$employee) {
+            return response()->json(['error' => 'Employee not found'], 404);
+        }
+
+        // Calculate daily rate using the extracted method
+        $dailyRate = $this->calculateEmployeeDailyRate($employee);
+
+        // Get schedule information for debugging/display
+        $scheduleInfo = [
+            'time_schedule' => $employee->timeSchedule ? [
+                'name' => $employee->timeSchedule->name,
+                'total_hours' => $employee->timeSchedule->total_hours,
+                'time_range' => $employee->timeSchedule->time_range_display ?? null
+            ] : null,
+            'day_schedule' => $employee->daySchedule ? [
+                'name' => $employee->daySchedule->name,
+                'days' => $employee->daySchedule->days_display ?? null,
+                'days_per_week' => $employee->getDaysPerWeek()
+            ] : null
+        ];
+
+        return response()->json([
+            'daily_rate' => $dailyRate, // Already rounded in calculateEmployeeDailyRate method
+            'rate_type' => $employee->rate_type ?? 'monthly',
+            'fixed_rate' => $employee->fixed_rate ?? $employee->basic_salary,
+            'schedule_info' => $scheduleInfo,
+            'calculation_method' => $employee->fixed_rate && $employee->rate_type ? 'fixed_rate_system' : 'legacy_system'
+        ]);
+    }
+
+    /**
+     * Calculate employee's daily rate using the same logic as payroll system
+     */
+    private function calculateEmployeeDailyRate($employee)
+    {
+        $dailyRate = 0;
+
+        if ($employee->fixed_rate && $employee->rate_type) {
+            // Use the new fixed rate system with actual employee schedules
+
+            // Get employee's assigned time schedule total hours for calculation
+            $timeSchedule = $employee->timeSchedule;
+            $dailyHours = $timeSchedule ? $timeSchedule->total_hours : 8; // Default to 8 hours if no schedule
+
+            // For monthly working days calculation, use current month as default
+            $currentMonth = now();
+            $monthStart = $currentMonth->copy()->startOfMonth();
+            $monthEnd = $currentMonth->copy()->endOfMonth();
+
+            switch ($employee->rate_type) {
+                case 'daily':
+                    $dailyRate = $employee->fixed_rate;
+                    break;
+
+                case 'hourly':
+                    // hourly rate * assigned total hours per day
+                    $dailyRate = $employee->fixed_rate * $dailyHours;
+                    break;
+
+                case 'weekly':
+                    // Calculate employee's working days per week based on day schedule
+                    $daysPerWeek = $employee->getDaysPerWeek();
+                    if ($daysPerWeek > 0) {
+                        $dailyRate = $employee->fixed_rate / $daysPerWeek;
+                    } else {
+                        $dailyRate = $employee->fixed_rate / 5; // Fallback to 5 days
+                    }
+                    break;
+
+                case 'semi_monthly':
+                case 'semi-monthly':
+                    // Calculate working days in a semi-monthly period based on employee schedule
+                    $sampleSemiStart = $monthStart->copy();
+                    $sampleSemiEnd = $sampleSemiStart->copy()->addDays(14); // First 15 days
+                    $workingDaysInSemiPeriod = 0;
+                    $sampleDate = $sampleSemiStart->copy();
+
+                    while ($sampleDate->lte($sampleSemiEnd)) {
+                        if ($employee->isWorkingDay($sampleDate)) {
+                            $workingDaysInSemiPeriod++;
+                        }
+                        $sampleDate->addDay();
+                    }
+
+                    if ($workingDaysInSemiPeriod > 0) {
+                        $dailyRate = $employee->fixed_rate / $workingDaysInSemiPeriod;
+                    } else {
+                        $dailyRate = $employee->fixed_rate / 11; // Fallback
+                    }
+                    break;
+
+                case 'monthly':
+                    // Calculate actual working days in the month based on employee's day schedule
+                    $workingDaysInMonth = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+
+                    if ($workingDaysInMonth > 0) {
+                        $dailyRate = $employee->fixed_rate / $workingDaysInMonth;
+                    } else {
+                        $dailyRate = $employee->fixed_rate / 22; // Fallback
+                    }
+                    break;
+
+                default:
+                    // Fallback calculation using basic salary
+                    if ($employee->basic_salary) {
+                        $workingDaysInMonth = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+                        $dailyRate = $workingDaysInMonth > 0 ? ($employee->basic_salary / $workingDaysInMonth) : ($employee->basic_salary / 22);
+                    }
+            }
+        } else {
+            // Use old calculation method with dynamic working days if possible
+            if ($employee->daily_rate && $employee->daily_rate > 0) {
+                $dailyRate = $employee->daily_rate;
+            } elseif ($employee->basic_salary && $employee->basic_salary > 0) {
+                // Try to use actual working days calculation
+                $currentMonth = now();
+                $monthStart = $currentMonth->copy()->startOfMonth();
+                $monthEnd = $currentMonth->copy()->endOfMonth();
+                $workingDaysInMonth = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+
+                $dailyRate = $workingDaysInMonth > 0 ? ($employee->basic_salary / $workingDaysInMonth) : ($employee->basic_salary / 22);
+            }
+        }
+
+        return round($dailyRate, 2);
     }
 }

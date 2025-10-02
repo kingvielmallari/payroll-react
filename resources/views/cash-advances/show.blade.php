@@ -81,20 +81,30 @@
                         <div class="flex space-x-2">
                             @can('approve cash advances')
                             <button type="button" class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-lg font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg" 
-                                    onclick="showApproveModal()">
+                                    onclick="approveWithOriginalValues({{ $cashAdvance->id }})"
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                                 </svg>
                                 Approve
                             </button>
                             <button type="button" class="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-lg font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-700 focus:bg-red-700 active:bg-red-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg"
-                                    onclick="showRejectModal()">
+                                    onclick="rejectWithConfirmation({{ $cashAdvance->id }})">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                 </svg>
                                 Reject
                             </button>
                             @endcan
+                            
+                            @if($cashAdvance->employee_id === auth()->user()->employee?->id || auth()->user()->can('edit cash advances'))
+                            <a href="{{ route('cash-advances.edit', $cashAdvance) }}" 
+                               class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-lg font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                                Edit
+                            </a>
+                            @endif
                         </div>
                     @endif
                 </div>
@@ -170,13 +180,13 @@
 
                             @if($cashAdvance->installments)
                             <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                                <h6 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                <h6 class="text-lg font-semibold text-gray-900 mb-1 flex items-center">
                                     <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                     </svg>
                                     Payment Plan
                                 </h6>
-                                <div class="space-y-3">
+                                <div class="space-y-1">
                                     <div class="flex justify-between items-center">
                                         <span class="text-sm font-medium text-gray-600">Installments:</span>
                                         <span class="text-lg font-bold text-blue-700">
@@ -333,7 +343,7 @@
 
                     <!-- Reason and Remarks -->
                     <!-- Remarks Section -->
-                    @if($cashAdvance->remarks)
+                    {{-- @if($cashAdvance->remarks)
                     <div class="mt-8">
                         <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                             <h6 class="text-lg font-semibold text-gray-900 mb-3 flex items-center">
@@ -345,7 +355,7 @@
                             <p class="text-sm text-gray-800">{{ $cashAdvance->remarks }}</p>
                         </div>
                     </div>
-                    @endif
+                    @endif --}}
                 </div>
             </div>
 
@@ -387,7 +397,12 @@
                         <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-jade-500 focus:border-jade-500" 
                                 id="installments" name="installments" required onchange="calculateApprovalTotals()">
                             @for($i = 1; $i <= 12; $i++)
-                            <option value="{{ $i }}" {{ $cashAdvance->installments == $i ? 'selected' : '' }}>
+                            @php
+                                $currentInstallments = $cashAdvance->deduction_frequency === 'monthly' 
+                                    ? $cashAdvance->monthly_installments 
+                                    : $cashAdvance->installments;
+                            @endphp
+                            <option value="{{ $i }}" {{ $currentInstallments == $i ? 'selected' : '' }}>
                                 {{ $i }} month{{ $i > 1 ? 's' : '' }}
                             </option>
                             @endfor
@@ -537,5 +552,85 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+// Direct approval with original values (no modal)
+function approveWithOriginalValues(cashAdvanceId) {
+    if (confirm('Are you sure you want to approve this cash advance request with the original values?')) {
+        // Create a form to submit approval with original values
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/cash-advances/' + cashAdvanceId + '/approve';
+        
+        // Add CSRF token
+        const tokenInput = document.createElement('input');
+        tokenInput.type = 'hidden';
+        tokenInput.name = '_token';
+        tokenInput.value = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        form.appendChild(tokenInput);
+        
+        // Use original requested amount as approved amount
+        const amountInput = document.createElement('input');
+        amountInput.type = 'hidden';
+        amountInput.name = 'approved_amount';
+        amountInput.value = '{{ $cashAdvance->requested_amount }}';
+        form.appendChild(amountInput);
+        
+        // Use original installments based on deduction frequency
+        const installmentsInput = document.createElement('input');
+        installmentsInput.type = 'hidden';
+        installmentsInput.name = 'installments';
+        @php
+            $originalInstallments = $cashAdvance->deduction_frequency === 'monthly' 
+                ? $cashAdvance->monthly_installments 
+                : $cashAdvance->installments;
+        @endphp
+        installmentsInput.value = '{{ $originalInstallments }}';
+        form.appendChild(installmentsInput);
+        
+        // Use original interest rate
+        const interestInput = document.createElement('input');
+        interestInput.type = 'hidden';
+        interestInput.name = 'interest_rate';
+        interestInput.value = '{{ $cashAdvance->interest_rate }}';
+        form.appendChild(interestInput);
+        
+        // Add default remarks
+        const remarksInput = document.createElement('input');
+        remarksInput.type = 'hidden';
+        remarksInput.name = 'remarks';
+        remarksInput.value = 'Approved by administrator';
+        form.appendChild(remarksInput);
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+// Simple reject function with confirmation
+function rejectWithConfirmation(cashAdvanceId) {
+    if (confirm('Are you sure you want to reject this cash advance request?')) {
+        // Create a form to submit rejection
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/cash-advances/' + cashAdvanceId + '/reject';
+        
+        // Add CSRF token
+        const tokenInput = document.createElement('input');
+        tokenInput.type = 'hidden';
+        tokenInput.name = '_token';
+        tokenInput.value = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        form.appendChild(tokenInput);
+        
+        // Add default rejection remarks
+        const remarksInput = document.createElement('input');
+        remarksInput.type = 'hidden';
+        remarksInput.name = 'remarks';
+        remarksInput.value = 'Request rejected by administrator';
+        form.appendChild(remarksInput);
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
 </script>
 </x-app-layout>

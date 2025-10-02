@@ -1778,6 +1778,91 @@ class PayrollController extends Controller
     }
 
     /**
+     * Calculate daily rate for an employee based on their fixed_rate and rate_type
+     */
+    private function calculateDailyRate($employee, $basicSalary, $periodStart = null, $periodEnd = null)
+    {
+        // Use fixed_rate and rate_type if available
+        if ($employee->fixed_rate && $employee->fixed_rate > 0 && $employee->rate_type) {
+            // Get employee's assigned time schedule total hours for calculation
+            $timeSchedule = $employee->timeSchedule;
+            $dailyHours = $timeSchedule ? $timeSchedule->total_hours : 8; // Default to 8 hours if no schedule
+
+            // Set default period if not provided
+            if (!$periodStart || !$periodEnd) {
+                $currentMonth = now();
+                $periodStart = $currentMonth->copy()->startOfMonth();
+                $periodEnd = $currentMonth->copy()->endOfMonth();
+            }
+
+            // Calculate working days based on rate type - each rate type has its own calculation period
+            switch ($employee->rate_type) {
+                case 'hourly':
+                    return $employee->fixed_rate * $dailyHours;
+
+                case 'daily':
+                    return $employee->fixed_rate;
+
+                case 'weekly':
+                    // For weekly rate: calculate working days in a typical week
+                    $weekStart = \Carbon\Carbon::parse($periodStart)->startOfWeek();
+                    $weekEnd = \Carbon\Carbon::parse($periodStart)->endOfWeek();
+                    $weeklyWorkingDays = $employee->getWorkingDaysForPeriod($weekStart, $weekEnd);
+                    return $weeklyWorkingDays > 0 ? ($employee->fixed_rate / $weeklyWorkingDays) : 0;
+
+                case 'semi_monthly':
+                    // For semi-monthly rate: determine which cutoff period and count working days in that specific period
+                    $payrollStartDay = \Carbon\Carbon::parse($periodStart)->day;
+                    $currentMonth = \Carbon\Carbon::parse($periodStart);
+
+                    if ($payrollStartDay <= 15) {
+                        // First cutoff (1st - 15th): count working days in this period
+                        $cutoffStart = $currentMonth->copy()->setDay(1);
+                        $cutoffEnd = $currentMonth->copy()->setDay(15);
+                    } else {
+                        // Second cutoff (16th - EOD): count working days in this period  
+                        $cutoffStart = $currentMonth->copy()->setDay(16);
+                        $cutoffEnd = $currentMonth->copy()->endOfMonth();
+                    }
+
+                    $semiMonthlyWorkingDays = $employee->getWorkingDaysForPeriod($cutoffStart, $cutoffEnd);
+                    return $semiMonthlyWorkingDays > 0 ? ($employee->fixed_rate / $semiMonthlyWorkingDays) : 0;
+
+                case 'monthly':
+                    // For monthly rate: calculate working days in the FULL month containing the payroll period
+                    $monthStart = \Carbon\Carbon::parse($periodStart)->startOfMonth();
+                    $monthEnd = \Carbon\Carbon::parse($periodStart)->endOfMonth();
+                    $monthlyWorkingDays = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+                    return $monthlyWorkingDays > 0 ? ($employee->fixed_rate / $monthlyWorkingDays) : 0;
+
+                default:
+                    // If rate_type is not recognized, fall back to monthly calculation
+                    $monthStart = \Carbon\Carbon::parse($periodStart)->startOfMonth();
+                    $monthEnd = \Carbon\Carbon::parse($periodStart)->endOfMonth();
+                    $monthlyWorkingDays = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+                    return $monthlyWorkingDays > 0 ? ($employee->fixed_rate / $monthlyWorkingDays) : 0;
+            }
+        }
+
+        // Fallback to dynamic calculation based on basic salary if fixed_rate/rate_type not available
+        if ($employee->daily_rate && $employee->daily_rate > 0) {
+            return $employee->daily_rate;
+        }
+
+        // Calculate daily rate from basic salary using dynamic working days for full month
+        if (!$periodStart || !$periodEnd) {
+            $currentMonth = now();
+            $periodStart = $currentMonth->copy()->startOfMonth();
+            $periodEnd = $currentMonth->copy()->endOfMonth();
+        }
+
+        $monthStart = \Carbon\Carbon::parse($periodStart)->startOfMonth();
+        $monthEnd = \Carbon\Carbon::parse($periodStart)->endOfMonth();
+        $monthlyWorkingDays = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+        return $monthlyWorkingDays > 0 ? ($basicSalary / $monthlyWorkingDays) : 0;
+    }
+
+    /**
      * Calculate deductions for an employee using dynamic settings
      */
     private function calculateDeductions($employee, $grossPay, $basicPay = null, $overtimePay = 0, $allowances = 0, $bonuses = 0, $payFrequency = 'semi_monthly', $periodStart = null, $periodEnd = null)
@@ -2447,7 +2532,7 @@ class PayrollController extends Controller
             if ($employee) {
                 return redirect()->route('payrolls.automation.show', [
                     'schedule' => $employee->pay_schedule,
-                    'employee' => $payroll
+                    'id' => $payroll
                 ]);
             }
         }
@@ -2462,7 +2547,7 @@ class PayrollController extends Controller
             $employeeId = $payroll->payrollDetails->first()->employee_id;
             return redirect()->route('payrolls.automation.show', [
                 'schedule' => $payroll->pay_schedule,
-                'employee' => $employeeId
+                'id' => $employeeId
             ]);
         }
 
@@ -3702,7 +3787,7 @@ class PayrollController extends Controller
 
             case 'daily_rate_multiplier':
                 // Calculate as multiplier of daily rate
-                $dailyRate = $employee->daily_rate ?? ($employee->basic_salary / 22);
+                $dailyRate = $employee->daily_rate ?? $this->calculateDailyRate($employee, $employee->basic_salary ?? 0, $payroll->period_start, $payroll->period_end);
                 $daysWorked = $this->calculateDaysWorked($employee, $payroll);
                 $amount = $dailyRate * ($setting->multiplier ?? 0) * $daysWorked;
                 break;
@@ -7675,7 +7760,7 @@ class PayrollController extends Controller
         if ($existingPayroll) {
             return redirect()->route('payrolls.automation.show', [
                 'schedule' => $schedule,
-                'employee' => $employee->id
+                'id' => $employee->id
             ])->with('info', 'This payroll is already processed.');
         }
 

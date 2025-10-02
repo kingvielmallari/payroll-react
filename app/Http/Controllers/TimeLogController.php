@@ -1646,7 +1646,7 @@ class TimeLogController extends Controller
                 if ($request->filled('schedule')) {
                     return redirect()->route('payrolls.automation.show', [
                         'schedule' => $request->schedule,
-                        'employee' => $validated['employee_id']
+                        'id' => $validated['employee_id']
                     ])->with('success', $message . ' Payroll calculations updated.');
                 } else {
                     // Fallback to traditional payroll route

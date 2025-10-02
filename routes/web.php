@@ -263,7 +263,13 @@ Route::middleware(['auth', 'verified', 'license'])->group(function () {
         Route::post('paid-leaves/employee-balances', [PaidLeaveController::class, 'getEmployeeLeaveBalances'])
             ->name('paid-leaves.employee-balances');
 
-        Route::resource('paid-leaves', PaidLeaveController::class);
+        // Get employee daily rate
+        Route::post('paid-leaves/employee-daily-rate', [PaidLeaveController::class, 'getEmployeeDailyRate'])
+            ->name('paid-leaves.employee-daily-rate');
+
+        Route::resource('paid-leaves', PaidLeaveController::class)->parameters([
+            'paid-leaves' => 'paidLeave'
+        ]);
 
         // Additional paid leave routes
         Route::post('paid-leaves/{paidLeave}/approve', [PaidLeaveController::class, 'approve'])

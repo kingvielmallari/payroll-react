@@ -182,7 +182,15 @@
             <!-- Paid Leaves Table -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">Paid Leaves</h3>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Paid Leaves</h3>
+                        <div class="text-sm text-gray-600">
+                            <div>Showing {{ $paidLeaves->count() }} of {{ $paidLeaves->total() }} paid leaves</div>
+                            <div class="text-xs text-blue-600 mt-1">
+                                <strong>Tip:</strong> Right-click on any paid leave row to access View, Approve, and Delete actions.
+                            </div>
+                        </div>
+                    </div>
                     
                     @if($paidLeaves->count() > 0)
                         <div class="overflow-x-auto">
@@ -196,12 +204,17 @@
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Days</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Amount</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     @foreach($paidLeaves as $paidLeave)
-                                    <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location.href='{{ route('paid-leaves.show', $paidLeave) }}'">
+                                    <tr class="paid-leave-row hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
+                                        data-paid-leave-id="{{ $paidLeave->id }}"
+                                        data-reference="{{ $paidLeave->reference_number }}"
+                                        data-employee="{{ $paidLeave->employee->full_name }}"
+                                        data-status="{{ $paidLeave->status }}"
+                                        oncontextmenu="showPaidLeaveContextMenu(event, this)"
+                                        onclick="window.location.href='{{ route('paid-leaves.show', $paidLeave) }}'">
                                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                             {{ $paidLeave->reference_number }}
                                         </td>
@@ -213,7 +226,13 @@
                                             {{ $paidLeave->leave_type_display }}
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {{ $paidLeave->start_date->format('M d, Y') }} - {{ $paidLeave->end_date->format('M d, Y') }}
+                                            @if($paidLeave->start_date->format('Y-m-d') === $paidLeave->end_date->format('Y-m-d'))
+                                                {{ $paidLeave->start_date->format('M d, Y') }}
+                                            @elseif($paidLeave->start_date->format('Y-m') === $paidLeave->end_date->format('Y-m'))
+                                                {{ $paidLeave->start_date->format('M d') }}-{{ $paidLeave->end_date->format('d, Y') }}
+                                            @else
+                                                {{ $paidLeave->start_date->format('M d, Y') }} - {{ $paidLeave->end_date->format('M d, Y') }}
+                                            @endif
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {{ $paidLeave->total_days }} {{ Str::plural('day', $paidLeave->total_days) }}
@@ -223,20 +242,6 @@
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             {!! $paidLeave->status_badge !!}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <div class="flex space-x-2">
-                                                <a href="{{ route('paid-leaves.show', $paidLeave) }}" 
-                                                   class="text-blue-600 hover:text-blue-900 transition-colors">
-                                                    View
-                                                </a>
-                                                @if($paidLeave->status === 'pending')
-                                                    <a href="{{ route('paid-leaves.edit', $paidLeave) }}" 
-                                                       class="text-indigo-600 hover:text-indigo-900 transition-colors">
-                                                        Edit
-                                                    </a>
-                                                @endif
-                                            </div>
                                         </td>
                                     </tr>
                                     @endforeach
@@ -324,5 +329,200 @@
             url.search = params.toString();
             window.location.href = url.toString();
         }
+
+        // Paid Leave Row Context Menu
+        let selectedPaidLeaveId = null;
+
+        function showPaidLeaveContextMenu(event, row) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const contextMenu = document.getElementById('contextMenu');
+            const paidLeaveId = row.dataset.paidLeaveId;
+            const reference = row.dataset.reference;
+            const employee = row.dataset.employee;
+            const status = row.dataset.status;
+
+            selectedPaidLeaveId = paidLeaveId;
+
+            // Update context menu content
+            document.getElementById('contextMenuPaidLeave').textContent = reference;
+            document.getElementById('contextMenuEmployee').textContent = employee;
+
+            // Show/hide actions based on status
+            const editAction = document.getElementById('contextMenuEdit');
+            const approveAction = document.getElementById('contextMenuApprove');
+            const rejectAction = document.getElementById('contextMenuReject');
+
+            if (status === 'pending') {
+                editAction.style.display = 'flex';
+                @can('approve paid leaves')
+                approveAction.style.display = 'flex';
+                rejectAction.style.display = 'flex';
+                @else
+                approveAction.style.display = 'none';
+                rejectAction.style.display = 'none';
+                @endcan
+            } else {
+                editAction.style.display = 'none';
+                approveAction.style.display = 'none';
+                rejectAction.style.display = 'none';
+            }
+
+            // Update links
+            document.getElementById('contextMenuView').href = '{{ url('paid-leaves') }}/' + paidLeaveId;
+            document.getElementById('contextMenuEdit').href = '{{ url('paid-leaves') }}/' + paidLeaveId + '/edit';
+            
+            // Position and show context menu at mouse position
+            const rect = document.body.getBoundingClientRect();
+            const menuWidth = 208; // min-w-52 = 208px
+            const menuHeight = 300; // approximate height
+            
+            let left = event.clientX;
+            let top = event.clientY;
+            
+            // Adjust if menu would go off screen
+            if (left + menuWidth > window.innerWidth) {
+                left = window.innerWidth - menuWidth - 10;
+            }
+            if (top + menuHeight > window.innerHeight) {
+                top = window.innerHeight - menuHeight - 10;
+            }
+            
+            contextMenu.style.left = left + 'px';
+            contextMenu.style.top = top + 'px';
+            contextMenu.classList.remove('hidden', 'opacity-0', 'scale-95');
+            contextMenu.classList.add('opacity-100', 'scale-100');
+        }
+
+        // Context menu actions
+        document.getElementById('contextMenuApprove').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (selectedPaidLeaveId && confirm('Are you sure you want to approve this paid leave request?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{{ url('paid-leaves') }}/' + selectedPaidLeaveId + '/approve';
+                
+                const tokenInput = document.createElement('input');
+                tokenInput.type = 'hidden';
+                tokenInput.name = '_token';
+                tokenInput.value = '{{ csrf_token() }}';
+                form.appendChild(tokenInput);
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
+            hideContextMenu();
+        });
+
+        document.getElementById('contextMenuReject').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (selectedPaidLeaveId && confirm('Are you sure you want to reject this paid leave request?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{{ url('paid-leaves') }}/' + selectedPaidLeaveId + '/reject';
+                
+                const tokenInput = document.createElement('input');
+                tokenInput.type = 'hidden';
+                tokenInput.name = '_token';
+                tokenInput.value = '{{ csrf_token() }}';
+                form.appendChild(tokenInput);
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
+            hideContextMenu();
+        });
+
+        document.getElementById('contextMenuDelete').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (selectedPaidLeaveId && confirm('Are you sure you want to delete this paid leave request? This action cannot be undone.')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{{ url('paid-leaves') }}/' + selectedPaidLeaveId;
+                
+                const tokenInput = document.createElement('input');
+                tokenInput.type = 'hidden';
+                tokenInput.name = '_token';
+                tokenInput.value = '{{ csrf_token() }}';
+                form.appendChild(tokenInput);
+                
+                const methodInput = document.createElement('input');
+                methodInput.type = 'hidden';
+                methodInput.name = '_method';
+                methodInput.value = 'DELETE';
+                form.appendChild(methodInput);
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
+            hideContextMenu();
+        });
+
+        // Hide context menu
+        function hideContextMenu() {
+            const contextMenu = document.getElementById('contextMenu');
+            contextMenu.classList.add('opacity-0', 'scale-95');
+            contextMenu.classList.remove('opacity-100', 'scale-100');
+            setTimeout(() => {
+                contextMenu.classList.add('hidden');
+            }, 150);
+        }
+
+        // Hide context menu when clicking elsewhere
+        document.addEventListener('click', function(event) {
+            const contextMenu = document.getElementById('contextMenu');
+            if (!contextMenu.contains(event.target) && !event.target.closest('.paid-leave-row')) {
+                hideContextMenu();
+            }
+        });
     </script>
+
+    <!-- Context Menu -->
+    <div id="contextMenu" class="fixed bg-white rounded-md shadow-xl border border-gray-200 py-1 z-50 hidden min-w-52 backdrop-blur-sm transition-all duration-150 transform opacity-0 scale-95">
+        <div id="contextMenuHeader" class="px-3 py-2 border-b border-gray-100 bg-gray-50 rounded-t-md">
+            <div class="text-sm font-medium text-gray-900" id="contextMenuPaidLeave"></div>
+            <div class="text-xs text-gray-500" id="contextMenuEmployee"></div>
+        </div>
+        
+        <div class="py-1">
+            <a href="#" id="contextMenuView" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors duration-150">
+                <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                </svg>
+                View Details
+            </a>
+
+            <a href="#" id="contextMenuEdit" class="flex items-center px-3 py-2 text-sm text-indigo-700 hover:bg-indigo-50 hover:text-indigo-900 transition-colors duration-150" style="display: none;">
+                <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                </svg>
+                Edit
+            </a>
+
+            <a href="#" id="contextMenuApprove" class="flex items-center px-3 py-2 text-sm text-green-700 hover:bg-green-50 hover:text-green-900 transition-colors duration-150" style="display: none;">
+                <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Approve
+            </a>
+
+            <a href="#" id="contextMenuReject" class="flex items-center px-3 py-2 text-sm text-red-700 hover:bg-red-50 hover:text-red-900 transition-colors duration-150" style="display: none;">
+                <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Reject
+            </a>
+
+            <div class="border-t border-gray-100 my-1"></div>
+
+            <a href="#" id="contextMenuDelete" class="flex items-center px-3 py-2 text-sm text-red-700 hover:bg-red-50 hover:text-red-900 transition-colors duration-150">
+                <svg class="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+                Delete
+            </a>
+        </div>
+    </div>
 </x-app-layout>

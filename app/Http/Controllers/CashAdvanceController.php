@@ -231,7 +231,7 @@ class CashAdvanceController extends Controller
             case 'semi_monthly':
                 return $this->calculateSemiMonthlyPeriodForOffset($scheduleSetting, $baseDate, $offset, $monthlyTiming, $deductionFrequency);
             case 'weekly':
-                return $this->calculateWeeklyPeriodForOffset($scheduleSetting, $baseDate, $offset);
+                return $this->calculateWeeklyPeriodForOffset($scheduleSetting, $baseDate, $offset, $monthlyTiming, $deductionFrequency);
             case 'monthly':
                 return $this->calculateMonthlyPeriodForOffset($scheduleSetting, $baseDate, $offset);
             default:
@@ -326,7 +326,7 @@ class CashAdvanceController extends Controller
     /**
      * Calculate weekly periods with offset
      */
-    private function calculateWeeklyPeriodForOffset($scheduleSetting, $baseDate, $offset)
+    private function calculateWeeklyPeriodForOffset($scheduleSetting, $baseDate, $offset, $monthlyTiming = null, $deductionFrequency = null)
     {
         $cutoffPeriods = $scheduleSetting->cutoff_periods;
         if (is_string($cutoffPeriods)) {
@@ -339,17 +339,53 @@ class CashAdvanceController extends Controller
         $cutoff = $cutoffPeriods[0];
         $startDayName = $cutoff['start_day'];
 
-        // Get the start of current week based on start day
-        $startDate = $baseDate->copy()->startOfWeek();
-        if ($startDayName !== 'monday') {
-            // Adjust for different start days
-            $dayMap = ['sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6];
-            $targetDay = $dayMap[$startDayName] ?? 1;
-            $startDate = $baseDate->copy()->startOfWeek()->addDays($targetDay - 1);
+        // Handle monthly deduction frequency with timing preference
+        if ($deductionFrequency === 'monthly' && $monthlyTiming) {
+            $currentMonth = $baseDate->copy();
+
+            if ($monthlyTiming === 'first_payroll') {
+                // Get first week of the month for each offset
+                $targetMonth = $currentMonth->copy()->addMonths($offset);
+                $firstDayOfMonth = $targetMonth->copy()->startOfMonth();
+
+                // Find the first occurrence of the pay day in this month
+                $dayMap = ['sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6];
+                $targetDayOfWeek = $dayMap[$startDayName] ?? 1;
+
+                // Find the first occurrence of the target day in the month
+                $startDate = $firstDayOfMonth->copy();
+                while ($startDate->dayOfWeek !== $targetDayOfWeek) {
+                    $startDate->addDay();
+                }
+            } else { // last_payroll
+                // Get last week of the month for each offset
+                $targetMonth = $currentMonth->copy()->addMonths($offset);
+                $lastDayOfMonth = $targetMonth->copy()->endOfMonth();
+
+                // Find the last occurrence of the pay day in this month
+                $dayMap = ['sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6];
+                $targetDayOfWeek = $dayMap[$startDayName] ?? 1;
+
+                // Find the last occurrence of the target day in the month
+                $startDate = $lastDayOfMonth->copy();
+                while ($startDate->dayOfWeek !== $targetDayOfWeek) {
+                    $startDate->subDay();
+                }
+            }
+        } else {
+            // Regular weekly calculation - get current week and add offset
+            $startDate = $baseDate->copy()->startOfWeek();
+            if ($startDayName !== 'monday') {
+                // Adjust for different start days
+                $dayMap = ['sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6];
+                $targetDay = $dayMap[$startDayName] ?? 1;
+                $startDate = $baseDate->copy()->startOfWeek()->addDays($targetDay - 1);
+            }
+
+            // Apply offset in weeks
+            $startDate->addWeeks($offset);
         }
 
-        // Apply offset in weeks
-        $startDate->addWeeks($offset);
         $endDate = $startDate->copy()->addDays(6); // 7-day week
 
         return [
@@ -439,7 +475,15 @@ class CashAdvanceController extends Controller
             // Calculate first deduction date based on starting payroll period
             // Get the actual payroll period dates for the selected starting period
             $employee = Employee::findOrFail($validated['employee_id']);
-            $payrollSetting = PayrollSetting::getDefault();
+
+            // Get the schedule setting for this employee's pay schedule - same as getEmployeePayrollPeriods
+            $scheduleSetting = \App\Models\PayScheduleSetting::where('code', $employee->pay_schedule)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$scheduleSetting) {
+                throw new \Exception('Pay schedule setting not found for employee');
+            }
 
             $monthlyTiming = $validated['monthly_deduction_timing'] ?? null;
             $deductionFrequency = $validated['deduction_frequency'];
@@ -447,8 +491,8 @@ class CashAdvanceController extends Controller
             // Calculate the actual payroll period for the selected starting period
             $periodOffset = $validated['starting_payroll_period'] - 1; // Convert to 0-based offset
 
-            // Use the SAME calculation that generates the dropdown options
-            $periodData = $this->calculatePayrollPeriodForOffset($payrollSetting, \Carbon\Carbon::now(), $periodOffset, $monthlyTiming, $deductionFrequency);
+            // Use the SAME calculation that generates the dropdown options with employee's schedule
+            $periodData = $this->calculatePayrollPeriodForOffset($scheduleSetting, \Carbon\Carbon::now(), $periodOffset, $monthlyTiming, $deductionFrequency);
             $firstDeductionDate = $periodData['start'];
             $firstDeductionPeriodEnd = $periodData['end'];
 
@@ -527,19 +571,23 @@ class CashAdvanceController extends Controller
         $validated = $request->validate([
             'approved_amount' => 'required|numeric|min:100|max:' . $cashAdvance->requested_amount,
             'installments' => 'required|integer|min:1|max:12',
-            'interest_rate' => 'nullable|numeric|min:0|max:100',
+            'interest_rate' => 'required|numeric|min:0|max:100',
             'remarks' => 'nullable|string|max:500',
         ]);
 
         try {
             DB::beginTransaction();
 
+            // Use the validated values from the form
+            $installments = $validated['installments'];
+            $interestRate = $validated['interest_rate'];
+
             $cashAdvance->approve(
                 $validated['approved_amount'],
-                $validated['installments'],
+                $installments,
                 Auth::id(),
                 $validated['remarks'],
-                $validated['interest_rate'] ?? $cashAdvance->interest_rate
+                $interestRate
             );
 
             DB::commit();
@@ -615,6 +663,158 @@ class CashAdvanceController extends Controller
     }
 
     /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(CashAdvance $cashAdvance)
+    {
+        $this->authorize('edit cash advances');
+
+        // Only allow editing pending requests
+        if ($cashAdvance->status !== 'pending') {
+            return redirect()->route('cash-advances.show', $cashAdvance)
+                ->with('error', 'Only pending cash advance requests can be edited.');
+        }
+
+        $employee = null;
+
+        // If employee user, get their employee record
+        if (Auth::user()->hasRole('Employee')) {
+            $employee = Auth::user()->employee;
+            if (!$employee) {
+                return redirect()->back()->with('error', 'Employee profile not found.');
+            }
+
+            // Check if the employee is editing their own request
+            if ($cashAdvance->employee_id !== $employee->id) {
+                return redirect()->route('cash-advances.index')
+                    ->with('error', 'You can only edit your own cash advance requests.');
+            }
+        }
+
+        $employees = Employee::active()->orderBy('last_name')->get();
+        $payrollSettings = PayrollSetting::first();
+
+        return view('cash-advances.edit', compact('cashAdvance', 'employees', 'employee', 'payrollSettings'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, CashAdvance $cashAdvance)
+    {
+        $this->authorize('edit cash advances');
+
+        // Only allow updating pending requests
+        if ($cashAdvance->status !== 'pending') {
+            return redirect()->route('cash-advances.show', $cashAdvance)
+                ->with('error', 'Only pending cash advance requests can be updated.');
+        }
+
+        // Base validation rules - similar to store method
+        $validationRules = [
+            'employee_id' => 'required|exists:employees,id',
+            'requested_amount' => 'required|numeric|min:100|max:50000',
+            'deduction_frequency' => 'required|in:per_payroll,monthly',
+            'monthly_deduction_timing' => 'nullable|in:first_payroll,last_payroll',
+            'interest_rate' => 'nullable|numeric|min:0|max:100',
+            'reason' => 'required|string|max:500',
+            'starting_payroll_period' => 'required|integer|min:1|max:4',
+        ];
+
+        // Add frequency-specific validation rules
+        if ($request->deduction_frequency === 'monthly') {
+            $validationRules['monthly_installments'] = 'required|integer|min:1|max:12';
+            $validationRules['installments'] = 'nullable|integer|min:1|max:12';
+            $validationRules['monthly_deduction_timing'] = 'required|in:first_payroll,last_payroll';
+        } else {
+            $validationRules['installments'] = 'required|integer|min:1|max:12';
+            $validationRules['monthly_installments'] = 'nullable|integer|min:1|max:12';
+        }
+
+        $validatedData = $request->validate($validationRules);
+
+        // Calculate amounts and installments
+        $requestedAmount = floatval($validatedData['requested_amount']);
+        $interestRate = floatval($validatedData['interest_rate'] ?? 0);
+        $deductionFrequency = $validatedData['deduction_frequency'];
+
+        // Calculate interest and total amounts
+        $interestAmount = ($requestedAmount * $interestRate) / 100;
+        $totalAmount = $requestedAmount + $interestAmount;
+
+        // Clean up monthly_deduction_timing - similar to store method
+        if ($validatedData['deduction_frequency'] === 'per_payroll') {
+            $validatedData['monthly_deduction_timing'] = null;
+        } elseif (isset($validatedData['monthly_deduction_timing']) && $validatedData['monthly_deduction_timing'] === '') {
+            $validatedData['monthly_deduction_timing'] = null;
+        }
+
+        // Determine installments value based on frequency - same logic as store method
+        // Always ensure we have a valid installments value (never null)
+        if ($validatedData['deduction_frequency'] === 'monthly') {
+            $installmentsValue = $validatedData['monthly_installments'] ?? 1;
+        } else {
+            $installmentsValue = $validatedData['installments'] ?? 1;
+        }
+
+        // Ensure installmentsValue is never null
+        $installmentsValue = max(1, intval($installmentsValue));
+
+        // Calculate installment amount
+        $installmentAmount = $totalAmount / $installmentsValue;
+
+        // Calculate the actual payroll period dates for the updated starting period (same as store method)
+        $employee = Employee::findOrFail($validatedData['employee_id']);
+
+        // Get the schedule setting for this employee's pay schedule
+        $scheduleSetting = \App\Models\PayScheduleSetting::where('code', $employee->pay_schedule)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$scheduleSetting) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Pay schedule setting not found for employee.');
+        }
+
+        $monthlyTiming = $validatedData['monthly_deduction_timing'] ?? null;
+
+        // Calculate the actual payroll period for the selected starting period
+        $periodOffset = $validatedData['starting_payroll_period'] - 1; // Convert to 0-based offset
+
+        // Use the SAME calculation that generates the dropdown options with employee's schedule
+        $periodData = $this->calculatePayrollPeriodForOffset($scheduleSetting, \Carbon\Carbon::now(), $periodOffset, $monthlyTiming, $deductionFrequency);
+
+        // Prepare update data - match the structure of store method
+        $updateData = [
+            'employee_id' => $validatedData['employee_id'],
+            'requested_amount' => $requestedAmount,
+            'approved_amount' => $requestedAmount, // Set approved amount same as requested for now
+            'outstanding_balance' => $totalAmount, // Will be the full amount until payments are made
+            'interest_rate' => $interestRate,
+            'interest_amount' => $interestAmount,
+            'total_amount' => $totalAmount,
+            'installment_amount' => $installmentAmount,
+            'deduction_frequency' => $deductionFrequency,
+            'starting_payroll_period' => $validatedData['starting_payroll_period'],
+            'reason' => $validatedData['reason'],
+            'installments' => $installmentsValue, // Always set installments value
+            'monthly_installments' => $validatedData['monthly_installments'] ?? null,
+            'monthly_deduction_timing' => $validatedData['deduction_frequency'] === 'monthly' ? ($validatedData['monthly_deduction_timing'] ?? null) : null,
+            // Add the calculated deduction dates
+            'first_deduction_date' => $periodData['start'],
+            'first_deduction_period_start' => $periodData['start'],
+            'first_deduction_period_end' => $periodData['end'],
+        ];
+
+        // Update the cash advance
+        $cashAdvance->update($updateData);
+
+        return redirect()->route('cash-advances.show', $cashAdvance)
+            ->with('success', 'Cash advance request updated successfully.');
+    }
+
+    /**
      * Remove the specified cash advance from storage.
      */
     public function destroy(CashAdvance $cashAdvance)
@@ -625,16 +825,6 @@ class CashAdvanceController extends Controller
         if ($cashAdvance->status === 'approved' && $cashAdvance->outstanding_balance < $cashAdvance->total_amount) {
             return redirect()->route('cash-advances.index')
                 ->with('error', 'Cannot delete cash advance that has been partially paid.');
-        }
-
-        // If approved, remove associated deductions
-        if ($cashAdvance->status === 'approved') {
-            // Remove automatic deductions associated with this cash advance
-            DB::table('deductions')
-                ->where('employee_id', $cashAdvance->employee_id)
-                ->where('type', 'cash_advance')
-                ->where('description', 'like', "%{$cashAdvance->reference_number}%")
-                ->delete();
         }
 
         $reference = $cashAdvance->reference_number;

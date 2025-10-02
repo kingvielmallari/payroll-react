@@ -318,8 +318,19 @@ class CashAdvance extends Model
         $this->outstanding_balance = $this->total_amount;
 
         // Calculate installment amount based on total amount (including interest)
-        if ($this->installments > 0) {
-            $this->installment_amount = round($this->total_amount / $this->installments, 2);
+        // Use the appropriate installment field based on deduction frequency
+        $installmentCount = 1;
+        if ($this->deduction_frequency === 'monthly' && $this->monthly_installments > 0) {
+            $installmentCount = $this->monthly_installments;
+        } elseif ($this->deduction_frequency === 'per_payroll' && $this->installments > 0) {
+            $installmentCount = $this->installments;
+        } elseif ($this->installments > 0) {
+            // Fallback to regular installments if frequency not set
+            $installmentCount = $this->installments;
+        }
+
+        if ($installmentCount > 0) {
+            $this->installment_amount = round($this->total_amount / $installmentCount, 2);
         }
     }
 
@@ -333,7 +344,16 @@ class CashAdvance extends Model
     public function approve($approvedAmount, $installments, $approvedById, $remarks = null, $interestRate = null)
     {
         $this->approved_amount = $approvedAmount;
-        $this->installments = $installments;
+
+        // Update installments based on deduction frequency
+        if ($this->deduction_frequency === 'monthly') {
+            $this->monthly_installments = $installments;
+            // Keep existing installments field as is for per_payroll frequency records
+        } else {
+            $this->installments = $installments;
+            // Keep existing monthly_installments field as is 
+        }
+
         $this->interest_rate = $interestRate ?? $this->interest_rate;
         $this->approved_by = $approvedById;
         $this->approved_date = now();

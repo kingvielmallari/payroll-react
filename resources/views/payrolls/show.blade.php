@@ -3340,25 +3340,49 @@
                                                     if($employee->fixed_rate && $employee->rate_type) {
                                                         switch($employee->rate_type) {
                                                             case 'monthly':
-                                                                // Monthly rate - show per day (assuming 22 working days)
-                                                                $dailyRate = $employee->fixed_rate / 22;
-                                                                $rateDisplay = '₱' . number_format($dailyRate, 2) . '/day';
+                                                                // Monthly rate - show per day based on full month working days (not payroll period)
+                                                                $monthStart = $payroll->period_start->copy()->startOfMonth();
+                                                                $monthEnd = $payroll->period_start->copy()->endOfMonth();
+                                                                $monthlyWorkingDays = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+                                                                $dailyRate = $monthlyWorkingDays > 0 ? ($employee->fixed_rate / $monthlyWorkingDays) : 0;
+                                                                $rateDisplay = '₱' . number_format($dailyRate, 2) . '/day (' . $monthlyWorkingDays . ' days/month)';
                                                                 break;
                                                             case 'semi_monthly':
                                                             case 'semi-monthly':
-                                                                // Semi-monthly rate - show per day (assuming 11 working days per semi-month)
-                                                                $dailyRate = $employee->fixed_rate / 11;
-                                                                $rateDisplay = '₱' . number_format($dailyRate, 2) . '/day';
+                                                                // Semi-monthly rate - count actual working days in the specific cutoff period
+                                                                $payrollStartDay = $payroll->period_start->day;
+                                                                $currentMonth = $payroll->period_start->copy();
+                                                                
+                                                                if ($payrollStartDay <= 15) {
+                                                                    // First cutoff (1st - 15th)
+                                                                    $cutoffStart = $currentMonth->copy()->setDay(1);
+                                                                    $cutoffEnd = $currentMonth->copy()->setDay(15);
+                                                                    $cutoffLabel = '1st-15th';
+                                                                } else {
+                                                                    // Second cutoff (16th - EOD)
+                                                                    $cutoffStart = $currentMonth->copy()->setDay(16);
+                                                                    $cutoffEnd = $currentMonth->copy()->endOfMonth();
+                                                                    $cutoffLabel = '16th-EOD';
+                                                                }
+                                                                
+                                                                $semiMonthlyWorkingDays = $employee->getWorkingDaysForPeriod($cutoffStart, $cutoffEnd);
+                                                                $dailyRate = $semiMonthlyWorkingDays > 0 ? ($employee->fixed_rate / $semiMonthlyWorkingDays) : 0;
+                                                                $rateDisplay = '₱' . number_format($dailyRate, 2) . '/day (' . $semiMonthlyWorkingDays . ' days/' . $cutoffLabel . ')';
                                                                 break;
                                                             case 'weekly':
-                                                                // Weekly rate - show per day (assuming 5 working days)
-                                                                $dailyRate = $employee->fixed_rate / 5;
-                                                                $rateDisplay = '₱' . number_format($dailyRate, 2) . '/day';
+                                                                // Weekly rate - show per day based on actual working days per week
+                                                                $weekStart = $payroll->period_start->copy()->startOfWeek();
+                                                                $weekEnd = $payroll->period_start->copy()->endOfWeek();
+                                                                $weeklyWorkingDays = $employee->getWorkingDaysForPeriod($weekStart, $weekEnd);
+                                                                $dailyRate = $weeklyWorkingDays > 0 ? ($employee->fixed_rate / $weeklyWorkingDays) : 0;
+                                                                $rateDisplay = '₱' . number_format($dailyRate, 2) . '/day (' . $weeklyWorkingDays . ' days/week)';
                                                                 break;
                                                             case 'daily':
-                                                                // Daily rate - show per hour (assuming 8 working hours)
-                                                                $hourlyRate = $employee->fixed_rate / 8;
-                                                                $rateDisplay = '₱' . number_format($hourlyRate, 2) . '/hr';
+                                                                // Daily rate - show per hour based on assigned time schedule
+                                                                $timeSchedule = $employee->timeSchedule;
+                                                                $dailyHours = $timeSchedule ? $timeSchedule->total_hours : 8;
+                                                                $hourlyRate = $dailyHours > 0 ? ($employee->fixed_rate / $dailyHours) : 0;
+                                                                $rateDisplay = '₱' . number_format($hourlyRate, 2) . '/hr (' . $dailyHours . 'h)';
                                                                 break;
                                                             case 'hourly':
                                                                 // Hourly rate - show per minute

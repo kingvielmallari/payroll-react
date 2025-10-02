@@ -201,10 +201,75 @@
     <!-- Store employee data for JavaScript calculations -->
     <script>
         const employees = @json($payroll->payrollDetails->map(function($detail) {
+            $employee = $detail->employee;
+            
+            // Calculate working days based on employee's rate type
+            if ($employee->fixed_rate && $employee->rate_type) {
+                switch ($employee->rate_type) {
+                    case 'monthly':
+                        // For monthly employees: use full month working days
+                        $monthStart = $payroll->period_start->copy()->startOfMonth();
+                        $monthEnd = $payroll->period_start->copy()->endOfMonth();
+                        $workingDays = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+                        break;
+                    case 'semi_monthly':
+                    case 'semi-monthly':
+                        // For semi-monthly employees: count working days in the specific cutoff period
+                        $payrollStartDay = $payroll->period_start->day;
+                        $currentMonth = $payroll->period_start->copy();
+                        
+                        if ($payrollStartDay <= 15) {
+                            // First cutoff (1st - 15th)
+                            $cutoffStart = $currentMonth->copy()->setDay(1);
+                            $cutoffEnd = $currentMonth->copy()->setDay(15);
+                        } else {
+                            // Second cutoff (16th - EOD)
+                            $cutoffStart = $currentMonth->copy()->setDay(16);
+                            $cutoffEnd = $currentMonth->copy()->endOfMonth();
+                        }
+                        
+                        $workingDays = $employee->getWorkingDaysForPeriod($cutoffStart, $cutoffEnd);
+                        break;
+                    case 'weekly':
+                        // For weekly employees: use working days in a week
+                        $weekStart = $payroll->period_start->copy()->startOfWeek();
+                        $weekEnd = $payroll->period_start->copy()->endOfWeek();
+                        $workingDays = $employee->getWorkingDaysForPeriod($weekStart, $weekEnd);
+                        break;
+                    default:
+                        // Fallback to monthly calculation
+                        $monthStart = $payroll->period_start->copy()->startOfMonth();
+                        $monthEnd = $payroll->period_start->copy()->endOfMonth();
+                        $workingDays = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+                        break;
+                }
+            } else {
+                // Fallback: use basic salary with full month working days
+                $monthStart = $payroll->period_start->copy()->startOfMonth();
+                $monthEnd = $payroll->period_start->copy()->endOfMonth();
+                $workingDays = $employee->getWorkingDaysForPeriod($monthStart, $monthEnd);
+            }
+            
+            // Calculate dynamic hourly rate based on employee's time schedule
+            $timeSchedule = $employee->timeSchedule;
+            $dailyHours = $timeSchedule ? $timeSchedule->total_hours : 8; // Default to 8 hours if no schedule
+            
+            // Calculate daily rate using the appropriate working days for the rate type
+            $salary = $employee->fixed_rate ?? $employee->basic_salary ?? 0;
+            $dailyRate = $workingDays > 0 ? ($salary / $workingDays) : 0;
+            
+            // Calculate hourly rate from daily rate using actual hours per day
+            $hourlyRate = $dailyHours > 0 ? ($dailyRate / $dailyHours) : 0;
+            
             return array(
                 'id' => $detail->employee_id,
-                'basic_salary' => $detail->employee->basic_salary,
-                'hourly_rate' => $detail->employee->basic_salary / 22 / 8, // Daily salary / 8 hours
+                'basic_salary' => $employee->basic_salary,
+                'fixed_rate' => $employee->fixed_rate,
+                'rate_type' => $employee->rate_type,
+                'working_days' => $workingDays,
+                'daily_hours' => $dailyHours,
+                'daily_rate' => $dailyRate,
+                'hourly_rate' => $hourlyRate,
             );
         })->keyBy('id')->toArray());
 
@@ -219,8 +284,8 @@
             const bonuses = parseFloat(document.querySelector(`input[name*="[bonuses]"][data-employee-id="${employeeId}"]`).value) || 0;
             const otherDeductions = parseFloat(document.querySelector(`input[name*="[other_deductions]"][data-employee-id="${employeeId}"]`).value) || 0;
 
-            // Calculate regular pay (proportional to days worked, assuming 22 working days per month)
-            const regularPay = (employee.basic_salary / 22) * daysWorked;
+            // Calculate regular pay (proportional to days worked, using dynamic working days)
+            const regularPay = employee.working_days > 0 ? (employee.basic_salary / employee.working_days) * daysWorked : 0;
             
             // Calculate overtime pay (1.5x hourly rate)
             const overtimePay = employee.hourly_rate * 1.5 * overtimeHours;

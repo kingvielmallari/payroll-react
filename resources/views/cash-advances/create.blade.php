@@ -157,10 +157,10 @@
                                             @foreach($employees->sortBy('full_name') as $emp)
                                             <div class="employee-option cursor-pointer px-3 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-900" 
                                                  data-value="{{ $emp->id }}" 
-                                                 data-text="{{ $emp->full_name }} ({{ $emp->employee_number }})"
-                                                 onclick="selectEmployee({{ $emp->id }}, '{{ $emp->full_name }} ({{ $emp->employee_number }})')">
+                                                 data-text="{{ $emp->full_name }} ({{ ucfirst(str_replace('_', ' ', $emp->pay_schedule)) }})"
+                                                 onclick="selectEmployee({{ $emp->id }}, '{{ $emp->full_name }} ({{ ucfirst(str_replace('_', ' ', $emp->pay_schedule)) }})')">
                                                 <div class="font-medium">{{ $emp->full_name }}</div>
-                                                <div class="text-gray-500 text-xs">{{ $emp->employee_number }}</div>
+                                                <div class="text-gray-500 text-xs">{{ ucfirst(str_replace('_', ' ', $emp->pay_schedule)) }}</div>
                                             </div>
                                             @endforeach
                                         </div>
@@ -180,7 +180,7 @@
                             <label for="starting_payroll_period" class="block text-sm font-medium text-gray-700">Deduction Start Period *</label>
                             <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('starting_payroll_period') border-red-300 @enderror" 
                                     id="starting_payroll_period" name="starting_payroll_period" required disabled>
-                                <option value="">{{ !$employee ? 'Select an employee first' : 'Loading payroll periods...' }}</option>
+                                <option value="">{{ !$employee ? 'Select employee and deduction frequency first' : 'Loading payroll periods...' }}</option>
                             </select>
                             @error('starting_payroll_period')
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -313,16 +313,16 @@
                                         id="monthly_deduction_timing" name="monthly_deduction_timing" onchange="onMonthlyTimingChange()">
                                     <option value="">Select Timing</option>
                                     <option value="first_payroll" {{ old('monthly_deduction_timing') == 'first_payroll' ? 'selected' : '' }}>
-                                        1st Cut-off Period
+                                        First Payroll
                                     </option>
                                     <option value="last_payroll" {{ old('monthly_deduction_timing') == 'last_payroll' ? 'selected' : '' }}>
-                                        2nd Cut-off Period
+                                        Last Payroll
                                     </option>
                                 </select>
                                 @error('monthly_deduction_timing')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-sm text-gray-500" id="timing_help_text">For semi-monthly employees</p>
+                                <p class="mt-1 text-sm text-gray-500" id="timing_help_text">Choose when monthly deductions occur</p>
                             </div>
                         </div>
 
@@ -421,8 +421,8 @@
             installmentsSelect.disabled = false;
         }
 
-        // Show Monthly Deduction Timing field only for semi-monthly employees with monthly frequency
-        if (employeePaySchedule === 'semi_monthly' && frequency === 'monthly') {
+        // Show Monthly Deduction Timing field for ALL employees when monthly frequency is selected
+        if (frequency === 'monthly') {
             monthlyTimingField.style.display = 'block';
             monthlyTimingSelect.setAttribute('required', 'required');
             monthlyTimingSelect.disabled = false; // Enable for submission
@@ -431,13 +431,22 @@
             startingPayrollSelect.disabled = true;
             // Reset periods when frequency changes
             resetStartingPayrollPeriods();
+            
+            // Load periods if timing is already selected
+            const timing = document.getElementById('monthly_deduction_timing').value;
+            const employeeId = document.getElementById('employee_id').value;
+            if (timing && employeeId) {
+                loadEmployeePayrollPeriods();
+            }
         } else {
             monthlyTimingField.style.display = 'none';
             monthlyTimingSelect.removeAttribute('required');
             monthlyTimingSelect.value = '';
             monthlyTimingSelect.disabled = true; // Disable so it's not sent
-            // For non-monthly or non-semi-monthly, enable the select if frequency is selected
-            if (frequency && employeePaySchedule) {
+            
+            // For non-monthly frequency, load periods if employee is selected
+            const employeeId = document.getElementById('employee_id').value;
+            if (frequency && employeeId) {
                 startingPayrollSelect.disabled = false;
                 loadEmployeePayrollPeriods();
             } else {
@@ -537,6 +546,11 @@
             clearActiveAdvanceWarning();
             return;
         }
+        
+        if (!frequency) {
+            startingPayrollSelect.innerHTML = '<option value="">Select deduction frequency first</option>';
+            return;
+        }
 
         // Check for existing active cash advances first
         try {
@@ -565,11 +579,11 @@
         // Load employee pay schedule first
         await loadEmployeePaySchedule(employeeId);
 
-        // For semi-monthly employees with monthly frequency, require timing selection first
-        if (employeePaySchedule === 'semi_monthly' && frequency === 'monthly') {
+        // For monthly frequency, require timing selection first
+        if (frequency === 'monthly') {
             const timing = document.getElementById('monthly_deduction_timing').value;
             if (!timing) {
-                startingPayrollSelect.innerHTML = '<option value="">Select monthly timing first</option>';
+                startingPayrollSelect.innerHTML = '<option value="">Select monthly deduction timing first</option>';
                 startingPayrollSelect.disabled = true;
                 return;
             }
@@ -581,8 +595,8 @@
             deduction_frequency: frequency
         };
 
-        // Add timing for semi-monthly employees with monthly frequency
-        if (employeePaySchedule === 'semi_monthly' && frequency === 'monthly') {
+        // Add timing for weekly and semi-monthly employees with monthly frequency
+        if ((employeePaySchedule === 'weekly' || employeePaySchedule === 'semi_monthly') && frequency === 'monthly') {
             requestBody.monthly_deduction_timing = document.getElementById('monthly_deduction_timing').value;
         }
 
@@ -665,24 +679,26 @@
     // Reset starting payroll periods dropdown
     function resetStartingPayrollPeriods() {
         const startingPayrollSelect = document.getElementById('starting_payroll_period');
-        startingPayrollSelect.innerHTML = '<option value="">Select an employee and frequency first</option>';
+        startingPayrollSelect.innerHTML = '<option value="">Select employee and deduction frequency first</option>';
         startingPayrollSelect.disabled = true;
     }
 
     // Handle monthly timing change for semi-monthly employees
     function onMonthlyTimingChange() {
         const employeeId = document.getElementById('employee_id').value;
+        const frequency = document.getElementById('deduction_frequency').value;
         const timing = document.getElementById('monthly_deduction_timing').value;
         const startingPayrollSelect = document.getElementById('starting_payroll_period');
         
-        // For semi-monthly employees, enable select when timing is selected
-        if (employeeId && employeePaySchedule === 'semi_monthly' && timing) {
-            // Enable the select field
+        // Check if all required fields are selected for monthly frequency
+        if (employeeId && frequency === 'monthly' && timing) {
+            // Enable the select field and load periods
             startingPayrollSelect.disabled = false;
             loadEmployeePayrollPeriods();
         } else {
-            // Disable the select field if timing is cleared
+            // Disable the select field if any required field is missing
             startingPayrollSelect.disabled = true;
+            startingPayrollSelect.innerHTML = '<option value="">Complete all required fields above</option>';
         }
     }
 
@@ -883,8 +899,11 @@
         
         hideEmployeeDropdown();
         
-        // Trigger change event for other functions that might depend on it
-        loadEmployeePayrollPeriods();
+        // Check if we can load payroll periods (both employee and frequency selected)
+        const frequency = document.getElementById('deduction_frequency').value;
+        if (frequency) {
+            loadEmployeePayrollPeriods();
+        }
     }
 
     function handleKeyDown(event) {

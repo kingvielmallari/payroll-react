@@ -184,35 +184,24 @@
                         </div>
                         @endif
 
-                        <!-- Leave Details Row -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <!-- Leave Type -->
+                        <!-- Leave Type Selection (for both HR/Admin and Employee users) -->
+                        <div class="grid grid-cols-1 gap-6">
                             <div>
                                 <label for="leave_setting_id" class="block text-sm font-medium text-gray-700">Leave Type *</label>
                                 <select class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('leave_setting_id') border-red-300 @enderror" 
                                         id="leave_setting_id" name="leave_setting_id" required>
-                                    <option value="">Select Leave Type</option>
+                                    <option value="">@if($employee)Loading...@else Select Leave Type @endif</option>
                                     <!-- Options will be populated by JavaScript based on selected employee -->
                                 </select>
                                 @error('leave_setting_id')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
-                                <p class="mt-1 text-sm text-gray-500" id="leave_balance_info">Choose the type of leave request</p>
-                            </div>
-
-                            <!-- Supporting Document -->
-                            <div>
-                                <label for="supporting_document" class="block text-sm font-medium text-gray-700">Supporting Document</label>
-                                <input type="file" 
-                                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('supporting_document') border-red-300 @enderror" 
-                                       id="supporting_document" name="supporting_document" 
-                                       accept=".jpg,.jpeg,.png,.pdf">
-                                @error('supporting_document')
-                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                                <p class="mt-1 text-sm text-gray-500">Upload medical certificate, etc. (JPG, PNG, PDF - max 2MB)</p>
+                                <p class="mt-1 text-sm text-gray-500" id="leave_balance_info">@if($employee)Loading leave types...@else Choose the type of leave request @endif</p>
                             </div>
                         </div>
+
+                        
+
 
                         <!-- Leave Period Row -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -222,7 +211,7 @@
                                 <input type="date" 
                                        class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('start_date') border-red-300 @enderror" 
                                        id="start_date" name="start_date" value="{{ old('start_date') }}" required
-                                       onchange="calculateLeaveDays()" min="{{ date('Y-m-d') }}">
+                                       min="{{ date('Y-m-d') }}">
                                 @error('start_date')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
@@ -234,17 +223,28 @@
                                 <input type="date" 
                                        class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('end_date') border-red-300 @enderror" 
                                        id="end_date" name="end_date" value="{{ old('end_date') }}" required
-                                       onchange="calculateLeaveDays()" min="{{ date('Y-m-d') }}">
+                                       min="{{ date('Y-m-d') }}">
                                 @error('end_date')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
                         </div>
-
+        <!-- Supporting Document -->
+                            <div>
+                                <label for="supporting_document" class="block text-sm font-medium text-gray-700">Supporting Document</label>
+                                <input type="file" 
+                                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 @error('supporting_document') border-red-300 @enderror" 
+                                       id="supporting_document" name="supporting_document" 
+                                       accept=".jpg,.jpeg,.png,.pdf">
+                                @error('supporting_document')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                                <p class="mt-1 text-sm text-gray-500">Upload medical certificate, etc. (JPG, PNG, PDF - max 2MB)</p>
+                            </div>
                         <!-- Calculation Results -->
                         <div class="bg-gray-50 p-3 rounded-lg">
                             <h3 class="text-sm font-medium text-gray-900 mb-3">Leave Summary</h3>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                                 <div class="text-center">
                                     <div class="text-lg font-bold text-blue-600" id="total-days">0</div>
                                     <div class="text-xs text-gray-600">Total Days</div>
@@ -256,6 +256,18 @@
                                 <div class="text-center">
                                     <div class="text-lg font-bold text-purple-600" id="total-amount">₱0.00</div>
                                     <div class="text-xs text-gray-600">Total Amount</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Calculation Details -->
+                            <div id="calculation-details" class="text-xs text-gray-600 border-t pt-2 hidden">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <div>
+                                        <span class="font-medium">Schedule:</span> <span id="schedule-info">-</span>
+                                    </div>
+                                    <div>
+                                        <span class="font-medium">Method:</span> <span id="calculation-method">-</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -333,7 +345,7 @@
             }
 
             // Initialize leave calculation
-            calculateLeaveDays();
+            calculateTotal();
         });
 
         function toggleEmployeeDropdown() {
@@ -369,7 +381,7 @@
             loadEmployeeLeaveTypes(employeeId);
             
             // Recalculate leave amounts when employee changes
-            calculateLeaveDays();
+            calculateTotal();
         }
 
         function handleKeyDown(event) {
@@ -475,29 +487,81 @@
             }
         });
 
-        // Leave calculation
+        // Leave calculation using actual employee data
         function calculateLeaveDays() {
+            calculateTotal();
+        }
+
+        // Main calculation function
+        function calculateTotal() {
+            const employeeId = document.getElementById('employee_id').value;
+            const leaveTypeSelect = document.getElementById('leave_setting_id');
+            const selectedOption = leaveTypeSelect.options[leaveTypeSelect.selectedIndex];
             const startDate = document.getElementById('start_date').value;
             const endDate = document.getElementById('end_date').value;
-            
-            if (startDate && endDate) {
+
+            if (employeeId && selectedOption && selectedOption.dataset.totalDays && startDate && endDate) {
+                const totalDays = parseInt(selectedOption.dataset.totalDays);
+                
+                // Validate that calculated days match the leave setting days
                 const start = new Date(startDate);
                 const end = new Date(endDate);
+                const calculatedDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
                 
-                if (end >= start) {
-                    const timeDiff = end.getTime() - start.getTime();
-                    const totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
-                    
-                    // Simplified calculation - in reality, you'd get this from employee data
-                    const dailyRate = 500; // Default daily rate
-                    const totalAmount = dailyRate * totalDays;
-                    
-                    document.getElementById('total-days').textContent = totalDays;
-                    document.getElementById('daily-rate').textContent = '₱' + dailyRate.toLocaleString('en-US', {minimumFractionDigits: 2});
-                    document.getElementById('total-amount').textContent = '₱' + totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2});
-                } else {
-                    resetCalculation();
+                if (calculatedDays !== totalDays) {
+                    document.getElementById('total-days').textContent = totalDays + ' (required)';
+                    document.getElementById('daily-rate').textContent = '₱0.00';
+                    document.getElementById('total-amount').textContent = '₱0.00';
+                    return;
                 }
+
+                // Fetch employee daily rate
+                fetch('{{ route("paid-leaves.employee-daily-rate") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: JSON.stringify({ employee_id: employeeId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.daily_rate) {
+                        // Get pay percentage from the selected option data attributes or leave settings
+                        let dailyRate = data.daily_rate;
+                        let payPercentage = 100; // Default to full pay
+                        
+                        if (selectedOption.dataset.payPercentage) {
+                            payPercentage = parseInt(selectedOption.dataset.payPercentage);
+                        } else {
+                            // Fallback to leave settings lookup
+                            const leaveSettings = @json($leaveSettings);
+                            const leaveSettingId = selectedOption.value;
+                            const leaveSetting = leaveSettings.find(ls => ls.id == leaveSettingId);
+                            
+                            if (leaveSetting && leaveSetting.pay_rule) {
+                                payPercentage = leaveSetting.pay_rule === 'full' ? 100 : 50;
+                            }
+                        }
+                        
+                        const adjustedDailyRate = Math.round((dailyRate * (payPercentage / 100)) * 100) / 100;
+                        const totalAmount = Math.round((adjustedDailyRate * totalDays) * 100) / 100;
+                        
+                        // Update display
+                        document.getElementById('total-days').textContent = totalDays;
+                        document.getElementById('daily-rate').textContent = '₱' + adjustedDailyRate.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        document.getElementById('total-amount').textContent = '₱' + totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        
+                        // Show calculation details
+                        updateCalculationDetails(data, payPercentage);
+                    } else {
+                        resetCalculation();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching daily rate:', error);
+                    resetCalculation();
+                });
             } else {
                 resetCalculation();
             }
@@ -507,6 +571,47 @@
             document.getElementById('total-days').textContent = '0';
             document.getElementById('daily-rate').textContent = '₱0.00';
             document.getElementById('total-amount').textContent = '₱0.00';
+            
+            // Hide calculation details
+            const detailsDiv = document.getElementById('calculation-details');
+            if (detailsDiv) {
+                detailsDiv.classList.add('hidden');
+            }
+        }
+
+        // Update calculation details display
+        function updateCalculationDetails(data, payPercentage) {
+            const detailsDiv = document.getElementById('calculation-details');
+            const scheduleInfoSpan = document.getElementById('schedule-info');
+            const methodSpan = document.getElementById('calculation-method');
+            
+            if (detailsDiv && scheduleInfoSpan && methodSpan) {
+                // Build schedule information
+                let scheduleText = 'Dynamic calculation based on employee schedule';
+                if (data.schedule_info) {
+                    const timeSchedule = data.schedule_info.time_schedule;
+                    const daySchedule = data.schedule_info.day_schedule;
+                    
+                    if (timeSchedule && daySchedule) {
+                        scheduleText = `${timeSchedule.total_hours}h/day, ${daySchedule.days_per_week} days/week`;
+                    } else if (timeSchedule) {
+                        scheduleText = `${timeSchedule.total_hours}h/day schedule`;
+                    } else if (daySchedule) {
+                        scheduleText = `${daySchedule.days_per_week} days/week schedule`;
+                    }
+                }
+                
+                // Build method information
+                const rateType = data.rate_type || 'monthly';
+                const payRule = payPercentage === 100 ? 'Full Rate' : `${payPercentage}% Rate`;
+                const methodText = `${rateType.replace('_', '-').toUpperCase()} rate system (${payRule})`;
+                
+                scheduleInfoSpan.textContent = scheduleText;
+                methodSpan.textContent = methodText;
+                
+                // Show the details
+                detailsDiv.classList.remove('hidden');
+            }
         }
 
         // Load available leave types for selected employee
@@ -538,6 +643,8 @@
                         option.textContent = `${balance.name} (${balance.available_leaves} available)`;
                         option.dataset.totalDays = balance.total_days;
                         option.dataset.availableLeaves = balance.available_leaves;
+                        option.dataset.payRule = balance.pay_rule;
+                        option.dataset.payPercentage = balance.pay_percentage;
                         leaveTypeSelect.appendChild(option);
                     });
                     balanceInfo.textContent = 'Choose the type of leave request';
@@ -567,6 +674,8 @@
                 if (startDateInput.value) {
                     calculateEndDate(startDateInput.value, totalDays);
                 }
+            } else {
+                resetCalculation();
             }
         });
 
@@ -578,7 +687,14 @@
             
             if (totalDays && this.value) {
                 calculateEndDate(this.value, totalDays);
+            } else {
+                calculateTotal(); // Recalculate if date changed manually
             }
+        });
+
+        // Recalculate when end date changes
+        document.getElementById('end_date').addEventListener('change', function() {
+            calculateTotal();
         });
 
         // Calculate end date based on start date and total days
@@ -594,6 +710,17 @@
             // Trigger calculation update
             calculateTotal();
         }
+
+        // Auto-load leave types for employee users on page load
+        @if($employee)
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set the employee_id for API call
+            const employeeIdInput = document.querySelector('input[name="employee_id"]');
+            if (employeeIdInput && employeeIdInput.value) {
+                loadEmployeeLeaveTypes(employeeIdInput.value);
+            }
+        });
+        @endif
 
         // Form validation
         document.getElementById('paidLeaveForm').addEventListener('submit', function(e) {
