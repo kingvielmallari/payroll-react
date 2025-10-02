@@ -288,12 +288,14 @@
         });
         
         // Cash Advance Row Context Menu
-        function showContextMenu(event, id, reference, employee, status) {
+        let currentRequestedAmount = 0;
+        function showContextMenu(event, id, reference, employee, status, requestedAmount) {
             event.preventDefault();
             event.stopPropagation();
             
             currentCashAdvanceId = id;
             currentStatus = status;
+            currentRequestedAmount = requestedAmount || 0;
             
             // Update context menu content
             document.getElementById('contextMenuCashAdvance').textContent = reference;
@@ -345,13 +347,70 @@
         // Handle approve action
         document.getElementById('contextMenuApprove').addEventListener('click', function(e) {
             e.preventDefault();
-            window.location.href = '{{ route("cash-advances.index") }}/' + currentCashAdvanceId + '?action=approve';
+            if (currentCashAdvanceId && confirm('Are you sure you want to approve this cash advance request?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{{ url("cash-advances") }}/' + currentCashAdvanceId + '/approve';
+                
+                const tokenInput = document.createElement('input');
+                tokenInput.type = 'hidden';
+                tokenInput.name = '_token';
+                tokenInput.value = '{{ csrf_token() }}';
+                form.appendChild(tokenInput);
+
+                // Add required fields for approval with default values
+                const approvedAmountInput = document.createElement('input');
+                approvedAmountInput.type = 'hidden';
+                approvedAmountInput.name = 'approved_amount';
+                approvedAmountInput.value = currentRequestedAmount;
+                form.appendChild(approvedAmountInput);
+
+                const installmentsInput = document.createElement('input');
+                installmentsInput.type = 'hidden';
+                installmentsInput.name = 'installments';
+                installmentsInput.value = '1';
+                form.appendChild(installmentsInput);
+
+                const interestRateInput = document.createElement('input');
+                interestRateInput.type = 'hidden';
+                interestRateInput.name = 'interest_rate';
+                interestRateInput.value = '0';
+                form.appendChild(interestRateInput);
+
+                const remarksInput = document.createElement('input');
+                remarksInput.type = 'hidden';
+                remarksInput.name = 'remarks';
+                remarksInput.value = 'Approved by administrator';
+                form.appendChild(remarksInput);
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
         });
         
         // Handle reject action
         document.getElementById('contextMenuReject').addEventListener('click', function(e) {
             e.preventDefault();
-            window.location.href = '{{ route("cash-advances.index") }}/' + currentCashAdvanceId + '?action=reject';
+            if (currentCashAdvanceId && confirm('Are you sure you want to reject this cash advance request?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{{ url("cash-advances") }}/' + currentCashAdvanceId + '/reject';
+                
+                const tokenInput = document.createElement('input');
+                tokenInput.type = 'hidden';
+                tokenInput.name = '_token';
+                tokenInput.value = '{{ csrf_token() }}';
+                form.appendChild(tokenInput);
+
+                const remarksInput = document.createElement('input');
+                remarksInput.type = 'hidden';
+                remarksInput.name = 'remarks';
+                remarksInput.value = 'Request rejected by administrator';
+                form.appendChild(remarksInput);
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
         });
         
         // Handle delete action

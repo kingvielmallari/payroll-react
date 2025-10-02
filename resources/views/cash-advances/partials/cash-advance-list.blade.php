@@ -29,7 +29,7 @@
         <tbody class="bg-white divide-y divide-gray-200">
             @foreach($cashAdvances as $cashAdvance)
             <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
-               oncontextmenu="showContextMenu(event, '{{ $cashAdvance->id }}', '{{ $cashAdvance->reference_number }}', '{{ $cashAdvance->employee->full_name }}', '{{ $cashAdvance->status }}')"
+               oncontextmenu="showContextMenu(event, '{{ $cashAdvance->id }}', '{{ $cashAdvance->reference_number }}', '{{ $cashAdvance->employee->full_name }}', '{{ $cashAdvance->status }}', '{{ $cashAdvance->requested_amount }}')"
                onclick="window.location.href='{{ route('cash-advances.show', $cashAdvance) }}'"
                title="Right-click for actions">
                 <td class="px-6 py-4 whitespace-nowrap">

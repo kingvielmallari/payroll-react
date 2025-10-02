@@ -87,14 +87,8 @@
                         </div>
 
                         <div class="flex-1 min-w-[160px]">
-                            <label class="block text-sm font-medium text-gray-700">Start Date</label>
-                            <input type="date" name="start_date" id="start_date" value="{{ request('start_date') }}" 
-                                   class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm paid-leave-filter focus:border-indigo-500 focus:ring-indigo-500">
-                        </div>
-
-                        <div class="flex-1 min-w-[160px]">
-                            <label class="block text-sm font-medium text-gray-700">End Date</label>
-                            <input type="date" name="end_date" id="end_date" value="{{ request('end_date') }}" 
+                            <label class="block text-sm font-medium text-gray-700">Date Approved</label>
+                            <input type="date" name="date_approved" id="date_approved" value="{{ request('date_approved') }}" 
                                    class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm paid-leave-filter focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
 
@@ -117,33 +111,56 @@
             </div>
 
             <!-- Summary Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-4 mb-6">
+                <!-- Total Approved Amount -->
                 <div class="bg-white overflow-hidden shadow rounded-lg">
                     <div class="p-5">
                         <div class="flex items-center">
                             <div class="flex-shrink-0">
-                                <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                                    <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                <div class="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path>
                                     </svg>
                                 </div>
                             </div>
                             <div class="ml-5 w-0 flex-1">
                                 <dl>
                                     <dt class="text-sm font-medium text-gray-500 truncate">Total Approved Amount</dt>
-                                    <dd class="text-lg font-medium text-gray-900">₱{{ number_format($totalApprovedAmount ?? 0, 2) }}</dd>
+                                    <dd class="text-lg font-medium text-gray-900" data-summary="total-approved-amount">₱{{ number_format($summaryStats['total_approved_amount'] ?? 0, 2) }}</dd>
                                 </dl>
                             </div>
                         </div>
                     </div>
                 </div>
 
+                <!-- Total Approved Leave -->
                 <div class="bg-white overflow-hidden shadow rounded-lg">
                     <div class="p-5">
                         <div class="flex items-center">
                             <div class="flex-shrink-0">
-                                <div class="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                                    <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-5 w-0 flex-1">
+                                <dl>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Approved Leave</dt>
+                                    <dd class="text-lg font-medium text-gray-900" data-summary="total-approved-leave">{{ $summaryStats['total_approved_leave'] ?? 0 }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Pending Amount -->
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="p-5">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                     </svg>
                                 </div>
@@ -151,27 +168,28 @@
                             <div class="ml-5 w-0 flex-1">
                                 <dl>
                                     <dt class="text-sm font-medium text-gray-500 truncate">Total Pending Amount</dt>
-                                    <dd class="text-lg font-medium text-gray-900">₱{{ number_format($totalPendingAmount ?? 0, 2) }}</dd>
+                                    <dd class="text-lg font-medium text-gray-900" data-summary="total-pending-amount">₱{{ number_format($summaryStats['total_pending_amount'] ?? 0, 2) }}</dd>
                                 </dl>
                             </div>
                         </div>
                     </div>
                 </div>
 
+                <!-- Total Pending Leave -->
                 <div class="bg-white overflow-hidden shadow rounded-lg">
                     <div class="p-5">
                         <div class="flex items-center">
                             <div class="flex-shrink-0">
-                                <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                <div class="w-8 h-8 bg-orange-500 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                                     </svg>
                                 </div>
                             </div>
                             <div class="ml-5 w-0 flex-1">
                                 <dl>
-                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Requests</dt>
-                                    <dd class="text-lg font-medium text-gray-900">{{ $totalRequests ?? 0 }}</dd>
+                                    <dt class="text-sm font-medium text-gray-500 truncate">Total Pending Leave</dt>
+                                    <dd class="text-lg font-medium text-gray-900" data-summary="total-pending-leave">{{ $summaryStats['total_pending_leave'] ?? 0 }}</dd>
                                 </dl>
                             </div>
                         </div>
@@ -193,64 +211,74 @@
                     </div>
                     
                     @if($paidLeaves->count() > 0)
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference #</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Leave Type</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Leave Period</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Days</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Amount</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    @foreach($paidLeaves as $paidLeave)
-                                    <tr class="paid-leave-row hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
-                                        data-paid-leave-id="{{ $paidLeave->id }}"
-                                        data-reference="{{ $paidLeave->reference_number }}"
-                                        data-employee="{{ $paidLeave->employee->full_name }}"
-                                        data-status="{{ $paidLeave->status }}"
-                                        oncontextmenu="showPaidLeaveContextMenu(event, this)"
-                                        onclick="window.location.href='{{ route('paid-leaves.show', $paidLeave) }}'">
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {{ $paidLeave->reference_number }}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            <div class="text-sm font-medium text-gray-900">{{ $paidLeave->employee->full_name }}</div>
-                                            <div class="text-sm text-gray-500">{{ $paidLeave->employee->employee_number }}</div>
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {{ $paidLeave->leave_type_display }}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            @if($paidLeave->start_date->format('Y-m-d') === $paidLeave->end_date->format('Y-m-d'))
-                                                {{ $paidLeave->start_date->format('M d, Y') }}
-                                            @elseif($paidLeave->start_date->format('Y-m') === $paidLeave->end_date->format('Y-m'))
-                                                {{ $paidLeave->start_date->format('M d') }}-{{ $paidLeave->end_date->format('d, Y') }}
-                                            @else
-                                                {{ $paidLeave->start_date->format('M d, Y') }} - {{ $paidLeave->end_date->format('M d, Y') }}
-                                            @endif
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {{ $paidLeave->total_days }} {{ Str::plural('day', $paidLeave->total_days) }}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            ₱{{ number_format($paidLeave->total_amount, 2) }}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            {!! $paidLeave->status_badge !!}
-                                        </td>
-                                    </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                        <div id="paid-leave-list-container">
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference #</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Leave Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Leave Period</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Amount</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        @foreach($paidLeaves as $paidLeave)
+                                        <tr class="paid-leave-row hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
+                                            data-paid-leave-id="{{ $paidLeave->id }}"
+                                            data-reference="{{ $paidLeave->reference_number }}"
+                                            data-employee="{{ $paidLeave->employee->full_name }}"
+                                            data-status="{{ $paidLeave->status }}"
+                                            oncontextmenu="showPaidLeaveContextMenu(event, this)"
+                                            onclick="window.location.href='{{ route('paid-leaves.show', $paidLeave) }}'">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                {{ $paidLeave->reference_number }}
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="text-sm font-medium text-gray-900">{{ $paidLeave->employee->full_name }}</div>
+                                                <div class="text-sm text-gray-500">{{ $paidLeave->employee->employee_number }}</div>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                {{ $paidLeave->leave_type_display }}
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                <div class="font-medium">
+                                                    @if($paidLeave->start_date->format('Y-m-d') === $paidLeave->end_date->format('Y-m-d'))
+                                                        {{ $paidLeave->start_date->format('M d, Y') }}
+                                                    @elseif($paidLeave->start_date->format('Y-m') === $paidLeave->end_date->format('Y-m'))
+                                                        {{ $paidLeave->start_date->format('M d') }}-{{ $paidLeave->end_date->format('d, Y') }}
+                                                    @else
+                                                        {{ $paidLeave->start_date->format('M d, Y') }} - {{ $paidLeave->end_date->format('M d, Y') }}
+                                                    @endif
+                                                </div>
+                                                <div class="text-xs text-gray-500">
+                                                    {{ $paidLeave->total_days }} {{ Str::plural('day', $paidLeave->total_days) }}
+                                                </div>
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                ₱{{ number_format($paidLeave->total_amount, 2) }}
+                                            </td>
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div>
+                                                    {!! $paidLeave->status_badge !!}
+                                                    @if($paidLeave->status === 'approved' && $paidLeave->approved_date)
+                                                        <div class="text-xs text-gray-500 mt-1">
+                                                            {{ $paidLeave->approved_date->format('M d, Y') }}
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                         
                         <!-- Pagination -->
-                        <div class="mt-6">
+                        <div id="pagination-container" class="mt-6">
                             {{ $paidLeaves->links() }}
                         </div>
                     @else
@@ -279,20 +307,103 @@
     </div>
 
     <script>
-        // Filter functionality
+        // Live filtering functionality
         document.addEventListener('DOMContentLoaded', function() {
-            // Auto-submit filters on change
-            document.querySelectorAll('.paid-leave-filter').forEach(element => {
-                element.addEventListener('change', function() {
-                    applyFilters();
+            const filterSelects = document.querySelectorAll('.paid-leave-filter');
+
+            // Debounce function to limit API calls
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
+            // Function to apply filters via AJAX (no page reload)
+            function applyFilters() {
+                const url = new URL(window.location.origin + window.location.pathname);
+                const params = new URLSearchParams();
+                const currentParams = new URLSearchParams(window.location.search);
+
+                // Get filter values
+                const nameSearch = document.getElementById('name_search').value;
+                const status = document.getElementById('status').value;
+                const leaveType = document.getElementById('leave_type').value;
+                const dateApproved = document.getElementById('date_approved').value;
+
+                // Add filter parameters
+                if (nameSearch) params.set('name_search', nameSearch);
+                if (status) params.set('status', status);
+                if (leaveType) params.set('leave_type', leaveType);
+                if (dateApproved) params.set('date_approved', dateApproved);
+
+                // Copy over existing parameters that aren't filters
+                for (const [key, value] of currentParams) {
+                    if (!['name_search', 'status', 'leave_type', 'date_approved', 'page'].includes(key)) {
+                        params.set(key, value);
+                    }
+                }
+
+                // Update URL without page reload
+                url.search = params.toString();
+                window.history.pushState({}, '', url.toString());
+
+                // Make AJAX request to get filtered data
+                fetch(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Update paid leave list
+                    document.getElementById('paid-leave-list-container').innerHTML = data.html;
+                    
+                    // Update pagination
+                    document.getElementById('pagination-container').innerHTML = data.pagination;
+                    
+                    // Update summary statistics
+                    if (data.summary_stats) {
+                        const stats = data.summary_stats;
+                        // Update summary card values
+                        document.querySelector('[data-summary="total-approved-amount"]').textContent = '₱' + new Intl.NumberFormat().format(stats.total_approved_amount);
+                        document.querySelector('[data-summary="total-approved-leave"]').textContent = stats.total_approved_leave;
+                        document.querySelector('[data-summary="total-pending-amount"]').textContent = '₱' + new Intl.NumberFormat().format(stats.total_pending_amount);
+                        document.querySelector('[data-summary="total-pending-leave"]').textContent = stats.total_pending_leave;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
                 });
+            }
+
+            // Add event listeners for live filtering
+            filterSelects.forEach(select => {
+                if (select.type === 'text') {
+                    // Text inputs use debounced 'input' event for live typing
+                    select.addEventListener('input', debounce(applyFilters, 500));
+                } else {
+                    // Select and date inputs use 'change' event
+                    select.addEventListener('change', applyFilters);
+                }
             });
 
-            // Reset filters
+            // Reset filters functionality
             document.getElementById('reset_filters').addEventListener('click', function() {
-                const url = new URL(window.location.href);
-                url.search = '';
-                window.location.href = url.toString();
+                window.location.href = '{{ route("paid-leaves.index") }}';
+            });
+
+            // Generate Paid Leave Summary functionality
+            document.getElementById('generate_summary').addEventListener('click', function() {
+                // Show the export modal or redirect to summary export
+                window.open('{{ route("paid-leaves.index") }}?export=summary', '_blank');
             });
 
             // Context menu functionality
@@ -395,68 +506,84 @@
             contextMenu.classList.add('opacity-100', 'scale-100');
         }
 
-        // Context menu actions
-        document.getElementById('contextMenuApprove').addEventListener('click', function(e) {
-            e.preventDefault();
-            if (selectedPaidLeaveId && confirm('Are you sure you want to approve this paid leave request?')) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '{{ url('paid-leaves') }}/' + selectedPaidLeaveId + '/approve';
-                
-                const tokenInput = document.createElement('input');
-                tokenInput.type = 'hidden';
-                tokenInput.name = '_token';
-                tokenInput.value = '{{ csrf_token() }}';
-                form.appendChild(tokenInput);
-                
-                document.body.appendChild(form);
-                form.submit();
+        // Context menu actions with event delegation
+        document.addEventListener('click', function(e) {
+            // Check if the clicked element or its parent is the approve button
+            const approveBtn = e.target.closest('#contextMenuApprove');
+            if (approveBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Approve clicked, selectedPaidLeaveId:', selectedPaidLeaveId);
+                if (selectedPaidLeaveId) {
+                    // Route to the individual paid leave page
+                    window.location.href = '{{ url('paid-leaves') }}/' + selectedPaidLeaveId;
+                }
+                hideContextMenu();
             }
-            hideContextMenu();
-        });
 
-        document.getElementById('contextMenuReject').addEventListener('click', function(e) {
-            e.preventDefault();
-            if (selectedPaidLeaveId && confirm('Are you sure you want to reject this paid leave request?')) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '{{ url('paid-leaves') }}/' + selectedPaidLeaveId + '/reject';
-                
-                const tokenInput = document.createElement('input');
-                tokenInput.type = 'hidden';
-                tokenInput.name = '_token';
-                tokenInput.value = '{{ csrf_token() }}';
-                form.appendChild(tokenInput);
-                
-                document.body.appendChild(form);
-                form.submit();
+            const rejectBtn = e.target.closest('#contextMenuReject');
+            if (rejectBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Reject clicked, selectedPaidLeaveId:', selectedPaidLeaveId);
+                if (selectedPaidLeaveId) {
+                    // Route to the individual paid leave page
+                    window.location.href = '{{ url('paid-leaves') }}/' + selectedPaidLeaveId;
+                }
+                hideContextMenu();
             }
-            hideContextMenu();
-        });
 
-        document.getElementById('contextMenuDelete').addEventListener('click', function(e) {
-            e.preventDefault();
-            if (selectedPaidLeaveId && confirm('Are you sure you want to delete this paid leave request? This action cannot be undone.')) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '{{ url('paid-leaves') }}/' + selectedPaidLeaveId;
+            const deleteBtn = e.target.closest('#contextMenuDelete');
+            if (deleteBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Delete clicked, selectedPaidLeaveId:', selectedPaidLeaveId);
                 
-                const tokenInput = document.createElement('input');
-                tokenInput.type = 'hidden';
-                tokenInput.name = '_token';
-                tokenInput.value = '{{ csrf_token() }}';
-                form.appendChild(tokenInput);
+                // Get reference number and status for better confirmation message
+                const row = document.querySelector(`tr[data-paid-leave-id="${selectedPaidLeaveId}"]`);
+                const reference = row ? row.dataset.reference : 'Unknown';
+                const status = row ? row.dataset.status : 'Unknown';
                 
-                const methodInput = document.createElement('input');
-                methodInput.type = 'hidden';
-                methodInput.name = '_method';
-                methodInput.value = 'DELETE';
-                form.appendChild(methodInput);
-                
-                document.body.appendChild(form);
-                form.submit();
+                if (selectedPaidLeaveId && confirm(`Are you sure you want to delete paid leave request? This action cannot be undone.`)) {
+                    // Create form element
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '{{ url('paid-leaves') }}/' + selectedPaidLeaveId;
+                    form.style.display = 'none';
+                    
+                    // Add CSRF token
+                    const tokenInput = document.createElement('input');
+                    tokenInput.type = 'hidden';
+                    tokenInput.name = '_token';
+                    tokenInput.value = '{{ csrf_token() }}';
+                    form.appendChild(tokenInput);
+                    
+                    // Add method override for DELETE
+                    const methodInput = document.createElement('input');
+                    methodInput.type = 'hidden';
+                    methodInput.name = '_method';
+                    methodInput.value = 'DELETE';
+                    form.appendChild(methodInput);
+                    
+                    console.log('Submitting delete form:', {
+                        action: form.action,
+                        method: form.method,
+                        token: tokenInput.value,
+                        methodOverride: methodInput.value
+                    });
+                    
+                    // Append to body and submit
+                    document.body.appendChild(form);
+                    
+                    // Use setTimeout to ensure form is properly appended before submission
+                    setTimeout(() => {
+                        form.submit();
+                    }, 10);
+                } else {
+                    console.log('Delete cancelled or no selectedPaidLeaveId');
+                }
+                hideContextMenu();
             }
-            hideContextMenu();
         });
 
         // Hide context menu

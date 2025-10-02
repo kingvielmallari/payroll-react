@@ -7,6 +7,7 @@ use App\Models\Employee;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class PaidLeaveController extends Controller
@@ -48,9 +49,9 @@ class PaidLeaveController extends Controller
             $query->where('leave_type', $request->leave_type);
         }
 
-        // Filter by date range
-        if ($request->filled('start_date') && $request->filled('end_date')) {
-            $query->whereBetween('start_date', [$request->start_date, $request->end_date]);
+        // Filter by date approved
+        if ($request->filled('date_approved')) {
+            $query->whereDate('approved_date', $request->date_approved);
         }
 
         // Order by latest first
@@ -59,11 +60,23 @@ class PaidLeaveController extends Controller
         $paidLeaves = $query->paginate(10);
 
         // Calculate summary statistics
-        $totalApprovedAmount = PaidLeave::where('status', 'approved')->sum('total_amount');
-        $totalPendingAmount = PaidLeave::where('status', 'pending')->sum('total_amount');
-        $totalRequests = PaidLeave::count();
+        $summaryStats = [
+            'total_approved_amount' => PaidLeave::where('status', 'approved')->sum('total_amount'),
+            'total_approved_leave' => PaidLeave::where('status', 'approved')->count(),
+            'total_pending_amount' => PaidLeave::where('status', 'pending')->sum('total_amount'),
+            'total_pending_leave' => PaidLeave::where('status', 'pending')->count(),
+        ];
 
-        return view('paid-leaves.index', compact('paidLeaves', 'totalApprovedAmount', 'totalPendingAmount', 'totalRequests'));
+        // Handle AJAX requests
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'html' => view('paid-leaves.partials.paid-leave-list', compact('paidLeaves'))->render(),
+                'pagination' => $paidLeaves->appends($request->all())->links()->toHtml(),
+                'summary_stats' => $summaryStats,
+            ]);
+        }
+
+        return view('paid-leaves.index', compact('paidLeaves', 'summaryStats'));
     }
 
     /**
@@ -285,10 +298,17 @@ class PaidLeaveController extends Controller
             'remarks' => $request->remarks,
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Paid leave approved successfully.',
-        ]);
+        // Return JSON response for AJAX requests
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Paid leave approved successfully.',
+            ]);
+        }
+
+        // Return redirect for form submissions
+        return redirect()->route('paid-leaves.index')
+            ->with('success', 'Paid leave approved successfully.');
     }
 
     /**
@@ -309,10 +329,17 @@ class PaidLeaveController extends Controller
             'remarks' => $request->remarks,
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Paid leave rejected.',
-        ]);
+        // Return JSON response for AJAX requests
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Paid leave rejected.',
+            ]);
+        }
+
+        // Return redirect for form submissions
+        return redirect()->route('paid-leaves.index')
+            ->with('success', 'Paid leave rejected successfully.');
     }
 
     /**
@@ -510,18 +537,52 @@ class PaidLeaveController extends Controller
      */
     public function destroy(PaidLeave $paidLeave)
     {
+        Log::info('Delete method called for paid leave', [
+            'paid_leave_id' => $paidLeave->id,
+            'reference_number' => $paidLeave->reference_number,
+            'status' => $paidLeave->status,
+            'user_id' => Auth::id()
+        ]);
+
         $this->authorize('delete paid leaves');
+        Log::info('Authorization passed');
 
-        // Only allow deleting pending requests
-        if ($paidLeave->status !== 'pending') {
-            return redirect()->back()
-                ->with('error', 'Only pending paid leave requests can be deleted.');
+        // Allow deletion of any status (removed pending-only restriction)
+        Log::info('Proceeding with deletion of paid leave with status: ' . $paidLeave->status);
+
+        try {
+            $paidLeave->delete();
+            Log::info('Paid leave deleted successfully', ['paid_leave_id' => $paidLeave->id]);
+
+            // Return JSON response for AJAX requests
+            if (request()->wantsJson() || request()->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Paid leave request deleted successfully.'
+                ]);
+            }
+
+            // Return redirect for form submissions
+            return redirect()->route('paid-leaves.index')
+                ->with('success', 'Paid leave request deleted successfully.');
+        } catch (\Exception $e) {
+            Log::error('Failed to delete paid leave', [
+                'paid_leave_id' => $paidLeave->id,
+                'error' => $e->getMessage()
+            ]);
+
+            // Return JSON response for AJAX requests
+            if (request()->wantsJson() || request()->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to delete paid leave request.'
+                ], 500);
+            }
+
+            // Return redirect for form submissions
+            return redirect()->route('paid-leaves.index')
+                ->with('error', 'Failed to delete paid leave request.');
         }
-
-        $paidLeave->delete();
-
-        return redirect()->route('paid-leaves.index')
-            ->with('success', 'Paid leave request deleted successfully.');
     }
 
     /**

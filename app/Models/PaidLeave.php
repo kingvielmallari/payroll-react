@@ -115,6 +115,19 @@ class PaidLeave extends Model
     public function getLeaveTypeDisplayAttribute()
     {
         return match ($this->leave_type) {
+            'sick_leave' => 'SL',
+            'vacation_leave' => 'VL',
+            'emergency_leave' => 'EL',
+            'maternity_leave' => 'ML',
+            'paternity_leave' => 'PL',
+            'bereavement_leave' => 'BL',
+            default => strtoupper(substr(str_replace('_', '', $this->leave_type), 0, 2)),
+        };
+    }
+
+    public function getLeaveTypeFullNameAttribute()
+    {
+        return match ($this->leave_type) {
             'sick_leave' => 'Sick Leave',
             'vacation_leave' => 'Vacation Leave',
             'emergency_leave' => 'Emergency Leave',
