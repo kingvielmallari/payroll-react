@@ -55,12 +55,14 @@
                 <div class="p-6">
                     <!-- Filter Inputs in 1 Row -->
                     <div class="flex flex-wrap items-end gap-4 mb-4 w-full">
+                        @unless(auth()->user()->hasRole('Employee'))
                         <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Name Search</label>
                             <input type="text" name="name_search" id="name_search" value="{{ request('name_search') }}" 
                                    placeholder="Search employee name..."
                                    class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm paid-leave-filter focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
+                        @endunless
                         
                         <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Status</label>
@@ -94,16 +96,15 @@
 
                         <div class="flex items-end gap-2">
                             <button type="button" id="reset_filters" class="inline-flex items-center px-4 h-10 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                 </svg>
-                                Reset Filters
                             </button>
                             <button type="button" id="generate_summary" class="inline-flex items-center px-4 h-10 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
-                                Generate Paid Leave Summary
+                                Paid Leave Summary
                             </button>
                         </div>
                     </div>
@@ -277,17 +278,13 @@
                             </div>
                         </div>
                         
-                        <!-- Pagination -->
-                        <div id="pagination-container" class="mt-6">
-                            {{ $paidLeaves->links() }}
+                        <div id="pagination-container">
+                            @include('paid-leaves.partials.pagination', ['paidLeaves' => $paidLeaves])
                         </div>
                     @else
-                        <div class="text-center py-12">
-                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                            </svg>
-                            <h3 class="mt-2 text-sm font-medium text-gray-900">No paid leaves found</h3>
-                            <p class="mt-1 text-sm text-gray-500">Get started by creating a new paid leave request.</p>
+                        <div id="pagination-container">
+                            @include('paid-leaves.partials.pagination', ['paidLeaves' => $paidLeaves])
+                        </div>
                             @can('create paid leaves')
                             <div class="mt-6">
                                 <a href="{{ route('paid-leaves.create') }}" 
@@ -331,20 +328,23 @@
                 const currentParams = new URLSearchParams(window.location.search);
 
                 // Get filter values
-                const nameSearch = document.getElementById('name_search').value;
+                const nameSearchEl = document.getElementById('name_search');
+                const nameSearch = nameSearchEl ? nameSearchEl.value : '';
                 const status = document.getElementById('status').value;
                 const leaveType = document.getElementById('leave_type').value;
                 const dateApproved = document.getElementById('date_approved').value;
+                const perPage = document.getElementById('per_page')?.value || 10;
 
                 // Add filter parameters
                 if (nameSearch) params.set('name_search', nameSearch);
                 if (status) params.set('status', status);
                 if (leaveType) params.set('leave_type', leaveType);
                 if (dateApproved) params.set('date_approved', dateApproved);
+                if (perPage) params.set('per_page', perPage);
 
                 // Copy over existing parameters that aren't filters
                 for (const [key, value] of currentParams) {
-                    if (!['name_search', 'status', 'leave_type', 'date_approved', 'page'].includes(key)) {
+                    if (!['name_search', 'status', 'leave_type', 'date_approved', 'per_page', 'page'].includes(key)) {
                         params.set(key, value);
                     }
                 }
@@ -394,6 +394,14 @@
                     select.addEventListener('change', applyFilters);
                 }
             });
+
+            // Handle per page selection
+            const perPageSelect = document.getElementById('per_page');
+            if (perPageSelect) {
+                perPageSelect.addEventListener('change', function() {
+                    applyFilters(); // Use AJAX instead of page reload
+                });
+            }
 
             // Reset filters functionality
             document.getElementById('reset_filters').addEventListener('click', function() {
@@ -479,6 +487,31 @@
                 approveAction.style.display = 'none';
                 rejectAction.style.display = 'none';
             }
+            
+            // Show/hide delete based on status and user role
+            @can('delete paid leaves')
+            @if(auth()->user()->hasRole(['System Administrator', 'HR Head']))
+            // System Admin and HR Head can delete all statuses - no restriction
+            @else
+            // HR Staff can only delete pending
+            const deleteAction = document.getElementById('contextMenuDelete');
+            if (status === 'pending') {
+                deleteAction.style.display = 'flex';
+            } else {
+                deleteAction.style.display = 'none';
+            }
+            @endif
+            @else
+            // For employees (no delete permission), they can only delete their own pending requests
+            @if(auth()->user()->hasRole('Employee'))
+            const deleteAction = document.getElementById('contextMenuDelete');
+            if (deleteAction && status === 'pending') {
+                deleteAction.style.display = 'flex';
+            } else if (deleteAction) {
+                deleteAction.style.display = 'none';
+            }
+            @endif
+            @endcan
 
             // Update links
             document.getElementById('contextMenuView').href = '{{ url('paid-leaves') }}/' + paidLeaveId;

@@ -42,6 +42,12 @@
                         <option value="percentage" {{ old('calculation_type') == 'percentage' ? 'selected' : '' }}>Percentage</option>
                         <option value="fixed_amount" {{ old('calculation_type') == 'fixed_amount' ? 'selected' : '' }}>Fixed Amount</option>
                         <option value="daily_rate_multiplier" {{ old('calculation_type') == 'daily_rate_multiplier' ? 'selected' : '' }}>Daily Rate Multiplier</option>
+                        <option value="automatic" 
+                                id="automatic_option" 
+                                style="display: none;"
+                                {{ old('calculation_type') == 'automatic' ? 'selected' : '' }}>
+                            Automatic (13th Month Pay)
+                        </option>
                     </select>
                     @error('calculation_type')
                         <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
@@ -180,6 +186,24 @@
 </div>
 
 <script>
+// Handle name field changes to show/hide automatic calculation type for 13th month pay
+document.getElementById('name').addEventListener('input', function() {
+    const nameValue = this.value.toLowerCase();
+    const automaticOption = document.getElementById('automatic_option');
+    const calculationType = document.getElementById('calculation_type');
+    
+    if (nameValue.includes('13th') || nameValue.includes('thirteenth')) {
+        automaticOption.style.display = 'block';
+    } else {
+        automaticOption.style.display = 'none';
+        // If automatic is currently selected, reset to empty
+        if (calculationType.value === 'automatic') {
+            calculationType.value = '';
+            calculationType.dispatchEvent(new Event('change'));
+        }
+    }
+});
+
 document.getElementById('calculation_type').addEventListener('change', function() {
     const calculationType = this.value;
     
@@ -195,6 +219,9 @@ document.getElementById('calculation_type').addEventListener('change', function(
         document.getElementById('fixed_amount_field').style.display = 'block';
     } else if (calculationType === 'daily_rate_multiplier') {
         document.getElementById('daily_rate_multiplier_field').style.display = 'block';
+    } else if (calculationType === 'automatic') {
+        // For automatic calculation, no additional fields are needed
+        // The calculation is done automatically based on payroll data
     }
 });
 
@@ -212,6 +239,12 @@ document.getElementById('frequency').addEventListener('change', function() {
 
 // Trigger change events on page load to show the correct fields
 document.addEventListener('DOMContentLoaded', function() {
+    // Check name field on page load for 13th month
+    const nameField = document.getElementById('name');
+    if (nameField) {
+        nameField.dispatchEvent(new Event('input'));
+    }
+    
     const calculationType = document.getElementById('calculation_type').value;
     if (calculationType) {
         document.getElementById('calculation_type').dispatchEvent(new Event('change'));

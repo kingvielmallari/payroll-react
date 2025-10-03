@@ -122,6 +122,18 @@ class PayrollController extends Controller
             }
         }
 
+        // Filter by employee name search
+        if ($request->filled('name_search')) {
+            $query->whereHas('payrollDetails.employee', function ($q) use ($request) {
+                $searchTerm = $request->name_search;
+                $q->where(DB::raw("CONCAT(first_name, ' ', middle_name, ' ', last_name)"), 'LIKE', "%{$searchTerm}%")
+                    ->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$searchTerm}%")
+                    ->orWhere('first_name', 'LIKE', "%{$searchTerm}%")
+                    ->orWhere('last_name', 'LIKE', "%{$searchTerm}%")
+                    ->orWhere('employee_number', 'LIKE', "%{$searchTerm}%");
+            });
+        }
+
         // Paginate with configurable records per page (default 10)
         $perPage = $request->get('per_page', 10);
         $payrolls = $query->paginate($perPage)->withQueryString();
@@ -234,32 +246,183 @@ class PayrollController extends Controller
     }
 
     /**
+     * Display payslips for employees (their own approved payslips only)
+     */
+    public function employeePayslips(Request $request)
+    {
+        // Handle AJAX request for pay periods
+        if ($request->ajax() && $request->input('action') === 'get_periods') {
+            return $this->getPayPeriods($request);
+        }
+
+        // Get current user's employee record
+        $employee = Employee::where('user_id', Auth::id())->first();
+
+        if (!$employee) {
+            abort(404, 'Employee record not found');
+        }
+
+        // Show processing, approved, and paid payrolls for the current employee
+        $query = Payroll::with(['creator', 'approver', 'payrollDetails.employee.position', 'snapshots'])
+            ->whereHas('payrollDetails', function ($q) use ($employee) {
+                $q->where('employee_id', $employee->id);
+            })
+            ->whereIn('status', ['processing', 'approved'])  // Include processing and approved
+            ->withCount('payrollDetails')
+            ->orderBy('created_at', 'desc');
+
+        // Filter by status
+        if ($request->filled('status')) {
+            $status = $request->status;
+            if ($status === 'paid') {
+                // Filter for payrolls that are marked as paid
+                $query->where('is_paid', true);
+            } elseif ($status === 'approved') {
+                // Filter for approved but not paid payrolls
+                $query->where('status', 'approved')->where('is_paid', false);
+            } elseif ($status === 'processing') {
+                // Filter for processing payrolls
+                $query->where('status', 'processing');
+            }
+        }
+
+        // Filter by pay period
+        if ($request->filled('pay_period')) {
+            $periodDates = explode('|', $request->pay_period);
+            if (count($periodDates) === 2) {
+                $startDate = Carbon::parse($periodDates[0]);
+                $endDate = Carbon::parse($periodDates[1]);
+                $query->where('period_start', $startDate)
+                    ->where('period_end', $endDate);
+            }
+        }
+
+        // Paginate with configurable records per page (default 10)
+        $perPage = $request->get('per_page', 10);
+        $payrolls = $query->paginate($perPage)->withQueryString();
+
+        // Calculate summary statistics
+        $summaryQuery = clone $query;
+        $summaryPayrolls = $summaryQuery->get();
+
+        $totalNetPay = 0;
+        $totalDeductions = 0;
+        $totalGrossPay = 0;
+
+        foreach ($summaryPayrolls as $payroll) {
+            if ($payroll->snapshots->isNotEmpty()) {
+                foreach ($payroll->snapshots as $snapshot) {
+                    // Calculate basic pay from breakdown
+                    $basicPay = 0;
+                    if ($snapshot->basic_breakdown) {
+                        $basicBreakdown = is_string($snapshot->basic_breakdown) ?
+                            json_decode($snapshot->basic_breakdown, true) : $snapshot->basic_breakdown;
+                        if (is_array($basicBreakdown)) {
+                            foreach ($basicBreakdown as $type => $data) {
+                                $basicPay += $data['amount'] ?? 0;
+                            }
+                        }
+                    } else {
+                        $basicPay = $snapshot->regular_pay ?? 0;
+                    }
+
+                    // Calculate pay components from breakdown data
+                    $holidayPay = $this->calculateCorrectHolidayPayFromSnapshot($snapshot);
+                    $restPay = $this->calculateCorrectRestPayFromSnapshot($snapshot);
+                    $overtimePay = $this->calculateCorrectOvertimePayFromSnapshot($snapshot);
+
+                    $allowances = $snapshot->allowances_total ?? 0;
+                    $bonuses = $snapshot->bonuses_total ?? 0;
+                    $incentives = $snapshot->incentives_total ?? 0;
+
+                    // Calculate gross pay from components
+                    $grossPay = $basicPay + $holidayPay + $restPay + $overtimePay + $allowances + $bonuses + $incentives;
+
+                    // Calculate deductions from breakdown
+                    $deductions = $this->recalculateDeductionsFromBreakdown($snapshot, $grossPay);
+
+                    // Calculate net pay
+                    $netPay = $grossPay - $deductions;
+
+                    $totalGrossPay += $grossPay;
+                    $totalDeductions += $deductions;
+                    $totalNetPay += $netPay;
+                }
+            } else {
+                // Use stored totals for draft payrolls (no snapshots yet)
+                $totalGrossPay += $payroll->total_gross ?? 0;
+                $totalDeductions += $payroll->total_deductions ?? 0;
+                $totalNetPay += $payroll->total_net ?? 0;
+            }
+        }
+
+        $summaryStats = [
+            'total_net_pay' => $totalNetPay,
+            'total_deductions' => $totalDeductions,
+            'total_gross_pay' => $totalGrossPay,
+        ];
+
+        // Return JSON for AJAX requests
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'payrolls' => $payrolls,
+                'summaryStats' => $summaryStats,
+                'html' => view('payslips.partials.payroll-list', compact('payrolls'))->render(),
+                'pagination' => view('payslips.partials.pagination', compact('payrolls'))->render()
+            ]);
+        }
+
+        return view('payslips.index', compact('payrolls', 'summaryStats'));
+    }
+
+    /**
      * Get pay periods for AJAX request
      */
     private function getPayPeriods(Request $request)
     {
         $schedule = $request->input('schedule');
-        if (!$schedule) {
-            return response()->json(['periods' => []]);
+
+        // Check if this is being called from employee payslips (current route is payslips.index)
+        if ($request->route()->getName() === 'payslips.index') {
+            // For employee payslips, get periods for current employee's approved payrolls only
+            $employee = Employee::where('user_id', Auth::id())->first();
+            if (!$employee) {
+                return response()->json(['periods' => []]);
+            }
+
+            $existingPeriods = Payroll::whereHas('payrollDetails', function ($q) use ($employee) {
+                $q->where('employee_id', $employee->id);
+            })
+                ->whereIn('status', ['processing', 'approved'])
+                ->select('period_start', 'period_end')
+                ->distinct()
+                ->orderBy('period_start', 'desc')
+                ->limit(12)
+                ->get();
+        } else {
+            // Original logic for payroll management
+            if (!$schedule) {
+                return response()->json(['periods' => []]);
+            }
+
+            // Get the schedule setting
+            $scheduleSetting = \App\Models\PayScheduleSetting::systemDefaults()
+                ->where('code', $schedule)
+                ->first();
+
+            if (!$scheduleSetting) {
+                return response()->json(['periods' => []]);
+            }
+
+            // Get existing payroll periods from database for this schedule
+            $existingPeriods = Payroll::where('pay_schedule', $schedule)
+                ->whereIn('status', ['processing', 'approved'])
+                ->select('period_start', 'period_end')
+                ->distinct()
+                ->orderBy('period_start', 'desc')
+                ->limit(12) // Show last 12 periods
+                ->get();
         }
-
-        // Get the schedule setting
-        $scheduleSetting = \App\Models\PayScheduleSetting::systemDefaults()
-            ->where('code', $schedule)
-            ->first();
-
-        if (!$scheduleSetting) {
-            return response()->json(['periods' => []]);
-        }
-
-        // Get existing payroll periods from database for this schedule
-        $existingPeriods = Payroll::where('pay_schedule', $schedule)
-            ->whereIn('status', ['processing', 'approved'])
-            ->select('period_start', 'period_end')
-            ->distinct()
-            ->orderBy('period_start', 'desc')
-            ->limit(12) // Show last 12 periods
-            ->get();
 
         $periods = [];
         foreach ($existingPeriods as $period) {
@@ -1357,11 +1520,11 @@ class PayrollController extends Controller
         $calculatedBasicPay = $grossPayData['basic_pay'] ?? 0;
 
         // Calculate allowances using dynamic settings
-        $allowancesData = $this->calculateAllowances($employee, $calculatedBasicPay, $daysWorked, $hoursWorked);
+        $allowancesData = $this->calculateAllowances($employee, $calculatedBasicPay, $daysWorked, $hoursWorked, $periodStart, $periodEnd);
         $allowancesTotal = $allowancesData['total'];
 
         // Calculate bonuses using dynamic settings
-        $bonusesData = $this->calculateBonuses($employee, $calculatedBasicPay, $daysWorked, $hoursWorked);
+        $bonusesData = $this->calculateBonuses($employee, $calculatedBasicPay, $daysWorked, $hoursWorked, $periodStart, $periodEnd);
         $bonusesTotal = $bonusesData['total'];
 
         // Calculate incentives using dynamic settings
@@ -2067,7 +2230,7 @@ class PayrollController extends Controller
     /**
      * Calculate allowances for an employee using dynamic settings
      */
-    private function calculateAllowances($employee, $basicPay, $daysWorked = 0, $hoursWorked = 0)
+    private function calculateAllowances($employee, $basicPay, $daysWorked = 0, $hoursWorked = 0, $periodStart = null, $periodEnd = null)
     {
         $total = 0;
         $details = [];
@@ -2084,22 +2247,37 @@ class PayrollController extends Controller
 
             // Apply distribution logic if amount > 0
             if ($amount > 0) {
-                // Apply distribution logic using period dates from current payroll context
-                // We need payroll period for distribution calculation
-                $payroll = request()->route('payroll'); // Get current payroll from route
-                if ($payroll && $payroll instanceof \App\Models\Payroll) {
+                // Apply distribution logic using provided period dates or fallback to route
+                if ($periodStart && $periodEnd) {
                     $employeePaySchedule = $employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
-                        $payroll->period_start,
-                        $payroll->period_end
+                        $periodStart,
+                        $periodEnd
                     );
 
                     // Apply distribution logic using the model method
                     $amount = $setting->calculateDistributedAmount(
                         $amount,
-                        $payroll->period_start,
-                        $payroll->period_end,
+                        $periodStart,
+                        $periodEnd,
                         $employeePaySchedule
                     );
+                } else {
+                    // Fallback to route-based payroll context for backward compatibility
+                    $payroll = request()->route('payroll'); // Get current payroll from route
+                    if ($payroll && $payroll instanceof \App\Models\Payroll) {
+                        $employeePaySchedule = $employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                            $payroll->period_start,
+                            $payroll->period_end
+                        );
+
+                        // Apply distribution logic using the model method
+                        $amount = $setting->calculateDistributedAmount(
+                            $amount,
+                            $payroll->period_start,
+                            $payroll->period_end,
+                            $employeePaySchedule
+                        );
+                    }
                 }
 
                 if ($amount > 0) {
@@ -2122,7 +2300,7 @@ class PayrollController extends Controller
     /**
      * Calculate bonuses for an employee using dynamic settings
      */
-    private function calculateBonuses($employee, $basicPay, $daysWorked = 0, $hoursWorked = 0)
+    private function calculateBonuses($employee, $basicPay, $daysWorked = 0, $hoursWorked = 0, $periodStart = null, $periodEnd = null)
     {
         $total = 0;
         $details = [];
@@ -2139,22 +2317,37 @@ class PayrollController extends Controller
 
             // Apply distribution logic if amount > 0
             if ($amount > 0) {
-                // Apply distribution logic using period dates from current payroll context
-                // We need payroll period for distribution calculation
-                $payroll = request()->route('payroll'); // Get current payroll from route
-                if ($payroll && $payroll instanceof \App\Models\Payroll) {
+                // Apply distribution logic using provided period dates or fallback to route
+                if ($periodStart && $periodEnd) {
                     $employeePaySchedule = $employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
-                        $payroll->period_start,
-                        $payroll->period_end
+                        $periodStart,
+                        $periodEnd
                     );
 
                     // Apply distribution logic using the model method
                     $amount = $setting->calculateDistributedAmount(
                         $amount,
-                        $payroll->period_start,
-                        $payroll->period_end,
+                        $periodStart,
+                        $periodEnd,
                         $employeePaySchedule
                     );
+                } else {
+                    // Fallback to route-based payroll context for backward compatibility
+                    $payroll = request()->route('payroll'); // Get current payroll from route
+                    if ($payroll && $payroll instanceof \App\Models\Payroll) {
+                        $employeePaySchedule = $employee->pay_schedule ?? \App\Models\PayScheduleSetting::detectPayFrequencyFromPeriod(
+                            $payroll->period_start,
+                            $payroll->period_end
+                        );
+
+                        // Apply distribution logic using the model method
+                        $amount = $setting->calculateDistributedAmount(
+                            $amount,
+                            $payroll->period_start,
+                            $payroll->period_end,
+                            $employeePaySchedule
+                        );
+                    }
                 }
 
                 if ($amount > 0) {
@@ -2268,6 +2461,11 @@ class PayrollController extends Controller
                         $amount = $amount * min($daysWorked, $maxDays);
                     }
                 }
+                break;
+
+            case 'automatic':
+                // Use the model's calculateAmount method for automatic calculation
+                $amount = $setting->calculateAmount($basicPay, $employee->daily_rate, $daysWorked, $employee);
                 break;
         }
 
@@ -3025,7 +3223,22 @@ class PayrollController extends Controller
      */
     public function payslip(Payroll $payroll)
     {
-        $this->authorize('view payrolls');
+        // Allow employees to view their own payslips, others need permission
+        if (!Auth::user()->hasRole('Employee')) {
+            $this->authorize('view payrolls');
+        } else {
+            // For employees, check if they have access to this payroll
+            $employee = Auth::user()->employee;
+            if (!$employee) {
+                abort(404, 'Employee record not found');
+            }
+
+            // Check if this payroll contains the employee's data
+            $hasAccess = $payroll->payrollDetails()->where('employee_id', $employee->id)->exists();
+            if (!$hasAccess) {
+                abort(403, 'You can only view your own payslips.');
+            }
+        }
 
         // Load necessary relationships
         $payroll->load([
@@ -3084,6 +3297,12 @@ class PayrollController extends Controller
                             ]);
                         }
 
+                        if ($snapshot->bonuses_breakdown) {
+                            $detail->bonuses_breakdown = is_string($snapshot->bonuses_breakdown)
+                                ? json_decode($snapshot->bonuses_breakdown, true)
+                                : $snapshot->bonuses_breakdown;
+                        }
+
                         if ($snapshot->deductions_breakdown) {
                             $detail->deduction_breakdown = is_string($snapshot->deductions_breakdown)
                                 ? json_decode($snapshot->deductions_breakdown, true)
@@ -3094,15 +3313,20 @@ class PayrollController extends Controller
             }
         }
 
-        // Get company information (you may need to create a Company model or use settings)
+        // Get dynamic company data from employer_settings table
+        $employerSettings = \App\Models\EmployerSetting::first();
+
+        // Get active deduction settings for breakdown display
+        $activeDeductions = \App\Models\DeductionTaxSetting::active()->orderBy('name')->get();
+
         $company = (object)[
-            'name' => config('app.name', 'Your Company Name'),
-            'address' => 'Company Address, City, Province',
-            'phone' => '+63 (000) 000-0000',
-            'email' => 'hr@company.com'
+            'name' => $employerSettings->registered_business_name ?? 'Payroll-System',
+            'address' => $employerSettings->registered_address ?? 'Company Address, City, Province',
+            'phone' => $employerSettings->landline_mobile ?? '+63 (000) 000-0000',
+            'email' => $employerSettings->office_business_email ?? 'hr@company.com'
         ];
 
-        return view('payrolls.payslip', compact('payroll', 'company', 'isDynamic'));
+        return view('payrolls.payslip', compact('payroll', 'company', 'isDynamic', 'employerSettings', 'activeDeductions'));
     }
 
     /**
@@ -3790,6 +4014,14 @@ class PayrollController extends Controller
                 $dailyRate = $employee->daily_rate ?? $this->calculateDailyRate($employee, $employee->basic_salary ?? 0, $payroll->period_start, $payroll->period_end);
                 $daysWorked = $this->calculateDaysWorked($employee, $payroll);
                 $amount = $dailyRate * ($setting->multiplier ?? 0) * $daysWorked;
+                break;
+
+            case 'automatic':
+                // Use the model's calculateAmount method for automatic calculation
+                $basicPay = $employee->basic_salary ?? 0;
+                $dailyRate = $employee->daily_rate ?? $this->calculateDailyRate($employee, $basicPay, $payroll->period_start, $payroll->period_end);
+                $daysWorked = $this->calculateDaysWorked($employee, $payroll);
+                $amount = $setting->calculateAmount($basicPay, $dailyRate, $daysWorked, $employee);
                 break;
         }
 
@@ -7175,8 +7407,10 @@ class PayrollController extends Controller
             $basicPay += $data['amount'] ?? 0;
         }
 
-        foreach ($holidayBreakdown as $data) {
-            $holidayPay += $data['amount'] ?? 0;
+        if ($holidayBreakdown) {
+            foreach ($holidayBreakdown as $data) {
+                $holidayPay += $data['amount'] ?? 0;
+            }
         }
 
         $payBreakdownByEmployee = [
@@ -7631,7 +7865,7 @@ class PayrollController extends Controller
             // For draft payrolls, calculate allowance breakdowns dynamically
             foreach ($payroll->payrollDetails as $detail) {
                 // Calculate allowances breakdown dynamically
-                $allowancesData = $this->calculateAllowances($detail->employee, $detail->basic_salary, $detail->days_worked, $detail->regular_hours);
+                $allowancesData = $this->calculateAllowances($detail->employee, $detail->basic_salary, $detail->days_worked, $detail->regular_hours, $payroll->period_start, $payroll->period_end);
 
                 $detail->earnings_breakdown = json_encode([
                     'allowances' => $allowancesData['breakdown'] ?? []
@@ -8533,26 +8767,19 @@ class PayrollController extends Controller
                         $timeLogAmount = round($ratePerMinute * $roundedMinutes, 2); // Round final amount to 2 decimals
                     }
 
-                    // Calculate fixed amount based on holiday settings (similar to partial suspension)
-                    // Find matching holiday of this type in the period
-                    $matchingHoliday = null;
+                    // Calculate fixed amount based on individual holiday settings in the period
+                    $fixedAmount = 0;
+
                     foreach ($holidays as $holiday) {
                         if (($type === 'regular_holiday' && $holiday->type === 'regular') ||
                             ($type === 'special_holiday' && $holiday->type === 'special_non_working')
                         ) {
-                            $matchingHoliday = $holiday;
-                            break;
-                        }
-                    }
-
-                    if ($matchingHoliday) {
-                        $payRule = $matchingHoliday->pay_rule ?? 'full';
-
-                        // Calculate fixed daily amount based on pay rule
-                        if ($payRule === 'half') {
-                            $fixedAmount = round($dailyRate * 0.5, 2);
-                        } else {
-                            $fixedAmount = round($dailyRate, 2);
+                            $payRule = $holiday->pay_rule ?? 'full';
+                            if ($payRule === 'half') {
+                                $fixedAmount += round($dailyRate * 0.5, 2);
+                            } else {
+                                $fixedAmount += round($dailyRate, 2);
+                            }
                         }
                     }
 
@@ -8635,24 +8862,19 @@ class PayrollController extends Controller
                         $timeLogAmount = round($ratePerMinute * $roundedMinutes, 2);
                     }
 
-                    // Calculate fixed amount based on holiday settings (fallback)
-                    $matchingHoliday = null;
+                    // Calculate fixed amount based on individual holiday settings (fallback)
+                    $fixedAmount = 0;
+
                     foreach ($holidays as $holiday) {
                         if (($type === 'regular_holiday' && $holiday->type === 'regular') ||
                             ($type === 'special_holiday' && $holiday->type === 'special_non_working')
                         ) {
-                            $matchingHoliday = $holiday;
-                            break;
-                        }
-                    }
-
-                    if ($matchingHoliday) {
-                        $payRule = $matchingHoliday->pay_rule ?? 'full';
-
-                        if ($payRule === 'half') {
-                            $fixedAmount = round($dailyRate * 0.5, 2);
-                        } else {
-                            $fixedAmount = round($dailyRate, 2);
+                            $payRule = $holiday->pay_rule ?? 'full';
+                            if ($payRule === 'half') {
+                                $fixedAmount += round($dailyRate * 0.5, 2);
+                            } else {
+                                $fixedAmount += round($dailyRate, 2);
+                            }
                         }
                     }
 
@@ -8704,78 +8926,122 @@ class PayrollController extends Controller
             }
         }
 
-        // ADDITIONAL LOGIC: Process paid holidays that have NO time logs but still need fixed amount display
-        // This ensures paid holidays show breakdown even when time_log_amount = 0
-        foreach ($holidays as $holiday) {
-            $holidayType = null;
-            $holidayName = null;
+        // ADDITIONAL LOGIC: Process paid holidays that have time log records with is_holiday=true but no time worked
+        // Check if employee has holiday time log records during this period
+        $holidayTimeLogs = \App\Models\TimeLog::where('employee_id', $employee->id)
+            ->where('is_holiday', true)
+            ->whereBetween('log_date', [$periodStart, $periodEnd])
+            ->get();
 
-            // Map holiday type to breakdown key
-            if ($holiday->type === 'regular') {
-                $holidayType = 'regular_holiday';
-                $holidayName = 'Regular Holiday';
-            } elseif ($holiday->type === 'special_non_working') {
-                $holidayType = 'special_holiday';
-                $holidayName = 'Special Holiday';
-            }
+        if ($holidayTimeLogs->isNotEmpty()) {
+            // Group time logs by holiday type based on the actual holiday dates
+            $holidayLogsByType = [];
 
-            // Only process if this holiday type doesn't already exist in breakdown
-            if ($holidayType && $holidayName && !isset($breakdown[$holidayName])) {
-                // Check if employee is eligible for this holiday pay
-                $employeeHasBenefits = $employee->benefits_status === 'with_benefits';
-                $payApplicableTo = $holiday->pay_applicable_to ?? 'all';
-                $shouldReceivePay = false;
-
-                if ($payApplicableTo === 'all') {
-                    $shouldReceivePay = true;
-                } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
-                    $shouldReceivePay = true;
-                } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
-                    $shouldReceivePay = true;
+            foreach ($holidayTimeLogs as $timeLog) {
+                // Find which holiday this time log corresponds to
+                $matchingHoliday = null;
+                foreach ($holidays as $holiday) {
+                    $holidayDate = is_string($holiday->date) ? $holiday->date : $holiday->date->format('Y-m-d');
+                    $logDate = is_string($timeLog->log_date) ? $timeLog->log_date : $timeLog->log_date->format('Y-m-d');
+                    if ($holidayDate === $logDate) {
+                        $matchingHoliday = $holiday;
+                        break;
+                    }
                 }
 
-                // Get rate config for this holiday type (needed for both paid and unpaid)
-                $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $holidayType)
-                    ->where('is_active', true)
-                    ->first();
+                if ($matchingHoliday) {
+                    $holidayType = $matchingHoliday->type === 'regular' ? 'regular_holiday' : 'special_holiday';
+                    $holidayName = $matchingHoliday->type === 'regular' ? 'Regular Holiday' : 'Special Holiday';
 
-                if ($rateConfig) {
-                    $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
-
-                    // For holidays with no time logs: fixed amount calculation
-                    $timeLogAmount = 0; // No time logs
-                    $payRule = $holiday->pay_rule ?? 'full';
-
-                    if ($shouldReceivePay) {
-                        // PAID HOLIDAY: Calculate actual fixed amount
-                        if ($payRule === 'half') {
-                            $fixedAmount = round($dailyRate * 0.5, 2);
-                        } else {
-                            $fixedAmount = round($dailyRate, 2);
-                        }
-                    } else {
-                        // UNPAID HOLIDAY: Show ₱0.00 but still display breakdown structure
-                        $fixedAmount = 0;
+                    if (!isset($holidayLogsByType[$holidayName])) {
+                        $holidayLogsByType[$holidayName] = [
+                            'type' => $holidayType,
+                            'logs' => [],
+                            'holidays' => []
+                        ];
                     }
 
-                    $totalAmount = $fixedAmount + $timeLogAmount;
+                    $holidayLogsByType[$holidayName]['logs'][] = $timeLog;
+                    $holidayLogsByType[$holidayName]['holidays'][] = $matchingHoliday;
+                }
+            }
 
-                    // Always show breakdown for ALL holidays (paid/unpaid), just like partial suspension
-                    // This ensures transparency - users can see if holiday is paid or not
-                    $description = "Holiday Pay: ₱" . number_format($fixedAmount, 2) . " (fixed) + ₱" . number_format($timeLogAmount, 2) . " (worked)";
+            // Process each holiday type that has time log records
+            foreach ($holidayLogsByType as $holidayName => $data) {
+                // Only process if this holiday type doesn't already exist in breakdown (from time worked)
+                if (!isset($breakdown[$holidayName])) {
+                    // Check if employee is eligible for this holiday pay
+                    $employeeHasBenefits = $employee->benefits_status === 'with_benefits';
+                    $sampleHoliday = $data['holidays'][0]; // Get first holiday for settings
+                    $payApplicableTo = $sampleHoliday->pay_applicable_to ?? 'all';
+                    $shouldReceivePay = false;
 
-                    $breakdown[$holidayName] = [
-                        'hours' => 0, // No time logs
-                        'minutes' => 0, // No time logs
-                        'rate' => $hourlyRate,
-                        'rate_per_minute' => 0,
-                        'multiplier' => $multiplier,
-                        'dynamic_multiplier' => $multiplier,
-                        'fixed_amount' => $fixedAmount,
-                        'time_log_amount' => $timeLogAmount,
-                        'amount' => $totalAmount,
-                        'description' => $description
-                    ];
+                    if ($payApplicableTo === 'all') {
+                        $shouldReceivePay = true;
+                    } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
+                        $shouldReceivePay = true;
+                    } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
+                        $shouldReceivePay = true;
+                    }
+
+                    if ($shouldReceivePay) {
+                        // Get rate config for this holiday type
+                        $rateConfig = \App\Models\PayrollRateConfiguration::where('type_name', $data['type'])
+                            ->where('is_active', true)
+                            ->first();
+
+                        $multiplier = 1.0;
+                        if ($rateConfig) {
+                            $multiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                        } else {
+                            // Fallback multipliers
+                            $fallbackMultipliers = [
+                                'special_holiday' => 1.3,
+                                'regular_holiday' => 2.0
+                            ];
+                            $multiplier = $fallbackMultipliers[$data['type']] ?? 1.0;
+                        }
+
+                        // Calculate fixed amount by checking each holiday's individual pay rule
+                        $fixedAmount = 0;
+                        $processedDates = [];
+
+                        foreach ($data['holidays'] as $holiday) {
+                            $holidayDate = is_string($holiday->date) ? $holiday->date : $holiday->date->format('Y-m-d');
+
+                            // Only process each unique date once
+                            if (!in_array($holidayDate, $processedDates)) {
+                                $processedDates[] = $holidayDate;
+
+                                $payRule = $holiday->pay_rule ?? 'full';
+                                if ($payRule === 'half') {
+                                    $fixedAmount += round($dailyRate * 0.5, 2);
+                                } else {
+                                    $fixedAmount += round($dailyRate, 2);
+                                }
+                            }
+                        }
+                        $timeLogAmount = 0; // No actual time worked (covered by time breakdown)
+                        $totalAmount = $fixedAmount + $timeLogAmount;
+
+                        // Always show breakdown if there's a fixed amount
+                        if ($fixedAmount > 0) {
+                            $description = "Holiday Pay: ₱" . number_format($fixedAmount, 2) . " (fixed) + ₱" . number_format($timeLogAmount, 2) . " (worked)";
+
+                            $breakdown[$holidayName] = [
+                                'hours' => 0, // No time worked
+                                'minutes' => 0, // No time worked
+                                'rate' => $hourlyRate,
+                                'rate_per_minute' => 0,
+                                'multiplier' => $multiplier,
+                                'dynamic_multiplier' => $multiplier,
+                                'fixed_amount' => $fixedAmount,
+                                'time_log_amount' => $timeLogAmount,
+                                'amount' => $totalAmount,
+                                'description' => $description
+                            ];
+                        }
+                    }
                 }
             }
         }

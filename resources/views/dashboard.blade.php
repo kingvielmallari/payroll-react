@@ -15,10 +15,17 @@
                 @if(count($notifications) > 0)
                     <div class="mb-6">
                         @foreach($notifications as $notification)
-                            <div class="bg-{{ $notification['type'] === 'warning' ? 'yellow' : 'blue' }}-50 border-l-4 border-{{ $notification['type'] === 'warning' ? 'yellow' : 'blue' }}-400 p-4 mb-2">
+                            @php
+                                $colorClass = match($notification['type']) {
+                                    'warning' => 'yellow',
+                                    'purple' => 'purple',
+                                    default => 'blue'
+                                };
+                            @endphp
+                            <div class="bg-{{ $colorClass }}-50 border-l-4 border-{{ $colorClass }}-400 p-4 mb-2">
                                 <div class="flex">
                                     <div class="ml-3">
-                                        <p class="text-sm text-{{ $notification['type'] === 'warning' ? 'yellow' : 'blue' }}-700">
+                                        <p class="text-sm text-{{ $colorClass }}-700">
                                             <a href="{{ $notification['link'] ?? '#' }}" class="underline">
                                                 {{ $notification['message'] }}
                                             </a>

@@ -54,12 +54,14 @@
                 <div class="p-6">
                     <!-- Filter Inputs in 1 Row -->
                     <div class="flex flex-wrap items-end gap-4 mb-4 w-full">
+                        @unless(auth()->user()->hasRole('Employee'))
                         <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Name Search</label>
                             <input type="text" name="name_search" id="name_search" value="{{ request('name_search') }}" 
                                    placeholder="Search employee name..."
                                    class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm cash-advance-filter focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
+                        @endunless
                         
                         <div class="flex-1 min-w-[180px]">
                             <label class="block text-sm font-medium text-gray-700">Status</label>
@@ -87,16 +89,15 @@
 
                         <div class="flex items-end gap-2">
                             <button type="button" id="reset_filters" class="inline-flex items-center px-4 h-10 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-4 h-4 " fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                 </svg>
-                                Reset Filters
                             </button>
                             <button type="button" id="generate_summary" class="inline-flex items-center px-4 h-10 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
-                                Generate Cash Advance Summary
+                               Cash Advance Summary
                             </button>
                         </div>
                     </div>
@@ -229,12 +230,14 @@
                 View Details
             </a>
             
+            @can('edit cash advances')
             <a href="#" id="contextMenuEdit" class="flex items-center px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 hover:text-blue-900 transition-colors duration-150">
                 <svg class="w-4 h-4 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                 </svg>
                 Edit
             </a>
+            @endcan
             
             @can('approve cash advances')
             <a href="#" id="contextMenuApprove" class="flex items-center px-3 py-2 text-sm text-green-700 hover:bg-green-50 hover:text-green-900 transition-colors duration-150" style="display: none;">
@@ -282,7 +285,7 @@
             const addContextMenu = document.getElementById('addContextMenu');
             const addBtn = document.getElementById('addCashAdvanceBtn');
             
-            if (!addBtn.contains(event.target) && !addContextMenu.contains(event.target)) {
+            if (addBtn && addContextMenu && !addBtn.contains(event.target) && !addContextMenu.contains(event.target)) {
                 addContextMenu.classList.add('hidden');
             }
         });
@@ -303,14 +306,19 @@
             
             // Update action URLs
             document.getElementById('contextMenuView').href = '{{ route("cash-advances.index") }}/' + id;
-            document.getElementById('contextMenuEdit').href = '{{ route("cash-advances.index") }}/' + id + '/edit';
-            
-            // Show/hide Edit button based on status (only for pending)
-            if (status === 'pending') {
-                document.getElementById('contextMenuEdit').style.display = 'flex';
-            } else {
-                document.getElementById('contextMenuEdit').style.display = 'none';
+            @can('edit cash advances')
+            const contextMenuEdit = document.getElementById('contextMenuEdit');
+            if (contextMenuEdit) {
+                contextMenuEdit.href = '{{ route("cash-advances.index") }}/' + id + '/edit';
+                
+                // Show/hide Edit button based on status (only for pending)
+                if (status === 'pending') {
+                    contextMenuEdit.style.display = 'flex';
+                } else {
+                    contextMenuEdit.style.display = 'none';
+                }
             }
+            @endcan
             
             // Show/hide actions based on status and permissions
             @can('approve cash advances')
@@ -321,6 +329,21 @@
                 document.getElementById('contextMenuApprove').style.display = 'none';
                 document.getElementById('contextMenuReject').style.display = 'none';
             }
+            @endcan
+            
+            // Show/hide delete based on status and user role
+            @can('delete cash advances')
+            @if(auth()->user()->hasRole(['System Administrator', 'HR Head']))
+            // System Admin and HR Head can delete all statuses
+            // No status restriction for these roles
+            @else
+            // HR Staff can only delete pending/processing
+            if (status === 'pending') {
+                document.getElementById('contextMenuDelete').style.display = 'flex';
+            } else {
+                document.getElementById('contextMenuDelete').style.display = 'none';
+            }
+            @endif
             @endcan
             
             // Show context menu
@@ -335,7 +358,7 @@
         // Hide context menu when clicking elsewhere
         document.addEventListener('click', function(event) {
             const contextMenu = document.getElementById('contextMenu');
-            if (!contextMenu.contains(event.target)) {
+            if (contextMenu && !contextMenu.contains(event.target)) {
                 contextMenu.classList.add('opacity-0', 'scale-95');
                 contextMenu.classList.remove('opacity-100', 'scale-100');
                 setTimeout(() => {
@@ -345,9 +368,11 @@
         });
         
         // Handle approve action
-        document.getElementById('contextMenuApprove').addEventListener('click', function(e) {
-            e.preventDefault();
-            if (currentCashAdvanceId && confirm('Are you sure you want to approve this cash advance request?')) {
+        const contextMenuApprove = document.getElementById('contextMenuApprove');
+        if (contextMenuApprove) {
+            contextMenuApprove.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (currentCashAdvanceId && confirm('Are you sure you want to approve this cash advance request?')) {
                 const form = document.createElement('form');
                 form.method = 'POST';
                 form.action = '{{ url("cash-advances") }}/' + currentCashAdvanceId + '/approve';
@@ -385,13 +410,16 @@
                 
                 document.body.appendChild(form);
                 form.submit();
-            }
-        });
+                }
+            });
+        }
         
         // Handle reject action
-        document.getElementById('contextMenuReject').addEventListener('click', function(e) {
-            e.preventDefault();
-            if (currentCashAdvanceId && confirm('Are you sure you want to reject this cash advance request?')) {
+        const contextMenuReject = document.getElementById('contextMenuReject');
+        if (contextMenuReject) {
+            contextMenuReject.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (currentCashAdvanceId && confirm('Are you sure you want to reject this cash advance request?')) {
                 const form = document.createElement('form');
                 form.method = 'POST';
                 form.action = '{{ url("cash-advances") }}/' + currentCashAdvanceId + '/reject';
@@ -410,13 +438,16 @@
                 
                 document.body.appendChild(form);
                 form.submit();
-            }
-        });
+                }
+            });
+        }
         
         // Handle delete action
         @can('delete cash advances')
-        document.getElementById('contextMenuDelete').addEventListener('click', function(e) {
-            e.preventDefault();
+        const contextMenuDelete = document.getElementById('contextMenuDelete');
+        if (contextMenuDelete) {
+            contextMenuDelete.addEventListener('click', function(e) {
+                e.preventDefault();
             if (confirm('Are you sure you want to delete this cash advance? This action cannot be undone.')) {
                 let form = document.createElement('form');
                 form.method = 'POST';
@@ -437,7 +468,9 @@
                 document.body.appendChild(form);
                 form.submit();
             }
-        });
+            });
+        }
+        @endcan
 
         // Live filtering functionality
         document.addEventListener('DOMContentLoaded', function() {
@@ -463,20 +496,26 @@
                 const currentParams = new URLSearchParams(window.location.search);
 
                 // Get filter values
-                const nameSearch = document.getElementById('name_search').value;
-                const status = document.getElementById('status').value;
-                const dateApproved = document.getElementById('date_approved').value;
-                const dateCompleted = document.getElementById('date_completed').value;
+                const nameSearchEl = document.getElementById('name_search');
+                const nameSearch = nameSearchEl ? nameSearchEl.value : '';
+                const statusEl = document.getElementById('status');
+                const status = statusEl ? statusEl.value : '';
+                const dateApprovedEl = document.getElementById('date_approved');
+                const dateApproved = dateApprovedEl ? dateApprovedEl.value : '';
+                const dateCompletedEl = document.getElementById('date_completed');
+                const dateCompleted = dateCompletedEl ? dateCompletedEl.value : '';
+                const perPage = document.getElementById('per_page')?.value || 10;
 
                 // Add filter parameters
                 if (nameSearch) params.set('name_search', nameSearch);
                 if (status) params.set('status', status);
                 if (dateApproved) params.set('date_approved', dateApproved);
                 if (dateCompleted) params.set('date_completed', dateCompleted);
+                if (perPage) params.set('per_page', perPage);
 
                 // Copy over existing parameters that aren't filters
                 for (const [key, value] of currentParams) {
-                    if (!['name_search', 'status', 'date_approved', 'date_completed', 'page'].includes(key)) {
+                    if (!['name_search', 'status', 'date_approved', 'date_completed', 'per_page', 'page'].includes(key)) {
                         params.set(key, value);
                     }
                 }
@@ -517,40 +556,79 @@
                 }
             });
 
+            // Handle per page selection
+            const perPageSelect = document.getElementById('per_page');
+            if (perPageSelect) {
+                perPageSelect.addEventListener('change', function() {
+                    applyFilters(); // Use AJAX instead of page reload
+                });
+            }
+
             // Reset filters functionality
-            document.getElementById('reset_filters').addEventListener('click', function() {
-                window.location.href = '{{ route("cash-advances.index") }}';
-            });
+            const resetBtn = document.getElementById('reset_filters');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    window.location.href = '{{ route("cash-advances.index") }}';
+                });
+            }
 
             // Generate Cash Advance Summary functionality
-            document.getElementById('generate_summary').addEventListener('click', function() {
-                // Show the export modal
-                document.getElementById('exportModal').classList.remove('hidden');
-            });
+            const generateSummaryBtn = document.getElementById('generate_summary');
+            if (generateSummaryBtn) {
+                generateSummaryBtn.addEventListener('click', function() {
+                    // Show the export modal
+                    const exportModal = document.getElementById('exportModal');
+                    if (exportModal) {
+                        exportModal.classList.remove('hidden');
+                    }
+                });
+            }
 
             // Modal functionality
-            document.getElementById('closeModal').addEventListener('click', function() {
-                document.getElementById('exportModal').classList.add('hidden');
-            });
+            const closeModal = document.getElementById('closeModal');
+            if (closeModal) {
+                closeModal.addEventListener('click', function() {
+                    const exportModal = document.getElementById('exportModal');
+                    if (exportModal) {
+                        exportModal.classList.add('hidden');
+                    }
+                });
+            }
 
             // Close modal when clicking outside
-            document.getElementById('exportModal').addEventListener('click', function(e) {
-                if (e.target === this) {
-                    this.classList.add('hidden');
-                }
-            });
+            const exportModal = document.getElementById('exportModal');
+            if (exportModal) {
+                exportModal.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        this.classList.add('hidden');
+                    }
+                });
+            }
 
             // PDF Export
-            document.getElementById('exportPDF').addEventListener('click', function() {
-                generateSummary('pdf');
-                document.getElementById('exportModal').classList.add('hidden');
-            });
+            const exportPDF = document.getElementById('exportPDF');
+            if (exportPDF) {
+                exportPDF.addEventListener('click', function() {
+                    generateSummary('pdf');
+                    const exportModal = document.getElementById('exportModal');
+                    if (exportModal) {
+                        exportModal.classList.add('hidden');
+                    }
+                });
+            }
 
             // Excel Export
-            document.getElementById('exportExcel').addEventListener('click', function() {
-                generateSummary('excel');
-                document.getElementById('exportModal').classList.add('hidden');
-            });
+            const exportExcel = document.getElementById('exportExcel');
+            if (exportExcel) {
+                exportExcel.addEventListener('click', function() {
+                    generateSummary('excel');
+                    const exportModal = document.getElementById('exportModal');
+                    if (exportModal) {
+                        exportModal.classList.add('hidden');
+                    }
+                });
+            }
 
             // Function to generate summary
             function generateSummary(format) {
@@ -588,7 +666,6 @@
                 document.body.removeChild(form);
             }
         });
-        @endcan
     </script>
 
     <!-- Export Format Modal -->

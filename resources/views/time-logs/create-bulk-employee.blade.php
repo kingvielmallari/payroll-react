@@ -252,38 +252,12 @@
                                                 $isPaidHoliday = $holidayInfo && ($holidayInfo['is_paid'] ?? false);
                                                 $employeeHasBenefits = $selectedEmployee->benefits_status === 'with_benefits';
                                                 
-                                                if ($isPaidHoliday) {
-                                                    $payApplicableTo = $holidayInfo['pay_applicable_to'] ?? 'all';
-                                                    $shouldAutoFill = false;
-                                                    
-                                                    if ($payApplicableTo === 'all') {
-                                                        $shouldAutoFill = true;
-                                                    } elseif ($payApplicableTo === 'with_benefits' && $employeeHasBenefits) {
-                                                        $shouldAutoFill = true;
-                                                    } elseif ($payApplicableTo === 'without_benefits' && !$employeeHasBenefits) {
-                                                        $shouldAutoFill = true;
-                                                    }
-                                                    
-                                                    if ($shouldAutoFill) {
-                                                        // PAID HOLIDAY: Preserve existing time logs or use auto-fill
-                                                        $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
-                                                        $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
-                                                        $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
-                                                        $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
-                                                    } else {
-                                                        // PAID HOLIDAY BUT NOT APPLICABLE: Clear all time fields
-                                                        $defaultTimeIn = null;
-                                                        $defaultTimeOut = null;
-                                                        $defaultBreakIn = null;
-                                                        $defaultBreakOut = null;
-                                                    }
-                                                } else {
-                                                    // UNPAID HOLIDAY: Preserve existing time logs for manual input
-                                                    $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
-                                                    $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
-                                                    $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
-                                                    $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
-                                                }
+                                                // HOLIDAY LOGIC: Don't auto-fill, only preserve existing time logs (like partial suspension behavior)
+                                                // Users should manually enter time if they worked on holiday
+                                                $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;
+                                                $defaultTimeOut = $day['time_out'] ? $day['time_out']->format('H:i') : null;
+                                                $defaultBreakIn = $day['break_in'] ? $day['break_in']->format('H:i') : null;
+                                                $defaultBreakOut = $day['break_out'] ? $day['break_out']->format('H:i') : null;
                                             } else {
                                                 // NOT SUSPENSION OR HOLIDAY: Use existing data as is
                                                 $defaultTimeIn = $day['time_in'] ? $day['time_in']->format('H:i') : null;

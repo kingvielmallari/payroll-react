@@ -41,7 +41,7 @@ class AllowanceBonusSettingController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'type' => 'required|in:allowance,bonus,incentives',
-            'calculation_type' => 'required|in:percentage,fixed_amount,daily_rate_multiplier',
+            'calculation_type' => 'required|in:percentage,fixed_amount,daily_rate_multiplier,automatic',
             'rate_percentage' => 'nullable|numeric|min:0|max:100|required_if:calculation_type,percentage',
             'fixed_amount' => 'nullable|numeric|min:0|required_if:calculation_type,fixed_amount',
             'daily_rate_multiplier' => 'nullable|numeric|min:0|required_if:calculation_type,daily_rate_multiplier',
@@ -99,7 +99,7 @@ class AllowanceBonusSettingController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'type' => 'required|in:allowance,bonus,incentives',
-            'calculation_type' => 'required|in:percentage,fixed_amount,daily_rate_multiplier',
+            'calculation_type' => 'required|in:percentage,fixed_amount,daily_rate_multiplier,automatic',
             'rate_percentage' => 'nullable|numeric|min:0|max:100|required_if:calculation_type,percentage',
             'fixed_amount' => 'nullable|numeric|min:0|required_if:calculation_type,fixed_amount',
             'multiplier' => 'nullable|numeric|min:0|required_if:calculation_type,daily_rate_multiplier',

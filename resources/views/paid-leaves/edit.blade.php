@@ -122,12 +122,20 @@
                         @csrf
                         @method('PUT')
                         
-                        @if(!$employee)
-                        <!-- Employee Selection (HR/Admin only) -->
+                        <!-- Employee Selection -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label for="employee_id" class="block text-sm font-medium text-gray-700">Employee *</label>
                                 
+                                @if($employee)
+                                <!-- Employee is pre-selected for employees - show disabled input -->
+                                <input type="hidden" name="employee_id" value="{{ $paidLeave->employee_id }}">
+                                <input type="text" 
+                                       class="block w-full border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-500 cursor-not-allowed" 
+                                       value="{{ $paidLeave->employee->full_name }} ({{ $paidLeave->employee->employee_number }})" 
+                                       disabled>
+                                @else
+                                <!-- HR/Admin users get searchable dropdown -->
                                 <!-- Hidden input for form submission -->
                                 <input type="hidden" id="employee_id" name="employee_id" value="{{ old('employee_id', $paidLeave->employee_id) }}" required>
                                 
@@ -171,20 +179,13 @@
                                         </div>
                                     </div>
                                 </div>
+                                @endif
                                 
                                 @error('employee_id')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
                         </div>
-                        @else
-                        <!-- Employee is pre-selected for regular users -->
-                        <input type="hidden" name="employee_id" value="{{ $paidLeave->employee_id }}">
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <h3 class="text-lg font-medium text-gray-900">Leave Request for:</h3>
-                            <p class="text-sm text-gray-600">{{ $paidLeave->employee->full_name }} ({{ $paidLeave->employee->employee_number }})</p>
-                        </div>
-                        @endif
 
                         <!-- Leave Type Selection (for both HR/Admin and Employee users) -->
                         <div class="grid grid-cols-1 gap-6">
@@ -511,7 +512,17 @@
 
         // Main calculation function
         function calculateTotal() {
-            const employeeId = document.getElementById('employee_id').value;
+            // Get employee ID from either the search field or hidden input
+            let employeeId = null;
+            const employeeIdField = document.getElementById('employee_id');
+            const employeeIdHidden = document.querySelector('input[name="employee_id"]');
+            
+            if (employeeIdField) {
+                employeeId = employeeIdField.value;
+            } else if (employeeIdHidden) {
+                employeeId = employeeIdHidden.value;
+            }
+            
             const leaveTypeSelect = document.getElementById('leave_setting_id');
             const selectedOption = leaveTypeSelect.options[leaveTypeSelect.selectedIndex];
             const startDate = document.getElementById('start_date').value;
@@ -736,6 +747,20 @@
             // Trigger calculation update
             calculateTotal();
         }
+
+        // Auto-load leave types for employee users on page load
+        @if($employee)
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set the employee_id for API call
+            const employeeIdInput = document.querySelector('input[name="employee_id"]');
+            if (employeeIdInput && employeeIdInput.value) {
+                console.log('Loading leave types for employee ID:', employeeIdInput.value);
+                loadEmployeeLeaveTypes(employeeIdInput.value);
+            } else {
+                console.log('Employee ID input not found or empty');
+            }
+        });
+        @endif
 
         // Form validation
         document.getElementById('paidLeaveForm').addEventListener('submit', function(e) {

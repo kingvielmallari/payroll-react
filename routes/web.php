@@ -110,6 +110,11 @@ Route::middleware(['auth', 'verified', 'license'])->group(function () {
         });
     });
 
+    // Employee Payslips - for employees to view their own payslips
+    Route::middleware(['role:Employee'])->group(function () {
+        Route::get('payslips', [PayrollController::class, 'employeePayslips'])->name('payslips.index');
+    });
+
     // Payroll Management
     Route::middleware('can:view payrolls')->group(function () {
         // View All Payrolls - shows all payrolls from different periods
@@ -138,7 +143,6 @@ Route::middleware(['auth', 'verified', 'license'])->group(function () {
 
         // Existing payroll routes
         Route::get('payrolls/{payroll}', [PayrollController::class, 'show'])->name('payrolls.show');
-        Route::get('payrolls/{payroll}/payslip', [PayrollController::class, 'payslip'])->name('payrolls.payslip');
         Route::get('payrolls/{payroll}/edit', [PayrollController::class, 'edit'])->name('payrolls.edit');
         Route::put('payrolls/{payroll}', [PayrollController::class, 'update'])->name('payrolls.update');
         Route::delete('payrolls/{payroll}', [PayrollController::class, 'destroy'])
@@ -177,6 +181,9 @@ Route::middleware(['auth', 'verified', 'license'])->group(function () {
             ->name('payrolls.debug-snapshots')
             ->middleware('can:view payrolls');
     });
+
+    // Payslip route - accessible to both HR and employees (authorization handled in controller)
+    Route::get('payrolls/{payroll}/payslip', [PayrollController::class, 'payslip'])->name('payrolls.payslip');
 
     // Payslip Management
     Route::middleware('can:view payslips')->group(function () {

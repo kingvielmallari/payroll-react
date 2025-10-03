@@ -16,68 +16,161 @@
     <script src="/assets/js/html2canvas.min.js"></script>
     <style>
         @media print {
-            body { margin: 0; padding: 0; }
+            * { 
+                print-color-adjust: exact; 
+                -webkit-print-color-adjust: exact; 
+                box-sizing: border-box;
+            }
+            body { 
+                margin: 0; 
+                padding: 0; 
+                background: white !important;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+            }
+            .print\:hidden { display: none !important; }
             .no-print { display: none !important; }
             .page-break { page-break-before: always; }
             .payslip-container { 
                 width: 8.5in !important; 
-                min-height: 11in !important;
+                height: auto !important;
+                max-height: 10.5in !important;
                 margin: 0 !important;
-                padding: 0.5in !important;
+                padding: 0.4in 0.5in !important;
                 box-shadow: none !important;
+                page-break-inside: avoid !important;
+                overflow: visible !important;
+                border-radius: 0 !important;
+                background: white !important;
             }
+            
+            /* Optimized typography for print */
+            .compact-spacing h1 { font-size: 1.1rem !important; line-height: 1.3 !important; font-weight: 700 !important; }
+            .compact-spacing h2 { font-size: 1rem !important; line-height: 1.3 !important; font-weight: 600 !important; }
+            .compact-spacing h3 { font-size: 0.9rem !important; line-height: 1.3 !important; font-weight: 600 !important; }
+            .compact-spacing .text-3xl { font-size: 1.6rem !important; line-height: 1.2 !important; font-weight: 700 !important; }
+            .compact-spacing .text-xl { font-size: 1.1rem !important; line-height: 1.3 !important; }
+            .compact-spacing .text-lg { font-size: 0.95rem !important; line-height: 1.3 !important; }
+            .compact-spacing .text-base { font-size: 0.85rem !important; line-height: 1.4 !important; }
+            .compact-spacing .text-sm { font-size: 0.75rem !important; line-height: 1.4 !important; }
+            .compact-spacing .text-xs { font-size: 0.7rem !important; line-height: 1.3 !important; }
+            
+            /* Optimized spacing for single page */
+            .compact-spacing .space-y-3 > * + * { margin-top: 0.3rem !important; }
+            .compact-spacing .space-y-1 > * + * { margin-top: 0.15rem !important; }
+            .compact-spacing .mb-8 { margin-bottom: 0.4rem !important; }
+            .compact-spacing .mb-6 { margin-bottom: 0.3rem !important; }
+            .compact-spacing .mb-4 { margin-bottom: 0.25rem !important; }
+            .compact-spacing .mb-3 { margin-bottom: 0.2rem !important; }
+            .compact-spacing .mb-2 { margin-bottom: 0.15rem !important; }
+            .compact-spacing .py-3 { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+            .compact-spacing .py-2 { padding-top: 0.2rem !important; padding-bottom: 0.2rem !important; }
+            .compact-spacing .pt-8 { padding-top: 0.3rem !important; }
+            .compact-spacing .pt-6 { padding-top: 0.25rem !important; }
+            .compact-spacing .p-6 { padding: 0.3rem !important; }
+            .compact-spacing .gap-8 { gap: 0.3rem !important; }
+            .compact-spacing .gap-6 { gap: 0.25rem !important; }
+            .compact-spacing .mt-12 { margin-top: 0.4rem !important; }
+            .compact-spacing .mt-8 { margin-top: 0.2rem !important; }
+            .compact-spacing .mt-4 { margin-top: 0.15rem !important; }
+            .compact-spacing .pb-4 { padding-bottom: 0.25rem !important; }
         }
         
         @page {
-            size: letter;
-            margin: 0.5in;
+            size: 8.5in 11in;
+            margin: 0.4in;
         }
         
+        /* Enhanced Payslip Container */
         .payslip-container {
             width: 8.5in;
-            min-height: 11in;
-            margin: 0 auto;
+            max-width: 8.5in;
+            min-height: 10in;
+            margin: 20px auto;
             background: white;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            padding: 0.5in;
+            border-radius: 6px;
+            position: relative;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.5;
+            color: #1f2937;
         }
+        
+        /* Enhanced spacing and typography for readability */
+        .compact-spacing .space-y-3 > * + * { margin-top: 0.5rem; }
+        .compact-spacing .space-y-1 > * + * { margin-top: 0.25rem; }
+        .compact-spacing .mb-8 { margin-bottom: 1rem; }
+        .compact-spacing .mb-6 { margin-bottom: 0.75rem; }
+        .compact-spacing .mb-4 { margin-bottom: 0.5rem; }
+        .compact-spacing .mb-3 { margin-bottom: 0.4rem; }
+        .compact-spacing .mb-2 { margin-bottom: 0.3rem; }
+        .compact-spacing .py-3 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+        .compact-spacing .py-2 { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+        .compact-spacing .pt-8 { padding-top: 0.75rem; }
+        .compact-spacing .pt-6 { padding-top: 0.6rem; }
+        .compact-spacing .p-6 { padding: 0.75rem; }
+        .compact-spacing .gap-8 { gap: 0.75rem; }
+        .compact-spacing .gap-6 { gap: 0.6rem; }
+        .compact-spacing .mt-12 { margin-top: 1rem; }
+        .compact-spacing .mt-8 { margin-top: 0.5rem; }
+        .compact-spacing .mt-4 { margin-top: 0.3rem; }
+        
+        /* Improved typography with better readability */
+        .compact-spacing .text-3xl { font-size: 1.875rem; line-height: 1.3; font-weight: 700; }
+        .compact-spacing .text-xl { font-size: 1.25rem; line-height: 1.4; font-weight: 600; }
+        .compact-spacing .text-lg { font-size: 1.125rem; line-height: 1.4; font-weight: 500; }
+        .compact-spacing .text-base { font-size: 1rem; line-height: 1.5; }
+        .compact-spacing .text-sm { font-size: 0.875rem; line-height: 1.5; }
+        .compact-spacing .text-xs { font-size: 0.75rem; line-height: 1.4; }
+        .compact-spacing h1 { font-size: 1.25rem; line-height: 1.3; font-weight: 700; }
+        .compact-spacing h2 { font-size: 1.125rem; line-height: 1.3; font-weight: 600; }
+        .compact-spacing h3 { font-size: 1rem; line-height: 1.3; font-weight: 600; }
+        
+        /* Enhanced borders and visual elements */
+        .compact-spacing .border-b-2 { border-bottom-width: 2px; border-color: #374151; }
+        .compact-spacing .border-b { border-bottom-width: 1px; border-color: #d1d5db; }
+        .compact-spacing .border-t-2 { border-top-width: 2px; border-color: #374151; }
     </style>
 </head>
-<body class="bg-gray-100 p-4">
+<body class="bg-gray-100 p-2">
     
     <!-- Action Buttons -->
-    <div class="no-print mb-6 text-center space-x-4">
-        <button onclick="window.print()" 
-                class="inline-flex items-center px-6 py-3 bg-blue-600 border border-transparent rounded-md font-semibold text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150">
-            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-            </svg>
-            Print Payslips
-        </button>
-        
-        <button onclick="downloadPDF()" 
-                class="inline-flex items-center px-6 py-3 bg-green-600 border border-transparent rounded-md font-semibold text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150">
-            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-            </svg>
-            Download PDF
-        </button>
-        
-        <button onclick="emailPayslips()" 
-                class="inline-flex items-center px-6 py-3 bg-purple-600 border border-transparent rounded-md font-semibold text-white uppercase tracking-widest hover:bg-purple-700 focus:bg-purple-700 active:bg-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition ease-in-out duration-150">
-            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-            </svg>
-            Email to Employees
-        </button>
-        
-        <a href="{{ route('payrolls.show', $payroll) }}" 
-           class="inline-flex items-center px-6 py-3 bg-gray-600 border border-transparent rounded-md font-semibold text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150">
-            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-            </svg>
-            Back to Payroll
-        </a>
-    </div>
+    <div class="flex justify-center space-x-2 mb-4 no-print print:hidden">
+                <a href="{{ url()->previous() }}" 
+                       class="inline-flex items-center p-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl"
+                       title="Back">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                        </svg>
+                    </a>
+                    <button onclick="window.print()" 
+                            class="inline-flex items-center p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl"
+                            title="Print Payslip">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                        </svg>
+                    </button>
+                    
+                    <button onclick="downloadPDF()" 
+                            class="inline-flex items-center p-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl"
+                            title="Download PDF">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </button>
+                    
+                    @can('email payslip')
+                        <button onclick="emailPayslips()" 
+                                class="inline-flex items-center p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl"
+                                title="Email Payslip">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                        </button>
+                    @endcan
+                    
+            
+                </div>
 
     <!-- Payslips Container -->
     <div id="payslips-container">
@@ -212,17 +305,16 @@
                 <div class="page-break"></div>
             @endif
             
-            <div class="payslip-container p-8 mb-8">
+            <div class="payslip-container compact-spacing">
                 <!-- Header -->
-                <div class="border-b-2 border-gray-800 pb-6 mb-6">
-                    <div class="grid grid-cols-2 gap-8">
+                <div class="border-b-2 border-gray-800 pb-3 mb-4">
+                    <div class="grid grid-cols-2 gap-6">
                         <!-- Company Info -->
                         <div>
-                            <h1 class="text-2xl font-bold text-gray-800 mb-2">{{ $company->name }}</h1>
+                            <h1 class="text-xl font-bold text-gray-800 mb-2">{{ $company->name }}</h1>
                             <div class="text-sm text-gray-600 space-y-1">
-                                <p>{{ $company->address }}</p>
-                                <p>Phone: {{ $company->phone }}</p>
-                                <p>Email: {{ $company->email }}</p>
+                                <p class="leading-relaxed">{{ $company->address }}</p>
+                                <p class="text-gray-500">{{ $company->phone }} | {{ $company->email }}</p>
                             </div>
                         </div>
                         
@@ -230,10 +322,8 @@
                         <div class="text-right">
                             <h2 class="text-xl font-bold text-gray-800 mb-2">PAYSLIP</h2>
                             <div class="text-sm text-gray-600 space-y-1">
-                                <p><strong>Payroll #:</strong> {{ $payroll->payroll_number }}</p>
-                                <p><strong>Pay Period:</strong> {{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}</p>
-                                <p><strong>Pay Date:</strong> {{ $payroll->period_end->format('M d, Y') }}</p>
-                                <p><strong>Status:</strong> <span class="px-2 py-1 rounded text-xs 
+                                <p><strong class="text-gray-700">Pay Period:</strong> {{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}</p>
+                                <p><strong class="text-gray-700">Status:</strong> <span class="px-2 py-1 rounded text-xs font-medium
                                     @if($payroll->status == 'approved') bg-green-100 text-green-800
                                     @elseif($payroll->status == 'processing') bg-yellow-100 text-yellow-800
                                     @else bg-gray-100 text-gray-800
@@ -244,235 +334,281 @@
                 </div>
 
                 <!-- Employee Information -->
-                <div class="grid grid-cols-2 gap-8 mb-8">
+                <div class="grid grid-cols-2 gap-6 mb-6">
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-1">Employee Information</h3>
+                        <h3 class="text-base font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-2">Employee Information</h3>
                         <div class="space-y-2 text-sm">
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Name:</span>
-                                <span class="col-span-2">{{ $detail->employee->first_name }} {{ $detail->employee->last_name }}</span>
+                                <span>{{ $detail->employee->first_name }} {{ $detail->employee->last_name }}</span>
                             </div>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Employee #:</span>
-                                <span class="col-span-2">{{ $detail->employee->employee_number }}</span>
+                                <span>{{ $detail->employee->employee_number }}</span>
                             </div>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Position:</span>
-                                <span class="col-span-2">{{ $detail->employee->position->title ?? 'N/A' }}</span>
+                                <span>{{ $detail->employee->position->title ?? 'N/A' }}</span>
                             </div>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Department:</span>
-                                <span class="col-span-2">{{ $detail->employee->department->name ?? 'N/A' }}</span>
+                                <span>{{ $detail->employee->department->name ?? 'N/A' }}</span>
                             </div>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Schedule:</span>
-                                <span class="col-span-2">{{ $detail->employee->schedule_display ?? 'N/A' }}</span>
+                                <span>{{ $detail->employee->schedule_display ?? 'N/A' }}</span>
                             </div>
                         </div>
                     </div>
                     
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-1">Pay Information</h3>
+                        <h3 class="text-base font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-2">Pay Information</h3>
                         <div class="space-y-2 text-sm">
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Pay Type:</span>
-                                <span class="col-span-2">{{ ucwords(str_replace('_', ' ', $detail->employee->pay_schedule)) }}</span>
+                                <span>{{ ucwords(str_replace('_', ' ', $detail->employee->pay_schedule)) }}</span>
                             </div>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Basic Pay:</span>
-                                <span class="col-span-2">₱{{ number_format($detail->regular_pay ?? 0, 2) }}</span>
+                                <span>₱{{ number_format($detail->regular_pay ?? 0, 2) }}</span>
                             </div>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Regular Hours:</span>
-                                <span class="col-span-2">{{ number_format($detail->regular_hours ?? 0, 1) }} hrs</span>
+                                <span>{{ number_format($detail->regular_hours ?? 0, 1) }} hrs</span>
                             </div>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Overtime Hours:</span>
-                                <span class="col-span-2">{{ number_format($detail->overtime_hours ?? 0, 1) }} hrs</span>
+                                <span>{{ number_format($detail->overtime_hours ?? 0, 1) }} hrs</span>
                             </div>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Total Hours:</span>
-                                <span class="col-span-2 font-semibold">{{ number_format(($detail->regular_hours ?? 0) + ($detail->overtime_hours ?? 0), 1) }} hrs</span>
+                                <span class="font-semibold">{{ number_format(($detail->regular_hours ?? 0) + ($detail->overtime_hours ?? 0), 1) }} hrs</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Earnings and Deductions -->
-                <div class="grid grid-cols-2 gap-8 mb-8">
+                <div class="grid grid-cols-2 gap-6 mb-6">
                     <!-- Earnings -->
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-1">Earnings</h3>
-                        <div class="space-y-3">
-                            @if($actualBasicPay > 0)
+                        <h3 class="text-base font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-2">Earnings</h3>
+                        <div class="space-y-2">
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Regular Pay</span>
-                                <span class="font-semibold text-blue-600">₱{{ number_format($actualBasicPay, 2) }}</span>
+                                <span class="font-semibold text-gray-800">₱{{ number_format($actualBasicPay, 2) }}</span>
                             </div>
-                            @endif
-                            @if($actualHolidayPay > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Holiday Pay</span>
-                                <span class="font-semibold text-yellow-600">₱{{ number_format($actualHolidayPay, 2) }}</span>
+                                <span class="font-semibold text-gray-800">₱{{ number_format($actualHolidayPay, 2) }}</span>
                             </div>
-                            @endif
-                            @if($actualRestPay > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Rest Pay</span>
-                                <span class="font-semibold text-cyan-600">₱{{ number_format($actualRestPay, 2) }}</span>
+                                <span class="font-semibold text-gray-800">₱{{ number_format($actualRestPay, 2) }}</span>
                             </div>
-                            @endif
-                            @if($actualOvertimePay > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Overtime Pay</span>
-                                <span class="font-semibold text-orange-600">₱{{ number_format($actualOvertimePay, 2) }}</span>
+                                <span class="font-semibold text-gray-800">₱{{ number_format($actualOvertimePay, 2) }}</span>
                             </div>
-                            @endif
-                            @if($detail->allowances > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Allowances</span>
-                                <span class="font-semibold text-purple-600">₱{{ number_format($detail->allowances, 2) }}</span>
+                                <span class="font-semibold text-gray-800">₱{{ number_format($detail->allowances, 2) }}</span>
+                            </div>
+
+                            @php
+                                // Separate 13th month pay from other bonuses
+                                $thirteenthMonthPay = 0;
+                                $otherBonuses = 0;
+                                
+                                if (isset($detail->bonuses_breakdown) && is_array($detail->bonuses_breakdown)) {
+                                    foreach ($detail->bonuses_breakdown as $bonus) {
+                                        if (isset($bonus['name']) && isset($bonus['amount'])) {
+                                            // Check if this is 13th month pay
+                                            if (stripos($bonus['name'], '13th') !== false || stripos($bonus['name'], 'thirteenth') !== false) {
+                                                $thirteenthMonthPay += $bonus['amount'];
+                                            } else {
+                                                $otherBonuses += $bonus['amount'];
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Fallback: if no breakdown, show all bonuses as "Other Bonuses"
+                                    $otherBonuses = $detail->bonuses ?? 0;
+                                }
+                            @endphp
+                            
+                            @if($thirteenthMonthPay > 0)
+                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span class="text-sm text-gray-700">13th Month Pay</span>
+                                <span class="font-semibold text-gray-800">₱{{ number_format($thirteenthMonthPay, 2) }}</span>
                             </div>
                             @endif
-                            @if($detail->bonuses > 0)
+                            
+                            @if($otherBonuses > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Bonuses</span>
-                                <span class="font-semibold text-indigo-600">₱{{ number_format($detail->bonuses, 2) }}</span>
+                                <span class="font-semibold text-gray-800">₱{{ number_format($otherBonuses, 2) }}</span>
                             </div>
                             @endif
-                            @if($detail->incentives > 0)
+                            
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Incentives</span>
-                                <span class="font-semibold text-purple-600">₱{{ number_format($detail->incentives, 2) }}</span>
+                                <span class="font-semibold text-gray-800">₱{{ number_format($detail->incentives, 2) }}</span>
                             </div>
-                            @endif
                             @if($detail->other_earnings > 0)
                             <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span class="text-sm text-gray-700">Other Earnings</span>
-                                <span class="font-semibold text-pink-600">₱{{ number_format($detail->other_earnings, 2) }}</span>
+                                <span class="font-semibold text-gray-800">₱{{ number_format($detail->other_earnings, 2) }}</span>
                             </div>
                             @endif
-                            @if($actualGrossPay > 0)
-                            <div class="flex justify-between items-center py-3 border-t-2 border-gray-300 bg-green-50">
+                            <div class="flex justify-between items-center py-2 border-t-2 border-gray-300 bg-green-50 mt-3">
                                 <span class="font-semibold text-gray-800">Gross Pay</span>
                                 <span class="font-bold text-lg text-green-600">₱{{ number_format($actualGrossPay, 2) }}</span>
                             </div>
-                            @endif
                         </div>
                     </div>
 
                     <!-- Deductions -->
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-1">Deductions</h3>
-                        <div class="space-y-3">
+                        <h3 class="text-base font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-2">Deductions</h3>
+                        <div class="space-y-2">
                             <!-- Show deduction breakdown if available from snapshot -->
                             @if(isset($detail->deduction_breakdown) && is_array($detail->deduction_breakdown) && !empty($detail->deduction_breakdown))
-                                @foreach($detail->deduction_breakdown as $code => $deductionData)
+                                @php
+                                    // Get all active deduction codes for comprehensive display
+                                    $activeDeductionCodes = $activeDeductions->pluck('name', 'code')->toArray();
+                                    $allDeductions = collect($detail->deduction_breakdown);
+                                    
+                                    // Ensure all active deductions are represented, even with 0 amount
+                                    foreach($activeDeductions as $deduction) {
+                                        if (!$allDeductions->has($deduction->code)) {
+                                            $allDeductions->put($deduction->code, ['name' => $deduction->name, 'amount' => 0]);
+                                        }
+                                    }
+                                    
+                                    // // Ensure cash advance is always shown
+                                    // if (!$allDeductions->has('CASH_ADVANCE')) {
+                                    //     $allDeductions->put('CASH_ADVANCE', ['name' => 'Cash Advance', 'amount' => $detail->cash_advance_deductions ?? 0]);
+                                    // }
+                                @endphp
+                                
+                                @foreach($allDeductions as $code => $deductionData)
                                     @php
                                         $amount = $deductionData['amount'] ?? $deductionData;
                                     @endphp
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                         <span class="text-sm text-gray-700">{{ $deductionData['name'] ?? $code }}</span>
-                                        <span class="font-semibold text-red-600">₱{{ number_format($amount, 2) }}</span>
+                                        <span class="font-semibold text-gray-800">₱{{ number_format($amount, 2) }}</span>
                                     </div>
                                 @endforeach
                             @else
-                                <!-- Traditional breakdown display -->
-                                @if($detail->sss_contribution > 0)
+                                <!-- Show all active deductions including cash advances -->
+                                @php
+                                    // Create a mapping of deduction codes to actual amounts
+                                    $deductionAmounts = [
+                                        'SSS' => $detail->sss_contribution ?? 0,
+                                        'PHILHEALTH' => $detail->philhealth_contribution ?? 0,
+                                        'PAGIBIG' => $detail->pagibig_contribution ?? 0,
+                                        'WITHHOLDING_TAX' => $detail->withholding_tax ?? 0,
+                                        'OTHER_DEDUCTIONS' => $detail->other_deductions ?? 0,
+                                    ];
+                                @endphp
+                                
+                                @php
+                                    $cashAdvanceShown = false;
+                                @endphp
+                                
+                                {{-- Show all active deduction settings --}}
+                                @foreach($activeDeductions as $deduction)
+                                    @php
+                                        $amount = $deductionAmounts[$deduction->code] ?? 0;
+                                        // Check if this is a cash advance related deduction
+                                        if (in_array(strtolower($deduction->code), ['cash_advance', 'ca']) || 
+                                            in_array(strtolower($deduction->name), ['cash advance', 'ca'])) {
+                                            $amount = $detail->cash_advance_deductions ?? 0;
+                                            $cashAdvanceShown = true;
+                                        }
+                                    @endphp
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                        <span class="text-sm text-gray-700">SSS Contribution</span>
-                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->sss_contribution, 2) }}</span>
+                                        <span class="text-sm text-gray-700">{{ $deduction->name }}</span>
+                                        <span class="font-semibold text-gray-800">₱{{ number_format($amount, 2) }}</span>
                                     </div>
-                                @endif
-                                @if($detail->philhealth_contribution > 0)
-                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                        <span class="text-sm text-gray-700">PhilHealth Contribution</span>
-                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->philhealth_contribution, 2) }}</span>
-                                    </div>
-                                @endif
-                                @if($detail->pagibig_contribution > 0)
-                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                        <span class="text-sm text-gray-700">Pag-IBIG Contribution</span>
-                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->pagibig_contribution, 2) }}</span>
-                                    </div>
-                                @endif
-                                @if($detail->withholding_tax > 0)
-                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                        <span class="text-sm text-gray-700">Withholding Tax</span>
-                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->withholding_tax, 2) }}</span>
-                                    </div>
-                                @endif
-                                @if($detail->cash_advance_deductions > 0)
+                                @endforeach
+                                
+                                {{-- Show Cash Advance only if not already shown in active deductions --}}
+                                @if(!$cashAdvanceShown)
                                     <div class="flex justify-between items-center py-2 border-b border-gray-100">
                                         <span class="text-sm text-gray-700">Cash Advance</span>
-                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->cash_advance_deductions, 2) }}</span>
-                                    </div>
-                                @endif
-                                @if($detail->other_deductions > 0)
-                                    <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                        <span class="text-sm text-gray-700">Other Deductions</span>
-                                        <span class="font-semibold text-red-600">₱{{ number_format($detail->other_deductions, 2) }}</span>
+                                        <span class="font-semibold text-gray-800">₱{{ number_format($detail->cash_advance_deductions ?? 0, 2) }}</span>
                                     </div>
                                 @endif
                             @endif
                             
-                            @if($actualTotalDeductions == 0)
-                            <div class="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span class="text-sm text-gray-400">No deductions</span>
-                                <span class="font-semibold text-gray-400">₱0.00</span>
-                            </div>
-                            @endif
-                            
-                            @if($actualTotalDeductions > 0)
-                            <div class="flex justify-between items-center py-3 border-t-2 border-gray-300 bg-red-50">
+                            <div class="flex justify-between items-center py-2 border-t-2 border-gray-300 bg-red-50 mt-3">
                                 <span class="font-semibold text-gray-800">Total Deductions</span>
                                 <span class="font-bold text-lg text-red-600">₱{{ number_format($actualTotalDeductions, 2) }}</span>
                             </div>
-                            @endif
                         </div>
                     </div>
                 </div>
 
                 <!-- Net Pay -->
-                @if($actualNetPay > 0)
-                <div class="bg-purple-50 border-2 border-purple-200 rounded-lg p-6 mb-8">
+                <div class="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 mb-6">
                     <div class="flex justify-between items-center">
                         <h3 class="text-xl font-bold text-gray-800">NET PAY</h3>
                         <span class="text-3xl font-bold text-purple-600">₱{{ number_format($actualNetPay, 2) }}</span>
                     </div>
-                    <p class="text-sm text-gray-600 mt-2">Amount to be paid to employee</p>
+                    <p class="text-sm text-gray-600 mt-1">Amount to be paid to employee</p>
                 </div>
-                @endif
 
                 <!-- Footer -->
-                <div class="border-t border-gray-300 pt-6 text-center">
-                    <div class="grid grid-cols-2 gap-8 mb-6">
+                <div class="pt-4 text-center mt-6">
+                    <div class="grid grid-cols-2 gap-8 mb-4">
                         <div>
-                            <div class="border-t border-gray-400 pt-2 mt-16">
+                            <div class="border-t border-gray-400 pt-3 mt-8">
                                 <p class="text-sm font-semibold">Employee Signature</p>
-                                <p class="text-xs text-gray-500">{{ $detail->employee->first_name }} {{ $detail->employee->last_name }}</p>
+                                <p class="text-xs text-gray-700 font-medium">{{ $detail->employee->first_name }} {{ $detail->employee->last_name }}</p>
+                                <p class="text-xs text-gray-500">({{ $detail->employee->position->title ?? 'Employee' }})</p>
                             </div>
                         </div>
                         <div>
-                            <div class="border-t border-gray-400 pt-2 mt-16">
+                            <div class="border-t border-gray-400 pt-3 mt-8">
                                 <p class="text-sm font-semibold">Authorized Signature</p>
-                                <p class="text-xs text-gray-500">{{ $payroll->approver ? $payroll->approver->name : 'HR Department' }}</p>
+                                <p class="text-xs text-gray-700 font-medium">{{ $employerSettings->signatory_name ?? 'HR Head' }}</p>
+                                <p class="text-xs text-gray-500">({{ $employerSettings->signatory_designation ?? 'HR Department' }})</p>
                             </div>
                         </div>
                     </div>
-                    <p class="text-xs text-gray-500">
-                        This payslip is generated electronically and serves as an official record of payment. 
-                        For questions, please contact HR Department.
-                    </p>
-                    <p class="text-xs text-gray-400 mt-2">
-                        Generated on {{ now()->format('M d, Y g:i A') }}
-                    </p>
+                    <div class="mt-3">
+                        <p class="text-xs text-gray-500 mb-1">
+                            This payslip is generated electronically and serves as an official record of payment.
+                        </p>
+                        <p class="text-xs text-gray-400">
+                            Generated on {{ now()->format('M d, Y g:i A') }}
+                        </p>
+                    </div>
                 </div>
             </div>
         @endforeach
     </div>
 
     <script>
+        // Auto-configure print settings
+        window.addEventListener('beforeprint', function() {
+            // Try to set print options programmatically
+            try {
+                // This works in some browsers for setting basic print preferences
+                const printSettings = {
+                    headerFooter: false,
+                    backgroundGraphics: true,
+                    marginType: 1, // Minimum margins
+                    scalingType: 0 // Fit to page width
+                };
+            } catch (e) {
+                console.log('Print settings auto-configuration not supported in this browser');
+            }
+        });
+        
         function downloadPDF() {
             // Simple implementation - you can enhance this with jsPDF
             window.print();

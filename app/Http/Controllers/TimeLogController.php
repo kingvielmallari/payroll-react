@@ -1118,21 +1118,12 @@ class TimeLogController extends Controller
                         $frontendBreakIn = $timeLog->break_in ? Carbon::parse($timeLog->break_in) : null;
                         $frontendBreakOut = $timeLog->break_out ? Carbon::parse($timeLog->break_out) : null;
                     } else {
-                        // Auto-fill with employee's regular schedule for paid holidays
-                        if ($employee->timeSchedule) {
-                            $frontendTimeIn = Carbon::parse($employee->timeSchedule->time_in);
-                            $frontendTimeOut = Carbon::parse($employee->timeSchedule->time_out);
-
-                            // Set break times if employee has fixed breaks
-                            if ($employee->timeSchedule->break_start && $employee->timeSchedule->break_end) {
-                                $frontendBreakIn = Carbon::parse($employee->timeSchedule->break_start);
-                                $frontendBreakOut = Carbon::parse($employee->timeSchedule->break_end);
-                            }
-                        } else {
-                            // Fallback schedule for paid holidays
-                            $frontendTimeIn = Carbon::parse('08:00');
-                            $frontendTimeOut = Carbon::parse('17:00');
-                        }
+                        // CHANGED: Don't auto-fill holidays with employee schedule (like partial suspension behavior)
+                        // Users should manually enter time if they worked on holiday
+                        $frontendTimeIn = null;
+                        $frontendTimeOut = null;
+                        $frontendBreakIn = null;
+                        $frontendBreakOut = null;
                     }
                 } else {
                     // Unpaid holidays: preserve existing time logs if available, otherwise leave blank for manual input

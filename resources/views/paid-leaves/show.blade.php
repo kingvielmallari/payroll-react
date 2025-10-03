@@ -263,51 +263,75 @@
     <script>
         function approvePaidLeave(paidLeaveId) {
             if (confirm('Are you sure you want to approve this paid leave request?')) {
+                const formData = new FormData();
+                formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+                formData.append('remarks', '');
+                
                 fetch(`/paid-leaves/${paidLeaveId}/approve`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ remarks: '' })
+                    body: formData
                 })
-                .then(response => response.json())
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    console.log('Response headers:', response.headers);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Response data:', data);
                     if (data.success) {
+                        alert('Paid leave approved successfully.');
                         location.reload();
                     } else {
-                        alert('Error approving paid leave.');
+                        alert('Error approving paid leave: ' + (data.message || 'Unknown error'));
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error approving paid leave.');
+                    console.error('Error details:', error);
+                    alert('Error approving paid leave: ' + error.message);
                 });
             }
         }
 
         function rejectPaidLeave(paidLeaveId) {
             if (confirm('Are you sure you want to reject this paid leave request?')) {
+                const formData = new FormData();
+                formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+                formData.append('remarks', 'Request rejected by administrator');
+                
                 fetch(`/paid-leaves/${paidLeaveId}/reject`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ remarks: 'Request rejected by administrator' })
+                    body: formData
                 })
-                .then(response => response.json())
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Response data:', data);
                     if (data.success) {
-                        alert('Paid leave rejected.');
+                        alert('Paid leave rejected successfully.');
                         location.reload();
                     } else {
-                        alert('Error rejecting paid leave.');
+                        alert('Error rejecting paid leave: ' + (data.message || 'Unknown error'));
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error rejecting paid leave.');
+                    console.error('Error details:', error);
+                    alert('Error rejecting paid leave: ' + error.message);
                 });
             }
         }

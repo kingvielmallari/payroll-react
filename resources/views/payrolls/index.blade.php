@@ -21,6 +21,12 @@
                 <div class="p-6">
                     <!-- Filter Inputs and Action Buttons in 1 Row -->
                     <div class="flex flex-wrap items-end gap-4 mb-4 w-full">
+                        <div class="flex-1 min-w-[180px]">
+                            <label class="block text-sm font-medium text-gray-700">Name Search</label>
+                            <input type="text" name="name_search" id="name_search" value="{{ request('name_search') }}" 
+                                   placeholder="Search employee name..."
+                                   class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
                         <div class="flex-1 ">
                             <label class="block text-sm font-medium text-gray-700">Pay Schedule</label>
                             <select name="pay_schedule" id="pay_schedule" class="mt-1 block w-full h-10 px-3 border-gray-300 rounded-md shadow-sm payroll-filter focus:border-indigo-500 focus:ring-indigo-500">
@@ -57,16 +63,15 @@
                         </div>
                         <div class="flex items-center space-x-2">
                             <button type="button" id="reset_filters" class="inline-flex items-center px-4 h-10 bg-gray-600 border border-transparent rounded-md text-white text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                 </svg>
-                                Reset Filters
                             </button>
                          <button type="button" id="generate_summary" class="inline-flex items-center px-4 h-10 bg-green-600 border border-transparent rounded-md text-white text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
-                                Generate Payroll Summary
+                                 Payroll Summary
                             </button>
                         </div>
                         
@@ -201,7 +206,7 @@
                 <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                 </svg>
-                Send Payroll
+                Send Payslip
             </a>
             <div class="border-t border-gray-100 my-1"></div>
             <a href="#" id="contextMenuDelete" class="flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors duration-150">
@@ -229,6 +234,8 @@
             event.preventDefault();
             event.stopPropagation();
             
+            console.log('Context menu called with:', { payrollId, payrollNumber, period, status, payrollType, paySchedule, employeeId });
+            
             currentPayrollId = payrollId;
             currentPayrollStatus = status;
             
@@ -251,6 +258,9 @@
             let x = event.pageX;
             let y = event.pageY;
             
+            console.log('Positioning menu at:', { x, y });
+            console.log('Context menu element:', contextMenu);
+            
             // Adjust position if menu would go off screen
             let menuWidth = 208; // min-w-52 = 13rem = 208px
             let menuHeight = 280; // approximate height
@@ -267,6 +277,8 @@
             contextMenu.style.top = y + 'px';
             contextMenu.classList.remove('hidden');
             
+            console.log('Menu should now be visible');
+            
             // Animate in
             setTimeout(() => {
                 contextMenu.classList.remove('opacity-0', 'scale-95');
@@ -275,6 +287,8 @@
         }
         
         function showHideContextMenuItems(status) {
+            console.log('Setting menu items for status:', status);
+            
             // Reset all items to hidden
             document.getElementById('contextMenuEdit').style.display = 'none';
             document.getElementById('contextMenuProcess').style.display = 'none';
@@ -296,26 +310,35 @@
             }
             @endcan
             
-            // Show Approve if payroll is processing and user has permission
+            // Show Approve if payroll is processing and user has permission (not HR Staff)
             @can('approve payrolls')
+            @if(!auth()->user()->hasRole('HR Staff'))
             if (status === 'processing') {
                 document.getElementById('contextMenuApprove').style.display = 'flex';
             }
+            @endif
             @endcan
             
-            // Show Send Payroll if payroll is approved and user has permission
+            // Show Send Payslip if payroll is approved and user has permission
             @can('email all payslips')
             if (status === 'approved') {
                 document.getElementById('contextMenuSendPayroll').style.display = 'flex';
             }
             @endcan
             
-            // Show Delete if user has permission (temporarily enabled for all users)
-            // @can('delete payrolls')
-            if (status === 'draft' || status === 'processing' || status === 'approved') {
+            // Show Delete if user has permission - only for pending/processing
+            @can('delete payrolls')
+            if (status === 'draft' || status === 'processing') {
                 document.getElementById('contextMenuDelete').style.display = 'flex';
             }
-            // @endcan
+            @endcan
+            
+            // Show Delete for approved payrolls if user has special permission
+            @can('delete approved payrolls')
+            if (status === 'approved') {
+                document.getElementById('contextMenuDelete').style.display = 'flex';
+            }
+            @endcan
         }
         
         // Handle process action
@@ -356,10 +379,10 @@
             }
         });
         
-        // Handle send payroll action
+        // Handle send payslip action
         document.getElementById('contextMenuSendPayroll').addEventListener('click', function(e) {
             e.preventDefault();
-            if (confirm('Send payslips to all employees via email?')) {
+            if (confirm('Send payslip to this employee via email?')) {
                 fetch('{{ route("payslips.email-all", ":payrollId") }}'.replace(':payrollId', currentPayrollId), {
                     method: 'POST',
                     headers: {
@@ -370,17 +393,19 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Payslips sent successfully to all employees!');
+                        alert('Payslip sent successfully!');
                     } else {
-                        alert('Error sending payslips: ' + (data.message || 'Unknown error'));
+                        alert('Error sending payslip: ' + (data.message || 'Unknown error'));
                     }
                 })
                 .catch(error => {
-                    alert('Error sending payslips. Please try again.');
+                    alert('Error sending payslip. Please try again.');
                     console.error('Error:', error);
                 });
             }
         });
+        
+
         
         // Handle delete action
         document.getElementById('contextMenuDelete').addEventListener('click', function(e) {
@@ -456,7 +481,7 @@
 
                 // Copy over existing parameters that aren't filters
                 for (const [key, value] of currentParams) {
-                    if (!['pay_schedule', 'status', 'type', 'pay_period', 'page'].includes(key)) {
+                    if (!['name_search', 'pay_schedule', 'status', 'type', 'pay_period', 'page'].includes(key)) {
                         params.set(key, value);
                     }
                 }
@@ -486,21 +511,40 @@
                 });
             }
 
+            // Debounce function to limit API calls
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
             // Add event listeners for live filtering
             filterSelects.forEach(select => {
-                select.addEventListener('change', function() {
-                    if (this.id === 'pay_schedule') {
-                        // For pay schedule changes, first update periods then apply filters
-                        updatePayPeriods(this.value);
-                        // Apply filters after a short delay to allow periods to load
-                        setTimeout(() => {
+                if (select.type === 'text') {
+                    // Text inputs use debounced 'input' event for live typing
+                    select.addEventListener('input', debounce(applyFilters, 500));
+                } else {
+                    // Select and date inputs use 'change' event
+                    select.addEventListener('change', function() {
+                        if (this.id === 'pay_schedule') {
+                            // For pay schedule changes, first update periods then apply filters
+                            updatePayPeriods(this.value);
+                            // Apply filters after a short delay to allow periods to load
+                            setTimeout(() => {
+                                applyFilters();
+                            }, 300);
+                        } else {
+                            // For other filters, apply immediately
                             applyFilters();
-                        }, 300);
-                    } else {
-                        // For other filters, apply immediately
-                        applyFilters();
-                    }
-                });
+                        }
+                    });
+                }
             });
 
             // Initialize pay periods on page load

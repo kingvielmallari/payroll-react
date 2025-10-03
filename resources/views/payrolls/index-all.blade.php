@@ -331,11 +331,13 @@
             }
             @endcan
             
-            // Show Approve if payroll is processing and user has permission
+            // Show Approve if payroll is processing and user has permission (not HR Staff)
             @can('approve payrolls')
+            @if(!auth()->user()->hasRole('HR Staff'))
             if (status === 'processing') {
                 document.getElementById('contextMenuApprove').style.display = 'flex';
             }
+            @endif
             @endcan
             
             // Show Delete if user has permission

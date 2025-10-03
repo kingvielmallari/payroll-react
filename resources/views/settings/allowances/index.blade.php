@@ -60,7 +60,7 @@
                                 @elseif($setting->calculation_type == 'daily_rate_multiplier')
                                     <div class="text-sm font-medium {{ !$setting->is_active ? 'text-gray-400' : 'text-purple-600' }}">{{ number_format($setting->multiplier, 2) }}x</div>
                                 @else
-                                    <div class="text-sm {{ !$setting->is_active ? 'text-gray-300' : 'text-gray-400' }}">Variable</div>
+                                    <div class="text-sm {{ !$setting->is_active ? 'text-gray-300' : 'text-gray-400' }}">Dynamic</div>
                                 @endif
                                 @if($setting->minimum_amount || $setting->maximum_amount)
                                     <div class="text-xs {{ !$setting->is_active ? 'text-gray-300' : 'text-gray-400' }}">

@@ -24,7 +24,12 @@ class CashAdvanceController extends Controller
      */
     public function index(Request $request)
     {
-        $this->authorize('view cash advances');
+        // Allow employees to view their own cash advances, others need permission
+        if (!Auth::user()->hasRole('Employee')) {
+            $this->authorize('view cash advances');
+        }
+
+
 
         $query = CashAdvance::with(['employee', 'requestedBy', 'approvedBy']);
 
@@ -63,7 +68,8 @@ class CashAdvanceController extends Controller
             }
         }
 
-        $cashAdvances = $query->orderByDesc('created_at')->paginate(10);
+        $perPage = $request->get('per_page', 10);
+        $cashAdvances = $query->orderByDesc('created_at')->paginate($perPage);
 
         $employees = Employee::active()->orderBy('last_name')->get();
 
@@ -107,11 +113,9 @@ class CashAdvanceController extends Controller
         // Return JSON for AJAX requests
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
-                'cashAdvances' => $cashAdvances,
-                'employees' => $employees,
-                'summaryStats' => $summaryStats,
                 'html' => view('cash-advances.partials.cash-advance-list', compact('cashAdvances'))->render(),
-                'pagination' => view('cash-advances.partials.pagination', compact('cashAdvances'))->render()
+                'pagination' => view('cash-advances.partials.pagination', compact('cashAdvances'))->render(),
+                'summary_stats' => $summaryStats,
             ]);
         }
 

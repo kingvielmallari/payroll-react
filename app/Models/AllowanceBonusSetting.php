@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class AllowanceBonusSetting extends Model
 {
@@ -152,6 +153,18 @@ class AllowanceBonusSetting extends Model
                     $amount = $dailyRate * $this->multiplier * $applicableDays;
                 }
                 break;
+
+            case 'automatic':
+                // 13th month pay calculation: sum all basic pay earned in current year / 12
+                if ($employee) {
+                    // For 13th month pay calculation, include current basic pay for preview in draft payrolls
+                    $currentBasicPay = null;
+                    if ($this->name && (strpos(strtolower($this->name), '13th') !== false || strpos(strtolower($this->name), 'thirteenth') !== false)) {
+                        $currentBasicPay = $basicSalary; // Include current period's basic pay for preview
+                    }
+                    $amount = $this->calculate13thMonthPay($employee, $currentBasicPay);
+                }
+                break;
         }
 
         // Apply conditions if any
@@ -234,6 +247,43 @@ class AllowanceBonusSetting extends Model
             default:
                 return false;
         }
+    }
+
+    /**
+     * Calculate 13th month pay based on total basic pay earned in current year
+     */
+    private function calculate13thMonthPay($employee, $includeCurrentBasicPay = null)
+    {
+        $currentYear = date('Y');
+
+        // Get all payroll details for the employee in the current year
+        $payrollDetails = DB::table('payroll_details')
+            ->join('payrolls', 'payroll_details.payroll_id', '=', 'payrolls.id')
+            ->where('payroll_details.employee_id', $employee->id)
+            ->whereYear('payrolls.period_start', $currentYear)
+            ->whereIn('payrolls.status', ['approved', 'processing'])
+            ->get();
+
+        $totalBasicPay = 0;
+
+        foreach ($payrollDetails as $detail) {
+            // Sum up regular pay, holiday pay (fixed amount), and suspension pay (fixed amount)
+            $totalBasicPay += $detail->regular_pay;
+
+            // Add holiday pay if it's based on fixed amount
+            $totalBasicPay += $detail->holiday_pay;
+
+            // Add any other basic pay components that should be included
+            // Note: We exclude overtime, allowances, bonuses, and incentives as they are not part of basic pay
+        }
+
+        // For draft payrolls, include the current basic pay being calculated to show preview
+        if ($includeCurrentBasicPay !== null && $includeCurrentBasicPay > 0) {
+            $totalBasicPay += $includeCurrentBasicPay;
+        }
+
+        // Calculate 13th month pay: total basic pay earned / 12 months
+        return round($totalBasicPay / 12, 2);
     }
 
     /**

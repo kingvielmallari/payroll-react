@@ -24,12 +24,26 @@ class PaidLeaveController extends Controller
      */
     public function index(Request $request)
     {
-        $this->authorize('view paid leaves');
+        // Allow employees to view their own paid leaves, others need permission
+        if (!Auth::user()->hasRole('Employee')) {
+            $this->authorize('view paid leaves');
+        }
 
         $query = PaidLeave::with(['employee', 'requestedBy', 'approvedBy']);
 
-        // Filter by name search (employee name)
-        if ($request->filled('name_search')) {
+        // If employee user, only show their own paid leaves
+        if (Auth::user()->hasRole('Employee')) {
+            $employee = Auth::user()->employee;
+            if ($employee) {
+                $query->where('employee_id', $employee->id);
+            } else {
+                // If no employee record found, return empty results
+                $query->where('employee_id', 0);
+            }
+        }
+
+        // Filter by name search (employee name) - only for non-employees
+        if ($request->filled('name_search') && !Auth::user()->hasRole('Employee')) {
             $query->whereHas('employee', function ($q) use ($request) {
                 $searchTerm = $request->name_search;
                 $q->where(DB::raw("CONCAT(first_name, ' ', middle_name, ' ', last_name)"), 'LIKE', "%{$searchTerm}%")
@@ -57,7 +71,8 @@ class PaidLeaveController extends Controller
         // Order by latest first
         $query->orderBy('created_at', 'desc');
 
-        $paidLeaves = $query->paginate(10);
+        $perPage = $request->get('per_page', 10);
+        $paidLeaves = $query->paginate($perPage);
 
         // Calculate summary statistics
         $summaryStats = [
@@ -71,7 +86,7 @@ class PaidLeaveController extends Controller
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json([
                 'html' => view('paid-leaves.partials.paid-leave-list', compact('paidLeaves'))->render(),
-                'pagination' => $paidLeaves->appends($request->all())->links()->toHtml(),
+                'pagination' => view('paid-leaves.partials.pagination', compact('paidLeaves'))->render(),
                 'summary_stats' => $summaryStats,
             ]);
         }
@@ -84,7 +99,10 @@ class PaidLeaveController extends Controller
      */
     public function create()
     {
-        $this->authorize('create paid leaves');
+        // Allow employees to create their own paid leaves, others need permission
+        if (!Auth::user()->hasRole('Employee')) {
+            $this->authorize('create paid leaves');
+        }
 
         $employee = null;
 
@@ -265,7 +283,7 @@ class PaidLeaveController extends Controller
 
         $paidLeave = PaidLeave::create($paidLeaveData);
 
-        return redirect()->route('paid-leaves.show', $paidLeave)->with('success', 'Paid leave request submitted successfully.');
+        return redirect()->route('paid-leaves.index')->with('success', 'Paid leave request submitted successfully.');
     }
 
     /**
@@ -273,7 +291,17 @@ class PaidLeaveController extends Controller
      */
     public function show(PaidLeave $paidLeave)
     {
-        $this->authorize('view paid leaves');
+        // Allow employees to view their own paid leaves, others need permission
+        if (!Auth::user()->hasRole('Employee')) {
+            $this->authorize('view paid leaves');
+        } else {
+            // For employees, check if they own this request
+            $employee = Auth::user()->employee;
+            if (!$employee || $paidLeave->employee_id !== $employee->id) {
+                return redirect()->route('paid-leaves.index')
+                    ->with('error', 'You can only view your own paid leave requests.');
+            }
+        }
 
         $paidLeave->load(['employee', 'requestedBy', 'approvedBy']);
 
@@ -303,7 +331,8 @@ class PaidLeaveController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Paid leave approved successfully.',
-            ]);
+                'paid_leave' => $paidLeave->fresh(['employee', 'requestedBy', 'approvedBy'])
+            ], 200);
         }
 
         // Return redirect for form submissions
@@ -333,8 +362,9 @@ class PaidLeaveController extends Controller
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Paid leave rejected.',
-            ]);
+                'message' => 'Paid leave rejected successfully.',
+                'paid_leave' => $paidLeave->fresh(['employee', 'requestedBy', 'approvedBy'])
+            ], 200);
         }
 
         // Return redirect for form submissions
@@ -416,7 +446,10 @@ class PaidLeaveController extends Controller
      */
     public function edit(PaidLeave $paidLeave)
     {
-        $this->authorize('edit paid leaves');
+        // Allow employees to edit their own paid leaves, others need permission
+        if (!Auth::user()->hasRole('Employee')) {
+            $this->authorize('edit paid leaves');
+        }
 
         // Only allow editing pending requests
         if ($paidLeave->status !== 'pending') {
@@ -455,7 +488,17 @@ class PaidLeaveController extends Controller
      */
     public function update(Request $request, PaidLeave $paidLeave)
     {
-        $this->authorize('edit paid leaves');
+        // Allow employees to update their own paid leaves, others need permission
+        if (!Auth::user()->hasRole('Employee')) {
+            $this->authorize('edit paid leaves');
+        } else {
+            // For employees, check if they own this request
+            $employee = Auth::user()->employee;
+            if (!$employee || $paidLeave->employee_id !== $employee->id) {
+                return redirect()->route('paid-leaves.index')
+                    ->with('error', 'You can only update your own paid leave requests.');
+            }
+        }
 
         // Only allow updating pending requests
         if ($paidLeave->status !== 'pending') {
@@ -544,11 +587,43 @@ class PaidLeaveController extends Controller
             'user_id' => Auth::id()
         ]);
 
-        $this->authorize('delete paid leaves');
-        Log::info('Authorization passed');
+        // Allow employees to delete their own paid leaves, others need permission
+        if (!Auth::user()->hasRole('Employee')) {
+            $this->authorize('delete paid leaves');
+            Log::info('Authorization passed for non-employee');
+            // Allow deletion of any status for HR/Admin
+            Log::info('Proceeding with deletion of paid leave with status: ' . $paidLeave->status);
+        } else {
+            // For employees, check if they own this request and it's pending
+            $employee = Auth::user()->employee;
+            if (!$employee || $paidLeave->employee_id !== $employee->id) {
+                Log::warning('Employee tried to delete paid leave they do not own');
+                if (request()->wantsJson() || request()->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You can only delete your own paid leave requests.'
+                    ], 403);
+                }
+                return redirect()->route('paid-leaves.index')
+                    ->with('error', 'You can only delete your own paid leave requests.');
+            }
 
-        // Allow deletion of any status (removed pending-only restriction)
-        Log::info('Proceeding with deletion of paid leave with status: ' . $paidLeave->status);
+            // Only allow employees to delete pending requests
+            if ($paidLeave->status !== 'pending') {
+                Log::warning('Employee tried to delete non-pending paid leave', ['status' => $paidLeave->status]);
+                if (request()->wantsJson() || request()->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You can only delete pending paid leave requests.'
+                    ], 403);
+                }
+                return redirect()->route('paid-leaves.index')
+                    ->with('error', 'You can only delete pending paid leave requests.');
+            }
+
+            Log::info('Employee authorization passed for own pending request');
+            Log::info('Proceeding with deletion of pending paid leave');
+        }
 
         try {
             $paidLeave->delete();

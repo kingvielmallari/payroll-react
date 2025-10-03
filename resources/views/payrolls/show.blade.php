@@ -113,6 +113,9 @@
                                                         $calculatedAllowanceAmount = ($basicPay * $allowanceSetting->rate_percentage) / 100;
                                                     } elseif($allowanceSetting->calculation_type === 'fixed_amount') {
                                                         $calculatedAllowanceAmount = $allowanceSetting->fixed_amount;
+                                                    } elseif($allowanceSetting->calculation_type === 'automatic') {
+                                                        // Use the model's calculateAmount method for automatic calculation
+                                                        $calculatedAllowanceAmount = $allowanceSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
                                                         
                                                         // Apply frequency-based calculation for daily allowances
                                                         if ($allowanceSetting->frequency === 'daily') {
@@ -189,6 +192,9 @@
                                                         $calculatedBonusAmount = ($basicPay * $bonusSetting->rate_percentage) / 100;
                                                     } elseif($bonusSetting->calculation_type === 'fixed_amount') {
                                                         $calculatedBonusAmount = $bonusSetting->fixed_amount;
+                                                    } elseif($bonusSetting->calculation_type === 'automatic') {
+                                                        // Use the model's calculateAmount method for automatic calculation
+                                                        $calculatedBonusAmount = $bonusSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
                                                     }
                                                     
                                                     // Apply distribution method for summary calculation (to match individual columns)
@@ -538,7 +544,7 @@
                             @if($payroll->payment_notes)
                             <div>
                                 <p class="text-sm text-green-700">
-                                    <span class="font-medium">Payment Notes:</span><br>
+                                    <span class="font-medium">Payment Notes:</span>
                                     {{ $payroll->payment_notes }}
                                 </p>
                             </div>
@@ -605,7 +611,7 @@
                         @endif
 
                         @can('approve payrolls')
-                        @if($payroll->status == 'processing')
+                        @if($payroll->status == 'processing' && !auth()->user()->hasRole('HR Staff'))
                         @if(isset($schedule) && isset($employee))
                         {{-- Automation payroll - use unified approve route --}}
                         <form method="POST" action="{{ route('payrolls.automation.approve', ['schedule' => $schedule, 'id' => $employee]) }}" class="inline">
@@ -662,14 +668,14 @@
                         @endif
                         @endcan
 
-                        @can('email all payslips')
+                        @can('email payslip')
                         @if($payroll->status == 'approved')
                         <form method="POST" action="{{ route('payslips.email-all', $payroll) }}" class="inline">
                             @csrf
                             <button type="submit"
                                     class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150"
-                                    onclick="return confirm('Send payslips to all employees?')">
-                                Email All Payslips
+                                    onclick="return confirm('Send payslip to this employee?')">
+                                Email Payslip
                             </button>
                         </form>
                         @endif
@@ -1147,7 +1153,7 @@
                                                         $hours = intval($totalMinutes / 60);
                                                         $minutes = $totalMinutes % 60;
                                                     ?>
-                                                    <div class="text-gray-500">Total: {{ $hours }}h {{ $minutes }}m</div>
+                                                    <div class="text-gray-500">{{ $hours }}h {{ $minutes }}m</div>
                                                 </div>
                                             @endif
                                         </div>
@@ -1693,6 +1699,10 @@
                                                             $displayAmount = ($basicPay * $setting->rate_percentage) / 100;
                                                         } elseif($setting->calculation_type === 'fixed_amount') {
                                                             $displayAmount = $setting->fixed_amount;
+                                                        } elseif($setting->calculation_type === 'automatic') {
+                                                            // Use the model's calculateAmount method for automatic calculation
+                                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                                            $displayAmount = $setting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
                                                             
                                                             // Apply frequency-based calculation for daily allowances
                                                             if ($setting->frequency === 'daily') {
@@ -1824,8 +1834,27 @@
                                                     </span>
                                                 </div>
                                             @else
-                                                <!-- No allowances -->
+                                                <!-- No allowances or zero amount -->
                                                 <div class="text-gray-400">₱0.00</div>
+                                                @if(isset($isDynamic) && $isDynamic)
+                                                    <div class="text-xs text-green-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                                            </svg>
+                                                            Current settings
+                                                        </span>
+                                                    </div>
+                                                @else
+                                                    <div class="text-xs text-gray-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                                            </svg>
+                                                            Locked snapshot
+                                                        </span>
+                                                    </div>
+                                                @endif
                                             @endif
                                         </div>
                                     </td>
@@ -1846,16 +1875,18 @@
                                                         }
                                                         $hasDynamicBonuses = true;
                                                         
-                                                        // Calculate actual amount for display
-                                                        $displayAmount = 0;
-                                                        if($setting->calculation_type === 'percentage') {
-                                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
-                                                            $displayAmount = ($basicPay * $setting->rate_percentage) / 100;
-                                                        } elseif($setting->calculation_type === 'fixed_amount') {
-                                                            $displayAmount = $setting->fixed_amount;
-                                                        }
-                                                        
-                                                        // Apply distribution method
+                                        // Calculate actual amount for display
+                                        $displayAmount = 0;
+                                        if($setting->calculation_type === 'percentage') {
+                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                            $displayAmount = ($basicPay * $setting->rate_percentage) / 100;
+                                        } elseif($setting->calculation_type === 'fixed_amount') {
+                                            $displayAmount = $setting->fixed_amount;
+                                        } elseif($setting->calculation_type === 'automatic') {
+                                            // Use the model's calculateAmount method for automatic calculation
+                                            $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                            $displayAmount = $setting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
+                                        }                                                        // Apply distribution method
                                                         $distributedAmount = 0;
                                                         if ($displayAmount > 0) {
                                                             $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
@@ -1931,8 +1962,27 @@
                                                     </span>
                                                 </div>
                                             @else
-                                                <!-- No bonuses -->
+                                                <!-- No bonuses or zero amount -->
                                                 <div class="text-gray-400">₱0.00</div>
+                                                @if(isset($isDynamic) && $isDynamic)
+                                                    <div class="text-xs text-blue-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                                            </svg>
+                                                            Current settings
+                                                        </span>
+                                                    </div>
+                                                @else
+                                                    <div class="text-xs text-gray-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                                            </svg>
+                                                            Locked snapshot
+                                                        </span>
+                                                    </div>
+                                                @endif
                                             @endif
                                         </div>
                                     </td>
@@ -2034,8 +2084,27 @@
                                                     </span>
                                                 </div>
                                             @else
-                                                <!-- No incentives -->
+                                                <!-- No incentives or zero amount -->
                                                 <div class="text-gray-400">₱0.00</div>
+                                                @if(isset($isDynamic) && $isDynamic)
+                                                    <div class="text-xs text-purple-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                                            </svg>
+                                                            Current settings
+                                                        </span>
+                                                    </div>
+                                                @else
+                                                    <div class="text-xs text-gray-500">
+                                                        <span class="inline-flex items-center">
+                                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                                            </svg>
+                                                            Locked snapshot
+                                                        </span>
+                                                    </div>
+                                                @endif
                                             @endif
                                         </div>
                                     </td>
@@ -2060,6 +2129,10 @@
                                         $displayAmount = ($basicPay * $allowanceSetting->rate_percentage) / 100;
                                     } elseif($allowanceSetting->calculation_type === 'fixed_amount') {
                                         $displayAmount = $allowanceSetting->fixed_amount;
+                                    } elseif($allowanceSetting->calculation_type === 'automatic') {
+                                        // Use the model's calculateAmount method for automatic calculation
+                                        $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                        $displayAmount = $allowanceSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
                                         
                                         // Apply frequency-based calculation for daily allowances
                                         if ($allowanceSetting->frequency === 'daily') {
@@ -2154,6 +2227,10 @@
                                         $displayAmount = ($basicPay * $bonusSetting->rate_percentage) / 100;
                                     } elseif($bonusSetting->calculation_type === 'fixed_amount') {
                                         $displayAmount = $bonusSetting->fixed_amount;
+                                    } elseif($bonusSetting->calculation_type === 'automatic') {
+                                        // Use the model's calculateAmount method for automatic calculation
+                                        $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
+                                        $displayAmount = $bonusSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
                                     }
                                     
                                     // Apply distribution method
@@ -2469,13 +2546,14 @@
                                                             
                                                             $calculatedAmount = 0;
                                                             
-                                                            // Calculate the amount based on the setting type
-                                                            if($setting->calculation_type === 'percentage') {
-                                                                $calculatedAmount = ($basicPayForGross * $setting->rate_percentage) / 100;
-                                                            } elseif($setting->calculation_type === 'fixed_amount') {
-                                                                $calculatedAmount = $setting->fixed_amount;
-                                                                
-                                                                // Apply frequency-based calculation for daily allowances
+                                            // Calculate the amount based on the setting type
+                                            if($setting->calculation_type === 'percentage') {
+                                                $calculatedAmount = ($basicPayForGross * $setting->rate_percentage) / 100;
+                                            } elseif($setting->calculation_type === 'fixed_amount') {
+                                                $calculatedAmount = $setting->fixed_amount;
+                                            } elseif($setting->calculation_type === 'automatic') {
+                                                // Use the model's calculateAmount method for automatic calculation
+                                                $calculatedAmount = $setting->calculateAmount($basicPayForGross, $detail->employee->daily_rate, null, $detail->employee);                                                                // Apply frequency-based calculation for daily allowances
                                                                 if ($setting->frequency === 'daily') {
                                                                     // Use same working days calculation as in allowances column
                                                                     $employeeBreakdown = $timeBreakdowns[$detail->employee_id] ?? [];
@@ -2539,7 +2617,9 @@
                                             @endphp
                                           
                                             <div class="font-medium text-green-600 gross-pay-amount" data-gross-amount="{{ $calculatedGrossPay }}">₱{{ number_format($calculatedGrossPay, 2) }}</div>
-                                              <div class="text-xs text-gray-500 taxable-income-amount" data-taxable-amount="{{ $taxableIncome }}">Taxable: ₱{{ number_format($taxableIncome, 2) }}</div>
+                                              @if($taxableIncome > 0)
+                                                  <div class="text-xs text-gray-500 taxable-income-amount" data-taxable-amount="{{ $taxableIncome }}">Taxable: ₱{{ number_format($taxableIncome, 2) }}</div>
+                                              @endif
                                           
                                         </div>
                                     </td>

@@ -373,7 +373,7 @@ class DashboardController extends Controller
                 $notifications[] = [
                     'type' => 'warning',
                     'message' => "{$pendingPayrolls} payrolls are processing",
-                    'link' => route('payrolls.index'),
+                    'link' => route('payrolls.index', ['status' => 'processing']),
                 ];
             }
 
@@ -383,19 +383,17 @@ class DashboardController extends Controller
                 $notifications[] = [
                     'type' => 'info',
                     'message' => "{$pendingAdvances} cash advances need approval",
-                    'link' => route('cash-advances.index'),
+                    'link' => route('cash-advances.index', ['status' => 'pending']),
                 ];
             }
 
             // Pending paid leave requests
-            $pendingLeaves = LeaveRequest::where('status', 'pending')
-                ->where('is_paid', true)
-                ->count();
+            $pendingLeaves = \App\Models\PaidLeave::where('status', 'pending')->count();
             if ($pendingLeaves > 0) {
                 $notifications[] = [
-                    'type' => 'info',
-                    'message' => "{$pendingLeaves} paid leave requests need approval",
-                    'link' => route('leave-requests.index'),
+                    'type' => 'purple',
+                    'message' => "{$pendingLeaves} paid leaves need approval",
+                    'link' => route('paid-leaves.index', ['status' => 'pending']),
                 ];
             }
         } else {
