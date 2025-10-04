@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AllowanceBonusSetting extends Model
 {
@@ -134,7 +135,7 @@ class AllowanceBonusSetting extends Model
     /**
      * Calculate allowance/bonus amount
      */
-    public function calculateAmount($basicSalary, $dailyRate = null, $workingDays = null, $employee = null)
+    public function calculateAmount($basicSalary, $dailyRate = null, $workingDays = null, $employee = null, $breakdownData = null)
     {
         $amount = 0;
 
@@ -157,12 +158,39 @@ class AllowanceBonusSetting extends Model
             case 'automatic':
                 // 13th month pay calculation: sum all basic pay earned in current year / 12
                 if ($employee) {
-                    // For 13th month pay calculation, include current basic pay for preview in draft payrolls
-                    $currentBasicPay = null;
+                    // For 13th month pay calculation, calculate current period fixed amounts from breakdown data
+                    $currentFixedPay = null;
                     if ($this->name && (strpos(strtolower($this->name), '13th') !== false || strpos(strtolower($this->name), 'thirteenth') !== false)) {
-                        $currentBasicPay = $basicSalary; // Include current period's basic pay for preview
+                        $currentFixedPay = $this->calculateCurrentPeriodFixedPay($breakdownData);
+
+                        Log::info("13th Month calculation logic check", [
+                            'employee_id' => $employee->id,
+                            'has_breakdown_data' => !empty($breakdownData),
+                            'current_fixed_pay' => $currentFixedPay,
+                            'breakdown_data_count' => is_array($breakdownData) ? count($breakdownData) : 'not_array',
+                            'will_use_current_only' => (!empty($breakdownData) && $currentFixedPay > 0)
+                        ]);
+
+                        // For snapshot calculations (when breakdown data is provided), 
+                        // return only the current period amount to avoid double-counting
+                        if ($breakdownData && !empty($breakdownData) && $currentFixedPay > 0) {
+                            $monthlyAmount = round($currentFixedPay / 12, 2);
+
+                            Log::info("Using current period only for 13th month (snapshot mode)", [
+                                'employee_id' => $employee->id,
+                                'current_period_fixed_pay' => $currentFixedPay,
+                                'monthly_amount' => $monthlyAmount,
+                                'reason' => 'Snapshot calculation - using current period only'
+                            ]);
+
+                            $amount = $monthlyAmount;
+                        } else {
+                            // For draft calculations (no breakdown data), use full year calculation
+                            $amount = $this->calculate13thMonthPay($employee, $currentFixedPay);
+                        }
+                    } else {
+                        $amount = $this->calculate13thMonthPay($employee, $currentFixedPay);
                     }
-                    $amount = $this->calculate13thMonthPay($employee, $currentBasicPay);
                 }
                 break;
         }
@@ -254,6 +282,23 @@ class AllowanceBonusSetting extends Model
      */
     private function calculate13thMonthPay($employee, $includeCurrentBasicPay = null)
     {
+        // CRITICAL FIX: For snapshot calculations, if $includeCurrentBasicPay is provided,
+        // it represents the current period's fixed pay and should be the ONLY amount used
+        // to avoid double-counting with existing payroll records
+        if ($includeCurrentBasicPay !== null && $includeCurrentBasicPay > 0) {
+            $monthlyAmount = round($includeCurrentBasicPay / 12, 2);
+
+            Log::info("13th Month Pay - Using current period only (snapshot mode)", [
+                'employee_id' => $employee->id,
+                'current_period_fixed_pay' => $includeCurrentBasicPay,
+                'monthly_13th_month_amount' => $monthlyAmount,
+                'reason' => 'Snapshot calculation - avoiding historical data double-counting'
+            ]);
+
+            return $monthlyAmount;
+        }
+
+        // Original logic for draft calculations (when no current period data provided)
         $currentYear = date('Y');
 
         // Get all payroll details for the employee in the current year
@@ -266,24 +311,98 @@ class AllowanceBonusSetting extends Model
 
         $totalBasicPay = 0;
 
+        Log::info("13th Month Pay - Processing existing payroll details (draft mode)", [
+            'employee_id' => $employee->id,
+            'year' => $currentYear,
+            'payroll_count' => $payrollDetails->count()
+        ]);
+
         foreach ($payrollDetails as $detail) {
-            // Sum up regular pay, holiday pay (fixed amount), and suspension pay (fixed amount)
+            // FIXED: Include regular_pay for basic pay (includes suspension pay)
             $totalBasicPay += $detail->regular_pay;
 
-            // Add holiday pay if it's based on fixed amount
+            // FIXED: Include holiday_pay for holiday fixed amounts  
             $totalBasicPay += $detail->holiday_pay;
 
-            // Add any other basic pay components that should be included
-            // Note: We exclude overtime, allowances, bonuses, and incentives as they are not part of basic pay
+            Log::info("Adding payroll detail to 13th month", [
+                'payroll_id' => $detail->payroll_id,
+                'regular_pay' => $detail->regular_pay,
+                'holiday_pay' => $detail->holiday_pay,
+                'running_total' => $totalBasicPay
+            ]);
         }
 
-        // For draft payrolls, include the current basic pay being calculated to show preview
-        if ($includeCurrentBasicPay !== null && $includeCurrentBasicPay > 0) {
-            $totalBasicPay += $includeCurrentBasicPay;
+        $monthlyAmount = round($totalBasicPay / 12, 2);
+
+        Log::info("13th Month Pay final calculation (draft mode)", [
+            'employee_id' => $employee->id,
+            'total_basic_pay_for_year' => $totalBasicPay,
+            'monthly_13th_month_amount' => $monthlyAmount
+        ]);
+
+        return $monthlyAmount;
+    }
+
+    /**
+     * Calculate fixed pay amounts from current period breakdown data
+     */
+    private function calculateCurrentPeriodFixedPay($breakdownData)
+    {
+        if (!$breakdownData || !is_array($breakdownData)) {
+            return 0;
         }
 
-        // Calculate 13th month pay: total basic pay earned / 12 months
-        return round($totalBasicPay / 12, 2);
+        $fixedPay = 0;
+
+
+
+        // Extract fixed amounts from basic breakdown (suspensions)
+        if (isset($breakdownData['basic']) && is_array($breakdownData['basic'])) {
+            foreach ($breakdownData['basic'] as $type => $data) {
+                Log::info("Processing basic type: $type", [
+                    'has_fixed_amount' => isset($data['fixed_amount']),
+                    'fixed_amount' => $data['fixed_amount'] ?? 'N/A',
+                    'total_amount' => $data['amount'] ?? 'N/A',
+                    'will_add_fixed' => isset($data['fixed_amount']),
+                    'will_add_full' => !in_array($type, ['Paid Suspension', 'Paid Partial Suspension', 'Full Suspension', 'Partial Suspension']) && isset($data['amount'])
+                ]);
+
+                if (isset($data['fixed_amount'])) {
+                    // Include fixed amounts from suspensions (Full Suspension, Partial Suspension)
+                    $fixedPay += $data['fixed_amount'];
+                    Log::info("Added fixed amount for $type: {$data['fixed_amount']}, total: $fixedPay");
+                } elseif (!in_array($type, ['Paid Suspension', 'Paid Partial Suspension', 'Full Suspension', 'Partial Suspension']) && isset($data['amount'])) {
+                    // For regular workdays (no fixed_amount separation), include full amount
+                    $fixedPay += $data['amount'];
+                    Log::info("Added full amount for $type: {$data['amount']}, total: $fixedPay");
+                }
+            }
+        }
+
+        // Extract fixed amounts from holiday breakdown 
+        if (isset($breakdownData['holiday']) && is_array($breakdownData['holiday'])) {
+            foreach ($breakdownData['holiday'] as $type => $data) {
+                Log::info("Processing holiday type: $type", [
+                    'has_fixed_amount' => isset($data['fixed_amount']),
+                    'fixed_amount' => $data['fixed_amount'] ?? 'N/A',
+                    'total_amount' => $data['amount'] ?? 'N/A'
+                ]);
+
+                if (isset($data['fixed_amount'])) {
+                    // Include only fixed amounts from holiday pay (Special Holiday, Regular Holiday)
+                    $fixedPay += $data['fixed_amount'];
+                    Log::info("Added holiday fixed amount for $type: {$data['fixed_amount']}, total: $fixedPay");
+                }
+            }
+        }
+
+        Log::info("13th Month Final Calculation", [
+            'total_fixed_pay' => $fixedPay,
+            'expected_total' => 2780.0,
+            'monthly_13th' => $fixedPay / 12
+        ]);
+
+        return $fixedPay;
     }
 
     /**

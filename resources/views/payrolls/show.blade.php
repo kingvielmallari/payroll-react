@@ -115,7 +115,8 @@
                                                         $calculatedAllowanceAmount = $allowanceSetting->fixed_amount;
                                                     } elseif($allowanceSetting->calculation_type === 'automatic') {
                                                         // Use the model's calculateAmount method for automatic calculation
-                                                        $calculatedAllowanceAmount = $allowanceSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
+                                                        $breakdownData = ['basic' => [], 'holiday' => []];
+                                                        $calculatedAllowanceAmount = $allowanceSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee, $breakdownData);
                                                         
                                                         // Apply frequency-based calculation for daily allowances
                                                         if ($allowanceSetting->frequency === 'daily') {
@@ -194,7 +195,10 @@
                                                         $calculatedBonusAmount = $bonusSetting->fixed_amount;
                                                     } elseif($bonusSetting->calculation_type === 'automatic') {
                                                         // Use the model's calculateAmount method for automatic calculation
-                                                        $calculatedBonusAmount = $bonusSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
+                                                        // IMPORTANT: Use proper breakdown data for 13th month calculation (will be calculated later in individual columns)
+                                                        // For now, use empty breakdown - the correct calculation will happen in the BONUSES column
+                                                        $breakdownData = ['basic' => [], 'holiday' => []];
+                                                        $calculatedBonusAmount = $bonusSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee, $breakdownData);
                                                     }
                                                     
                                                     // Apply distribution method for summary calculation (to match individual columns)
@@ -1885,7 +1889,14 @@
                                         } elseif($setting->calculation_type === 'automatic') {
                                             // Use the model's calculateAmount method for automatic calculation
                                             $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
-                                            $displayAmount = $setting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
+                                            
+                                            // Prepare breakdown data for 13th month calculation
+                                            $breakdownData = [
+                                                'basic' => isset($basicBreakdownData) ? $basicBreakdownData : [],
+                                                'holiday' => isset($employeeHolidayBreakdown) ? $employeeHolidayBreakdown : []
+                                            ];
+                                            
+                                            $displayAmount = $setting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee, $breakdownData);
                                         }                                                        // Apply distribution method
                                                         $distributedAmount = 0;
                                                         if ($displayAmount > 0) {
@@ -2230,7 +2241,8 @@
                                     } elseif($bonusSetting->calculation_type === 'automatic') {
                                         // Use the model's calculateAmount method for automatic calculation
                                         $basicPay = $payBreakdownByEmployee[$detail->employee_id]['basic_pay'] ?? $detail->regular_pay ?? 0;
-                                        $displayAmount = $bonusSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee);
+                                        $breakdownData = ['basic' => [], 'holiday' => []];
+                                        $displayAmount = $bonusSetting->calculateAmount($basicPay, $detail->employee->daily_rate, null, $detail->employee, $breakdownData);
                                     }
                                     
                                     // Apply distribution method
@@ -2336,12 +2348,21 @@
                                     // Fallback to stored regular_pay if no breakdown
                                     $basicPayForGross = $employeeSnapshot->regular_pay ?? 0;
                                 }
-                            } else {
-                                // For draft payrolls, use dynamic calculation
-                                $basicPayForGross = round($basicPay, 2); // Use rounded value to match display
-                            }
-                            
-                            // Handle holiday pay - for locked payrolls use snapshot, for draft use dynamic calculation
+            } else {
+                // For draft payrolls, calculate from basic breakdown to match REGULAR column total
+                // This ensures the gross pay breakdown "Regular:" matches the REGULAR column total
+                $basicPayForGross = 0;
+                
+                // Get basic breakdown data (includes suspensions that appear in REGULAR column)
+                if (isset($basicBreakdownData) && is_array($basicBreakdownData)) {
+                    foreach ($basicBreakdownData as $type => $data) {
+                        $basicPayForGross += $data['amount'] ?? 0;
+                    }
+                } else {
+                    // Fallback to basic pay if no breakdown available
+                    $basicPayForGross = round($basicPay, 2);
+                }
+            }                            // Handle holiday pay - for locked payrolls use snapshot, for draft use dynamic calculation
                             if ($payroll->status !== 'draft' && $employeeSnapshot) {
                                 // For locked/processing payrolls, use static snapshot data
                                 if ($employeeSnapshot->holiday_breakdown) {
@@ -2410,9 +2431,71 @@
                                 $overtimePayForGross = round($overtimePay, 2);
                             }
                             
+                            // Recalculate bonuses using proper breakdown data (fixes 13th month calculation for GROSS PAY column)
+                            if ($payroll->status !== 'draft' && $employeeSnapshot) {
+                                // For locked/processing payrolls, use bonuses from snapshot breakdown
+                                $bonusesForGross = 0;
+                                if ($employeeSnapshot->bonuses_breakdown) {
+                                    $bonusesBreakdown = is_string($employeeSnapshot->bonuses_breakdown) 
+                                        ? json_decode($employeeSnapshot->bonuses_breakdown, true) 
+                                        : $employeeSnapshot->bonuses_breakdown;
+                                    
+                                    if (is_array($bonusesBreakdown)) {
+                                        foreach ($bonusesBreakdown as $bonus) {
+                                            if (isset($bonus['amount']) && $bonus['amount'] > 0) {
+                                                $bonusesForGross += $bonus['amount'];
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Fallback to stored bonuses if no breakdown
+                                    $bonusesForGross = $employeeSnapshot->bonuses ?? 0;
+                                }
+                            } else {
+                                // For draft payrolls, recalculate bonuses with proper breakdown data now that it's available
+                                $bonusesForGross = 0;
+                                if (isset($bonusSettings) && $bonusSettings->isNotEmpty()) {
+                                    foreach($bonusSettings as $bonusSetting) {
+                                        // Check if this bonus setting applies to this employee's benefit status
+                                        if (!$bonusSetting->appliesTo($detail->employee)) {
+                                            continue; // Skip this setting for this employee
+                                        }
+                                        
+                                        $calculatedBonusAmount = 0;
+                                        if($bonusSetting->calculation_type === 'percentage') {
+                                            $calculatedBonusAmount = ($basicPayForGross * $bonusSetting->rate_percentage) / 100;
+                                        } elseif($bonusSetting->calculation_type === 'fixed_amount') {
+                                            $calculatedBonusAmount = $bonusSetting->fixed_amount;
+                                        } elseif($bonusSetting->calculation_type === 'automatic') {
+                                            // Use proper breakdown data for 13th month calculation
+                                            $breakdownData = [
+                                                'basic' => isset($basicBreakdownData) ? $basicBreakdownData : [],
+                                                'holiday' => isset($employeeHolidayBreakdown) ? $employeeHolidayBreakdown : []
+                                            ];
+                                            $calculatedBonusAmount = $bonusSetting->calculateAmount($basicPayForGross, $detail->employee->daily_rate, null, $detail->employee, $breakdownData);
+                                        }
+                                        
+                                        // Apply distribution method for summary calculation (to match individual columns)
+                                        if ($calculatedBonusAmount > 0) {
+                                            $employeePaySchedule = $detail->employee->pay_schedule ?? 'semi_monthly';
+                                            $distributedAmount = $bonusSetting->calculateDistributedAmount(
+                                                $calculatedBonusAmount,
+                                                $payroll->period_start,
+                                                $payroll->period_end,
+                                                $employeePaySchedule
+                                            );
+                                            $bonusesForGross += $distributedAmount;
+                                        }
+                                    }
+                                } else {
+                                    // Fallback to stored value if no active settings
+                                    $bonusesForGross = $detail->bonuses ?? 0;
+                                }
+                            }
+                            
                             // Calculate gross pay - for locked payrolls, calculate from breakdown totals to match display
                             // This ensures the gross pay total always matches the sum of breakdown components
-                            $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePayForGross + $allowances + $bonuses + $incentives;
+                            $calculatedGrossPay = $basicPayForGross + $holidayPayForGross + $restPayForGross + $overtimePayForGross + $allowances + $bonusesForGross + $incentives;
                         @endphp                                        <!-- Show Gross Pay Breakdown -->
                                         <div class="space-y-1">
                                             @if($calculatedGrossPay > 0)
@@ -2447,10 +2530,10 @@
                                                             <span>₱{{ number_format($allowances, 2) }}</span>
                                                         </div>
                                                     @endif
-                                    @if($bonuses > 0)
+                                    @if($bonusesForGross > 0)
                                         <div class="text-xs text-gray-500">
                                             <span>Bonus:</span>
-                                            <span>₱{{ number_format($bonuses, 2) }}</span>
+                                            <span>₱{{ number_format($bonusesForGross, 2) }}</span>
                                         </div>
                                     @endif
                                     @if($incentives > 0)

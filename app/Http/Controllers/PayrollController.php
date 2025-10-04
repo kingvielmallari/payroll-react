@@ -3962,7 +3962,7 @@ class PayrollController extends Controller
     /**
      * Calculate individual allowance or bonus amount for payroll
      */
-    private function calculateAllowanceBonusAmountForPayroll($setting, $employee, $payroll, $regularHours, $overtimeHours, $holidayHours)
+    private function calculateAllowanceBonusAmountForPayroll($setting, $employee, $payroll, $regularHours, $overtimeHours, $holidayHours, $breakdownData = null)
     {
         $amount = 0;
 
@@ -4021,7 +4021,17 @@ class PayrollController extends Controller
                 $basicPay = $employee->basic_salary ?? 0;
                 $dailyRate = $employee->daily_rate ?? $this->calculateDailyRate($employee, $basicPay, $payroll->period_start, $payroll->period_end);
                 $daysWorked = $this->calculateDaysWorked($employee, $payroll);
-                $amount = $setting->calculateAmount($basicPay, $dailyRate, $daysWorked, $employee);
+                // Pass breakdown data for 13th month pay calculation accuracy
+                $amount = $setting->calculateAmount($basicPay, $dailyRate, $daysWorked, $employee, $breakdownData);
+
+                Log::info("Automatic bonus calculation result", [
+                    'setting_name' => $setting->name,
+                    'employee_id' => $employee->id,
+                    'calculated_amount' => $amount,
+                    'has_breakdown_data' => !empty($breakdownData),
+                    'frequency' => $setting->frequency,
+                    'distribution_method' => $setting->distribution_method
+                ]);
                 break;
         }
 
@@ -4050,12 +4060,23 @@ class PayrollController extends Controller
             );
 
             // Apply distribution logic using the model method
+            $originalAmount = $amount;
             $amount = $setting->calculateDistributedAmount(
                 $amount,
                 $payroll->period_start,
                 $payroll->period_end,
                 $employeePaySchedule
             );
+
+            Log::info("Distribution applied to bonus", [
+                'bonus_name' => $setting->name,
+                'employee_id' => $employee->id,
+                'original_amount' => $originalAmount,
+                'distributed_amount' => $amount,
+                'pay_schedule' => $employeePaySchedule,
+                'period_start' => $payroll->period_start,
+                'period_end' => $payroll->period_end
+            ]);
         }
 
         return round($amount, 2);
@@ -6218,7 +6239,18 @@ class PayrollController extends Controller
 
             // Get breakdown data for allowances and bonuses (exactly as they are in draft mode)
             $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
-            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
+
+            // Pass the calculated breakdown data to bonuses calculation for 13th month pay accuracy
+            // CRITICAL: Use the same structure as the draft view for consistency
+            // IMPORTANT: Use $basicBreakdown AFTER suspension merge to include fixed amounts from suspensions
+            $employeeBreakdownData = [
+                'basic' => $basicBreakdown,
+                'holiday' => $holidayBreakdown
+            ];
+
+
+
+            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll, $employeeBreakdownData);
             $incentivesBreakdown = $this->getEmployeeIncentivesBreakdown($employee, $payroll);            // Log the calculated values for debugging
             Log::info("Snapshot calculation for employee {$employee->id}", [
                 'basic_pay' => $basicPay,
@@ -6241,12 +6273,7 @@ class PayrollController extends Controller
             // Use the calculated total deductions from the payroll calculation
             $totalDeductions = $payrollCalculation['total_deductions'] ?? 0;
 
-            // Get breakdown data for allowances, bonuses, and incentives (with correct distribution methods)
-            $allowancesBreakdown = $this->getEmployeeAllowancesBreakdown($employee, $payroll);
-            $bonusesBreakdown = $this->getEmployeeBonusesBreakdown($employee, $payroll);
-            $incentivesBreakdown = $this->getEmployeeIncentivesBreakdown($employee, $payroll);
-
-            // Calculate totals from breakdown (these have correct distribution logic applied)
+            // Calculate totals from breakdown (reuse already calculated breakdown data to avoid duplicate calculations)
             $allowancesTotal = array_sum(array_column($allowancesBreakdown, 'amount'));
             $bonusesTotal = array_sum(array_column($bonusesBreakdown, 'amount'));
             $incentivesTotal = array_sum(array_column($incentivesBreakdown, 'amount'));
@@ -6725,7 +6752,7 @@ class PayrollController extends Controller
     /**
      * Get bonuses breakdown for employee
      */
-    private function getEmployeeBonusesBreakdown(Employee $employee, Payroll $payroll)
+    private function getEmployeeBonusesBreakdown(Employee $employee, Payroll $payroll, $breakdownData = null)
     {
         $breakdown = [];
 
@@ -6752,8 +6779,17 @@ class PayrollController extends Controller
                 $payroll,
                 $regularHours,
                 $overtimeHours,
-                $holidayHours
+                $holidayHours,
+                $breakdownData
             );
+
+            Log::info("Bonus calculation in getEmployeeBonusesBreakdown", [
+                'bonus_name' => $setting->name,
+                'employee_id' => $employee->id,
+                'raw_calculated_amount' => $amount,
+                'calculation_type' => $setting->calculation_type,
+                'has_breakdown_data' => !empty($breakdownData)
+            ]);
 
             if ($amount > 0) {
                 $breakdown[] = [
