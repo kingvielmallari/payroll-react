@@ -20,7 +20,7 @@
         <tbody class="bg-white divide-y divide-gray-200">
             @foreach($payrolls as $payroll)
             <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
-               oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $payroll->payroll_type }}', '{{ $payroll->pay_schedule }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : '' }}')"
+               oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $payroll->payroll_type }}', '{{ $payroll->pay_schedule }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : '' }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee->first_name . ' ' . $payroll->payrollDetails->first()->employee->last_name : 'employees' }}')"
                onclick="window.open('{{ route('payrolls.automation.show', ['schedule' => $payroll->pay_schedule, 'id' => $payroll->id]) }}', '_blank')"
                title="Click to open in new tab, Right-click for actions">
                

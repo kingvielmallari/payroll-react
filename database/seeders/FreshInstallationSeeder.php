@@ -80,6 +80,10 @@ class FreshInstallationSeeder extends Seeder
             'process payrolls',
             'generate payslips',
             'send payslips',
+            'email payslip',
+            'email all payslips',
+            'view payslips',
+            'download payslips',
 
             // Time & Attendance
             'view time logs',
@@ -171,7 +175,7 @@ class FreshInstallationSeeder extends Seeder
         // HR Head - Same as System Admin (all permissions)
         $hrHead->syncPermissions(Permission::all());
 
-        // HR Staff - All except employee creation/editing and settings
+        // HR Staff - All except employee creation/editing and settings but INCLUDING email payslip permissions
         $hrStaffPermissions = Permission::whereNotIn('name', [
             'create employees',
             'edit employees',

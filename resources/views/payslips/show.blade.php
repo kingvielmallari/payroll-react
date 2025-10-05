@@ -11,16 +11,18 @@
                 </p>
             </div>
             <div class="flex space-x-2">
-                @can('email payslips')
-                <form method="POST" action="{{ route('payslips.email', $payrollDetail) }}" class="inline">
-                    @csrf
-                    <button type="submit" 
-                            class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150"
-                            onclick="return confirm('Send payslip to {{ $payrollDetail->employee->user->email ?? 'employee' }}?')">
-                        Email Payslip
-                    </button>
-                </form>
-                @endcan
+                @canany(['email payslip'], [auth()->user()])
+                    @if(auth()->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff']))
+                        <form method="POST" action="{{ route('payslips.email', $payrollDetail) }}" class="inline">
+                            @csrf
+                            <button type="submit" 
+                                    class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-700 focus:bg-green-700 active:bg-green-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                    onclick="return confirm('Send payslip to {{ $payrollDetail->employee->first_name }} {{ $payrollDetail->employee->last_name }} via email?\nEmail address: {{ $payrollDetail->employee->user->email ?? 'No email' }}')">
+                                Email Payslip
+                            </button>
+                        </form>
+                    @endif
+                @endcanany
                 
                 @can('download payslips')
                 <a href="{{ route('payslips.download', $payrollDetail) }}" 

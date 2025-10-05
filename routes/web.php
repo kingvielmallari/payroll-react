@@ -194,13 +194,19 @@ Route::middleware(['auth', 'verified', 'license'])->group(function () {
             ->middleware('can:download payslips');
         Route::post('payslips/{payrollDetail}/email', [App\Http\Controllers\PayslipController::class, 'email'])
             ->name('payslips.email')
-            ->middleware('can:email payslips');
+            ->middleware('can:email payslip');
         Route::post('payrolls/{payroll}/email-all-payslips', [App\Http\Controllers\PayslipController::class, 'emailAll'])
             ->name('payslips.email-all')
             ->middleware('can:email all payslips');
         Route::get('payrolls/{payroll}/download-all-payslips', [App\Http\Controllers\PayslipController::class, 'downloadAll'])
             ->name('payslips.download-all')
             ->middleware('can:download all payslips');
+        Route::post('payrolls/bulk-email-approved', [App\Http\Controllers\PayslipController::class, 'bulkEmailApproved'])
+            ->name('payslips.bulk-email-approved')
+            ->middleware('can:email all payslips');
+        Route::post('payrolls/{payroll}/email-individual', [App\Http\Controllers\PayslipController::class, 'emailIndividual'])
+            ->name('payslips.email-individual')
+            ->middleware('can:email payslip');
     });
 
     // Employee's own payslips

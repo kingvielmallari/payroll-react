@@ -40,7 +40,7 @@ class PayslipMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Payslip for ' . $this->payrollDetail->payroll->period_start->format('F Y'),
+            subject: 'Your Payslip for ' . $this->payrollDetail->payroll->period_start->format('F d') . ' - ' . $this->payrollDetail->payroll->period_end->format('F d, Y'),
             from: config('mail.from.address', 'noreply@company.com'),
         );
     }
@@ -50,13 +50,15 @@ class PayslipMail extends Mailable
      */
     public function content(): Content
     {
+        $employeeName = $this->payrollDetail->employee->first_name . ' ' . $this->payrollDetail->employee->last_name;
+        $period = $this->payrollDetail->payroll->period_start->format('M d') . ' - ' . $this->payrollDetail->payroll->period_end->format('M d, Y');
+
+        $emailContent = "Hello {$employeeName},\n\nYour payslip for {$period} is attached to this email.\n\nBest regards,\nHR Department";
+
         return new Content(
-            view: 'emails.payslip',
+            text: 'emails.payslip-plain',
             with: [
-                'payrollDetail' => $this->payrollDetail,
-                'snapshot' => $this->snapshot,
-                'employee' => $this->payrollDetail->employee,
-                'payroll' => $this->payrollDetail->payroll,
+                'emailContent' => $emailContent,
             ],
         );
     }
@@ -68,12 +70,14 @@ class PayslipMail extends Mailable
      */
     public function attachments(): array
     {
-        // Generate PDF attachment
-        $pdf = Pdf::loadView('payslips.pdf', [
+        // Generate PDF attachment using the same format as the web payslip
+        $pdf = Pdf::loadView('payslips.pdf-single', [
             'payrollDetail' => $this->payrollDetail,
             'snapshot' => $this->snapshot
         ]);
-        $pdf->setPaper('A4', 'portrait');
+
+        // Set paper size to Letter (8.5" x 11" - short bond paper size)
+        $pdf->setPaper('letter', 'portrait');
 
         $filename = 'payslip_' . $this->payrollDetail->employee->employee_number . '_' .
             $this->payrollDetail->payroll->period_start->format('Y-m') . '.pdf';

@@ -589,24 +589,68 @@
                 const isRestDay = row.classList.contains('bg-gray-100'); // This is employee's rest day
                 const isHoliday = row.classList.contains('bg-yellow-50');
                 
+                // Skip rest days and holidays (but handle suspensions properly)
+                if (isRestDay || isHoliday) {
+                    return;
+                }
+                
                 // Check if the row has suspension type selected
                 const logTypeSelect = row.querySelector(`select[name="time_logs[${index}][log_type]"]`);
                 const selectedOption = logTypeSelect ? logTypeSelect.options[logTypeSelect.selectedIndex] : null;
                 const selectedText = selectedOption ? selectedOption.text : '';
                 const isSuspension = selectedText.toLowerCase().includes('suspension');
                 
-                if (!isRestDay && !isHoliday && !isSuspension) {
+                // For suspension days, apply the same logic as setRegularHours
+                if (isSuspension) {
+                    // Check if time inputs are disabled (this catches paid full suspensions)
                     const timeInInput = row.querySelector(`input[name="time_logs[${index}][time_in]"]`);
-                    const timeOutInput = row.querySelector(`input[name="time_logs[${index}][time_out]"]`);
-                    const breakInInput = row.querySelector(`input[name="time_logs[${index}][break_in]"]`);
-                    const breakOutInput = row.querySelector(`input[name="time_logs[${index}][break_out]"]`);
+                    if (timeInInput && timeInInput.disabled) {
+                        console.log('Skipping fillRegularHours for disabled inputs (paid full suspension) on row:', index);
+                        return;
+                    }
                     
-                    // Only fill empty fields to avoid overwriting existing data
-                    if (timeInInput && !timeInInput.value && !timeInInput.disabled) timeInInput.value = timeIn;
-                    if (timeOutInput && !timeOutInput.value && !timeOutInput.disabled) timeOutInput.value = timeOut;
-                    if (breakInInput && !breakInInput.value && !breakInInput.disabled) breakInInput.value = breakIn;
-                    if (breakOutInput && !breakOutInput.value && !breakOutInput.disabled) breakOutInput.value = breakOut;
+                    // Get suspension details to determine if filling should be allowed
+                    const isPartialSuspension = row && row.dataset.isPartialSuspension === 'true';
+                    const isPaidSuspension = row && row.dataset.isPaidSuspension === 'true';
+                    const employeeHasBenefits = row && row.dataset.employeeHasBenefits === 'true';
+                    
+                    // Get suspension pay settings
+                    const suspensionPayApplicableToInput = document.querySelector(`input[name="time_logs[${index}][suspension_pay_applicable_to]"][type="hidden"]`);
+                    const suspensionPayApplicableTo = suspensionPayApplicableToInput ? suspensionPayApplicableToInput.value : 'all';
+                    
+                    // Check if this employee should receive paid suspension
+                    let shouldReceivePaidSuspension = false;
+                    if (isPaidSuspension) {
+                        if (suspensionPayApplicableTo === 'all') {
+                            shouldReceivePaidSuspension = true;
+                        } else if (suspensionPayApplicableTo === 'with_benefits' && employeeHasBenefits) {
+                            shouldReceivePaidSuspension = true;
+                        } else if (suspensionPayApplicableTo === 'without_benefits' && !employeeHasBenefits) {
+                            shouldReceivePaidSuspension = true;
+                        }
+                    }
+                    
+                    // Block auto-fill ONLY for paid full-day suspensions
+                    // Allow for: 1. Partial suspensions 2. Unpaid suspensions
+                    if (!isPartialSuspension && shouldReceivePaidSuspension) {
+                        console.log('Skipping fillRegularHours for paid full-day suspension on row:', index);
+                        return;
+                    } else {
+                        console.log('Allowing fillRegularHours for suspension (partial or unpaid) on row:', index);
+                    }
                 }
+                
+                // Fill the time inputs
+                const timeInInput = row.querySelector(`input[name="time_logs[${index}][time_in]"]`);
+                const timeOutInput = row.querySelector(`input[name="time_logs[${index}][time_out]"]`);
+                const breakInInput = row.querySelector(`input[name="time_logs[${index}][break_in]"]`);
+                const breakOutInput = row.querySelector(`input[name="time_logs[${index}][break_out]"]`);
+                
+                // Only fill empty fields to avoid overwriting existing data
+                if (timeInInput && !timeInInput.value && !timeInInput.disabled) timeInInput.value = timeIn;
+                if (timeOutInput && !timeOutInput.value && !timeOutInput.disabled) timeOutInput.value = timeOut;
+                if (breakInInput && !breakInInput.value && !breakInInput.disabled) breakInInput.value = breakIn;
+                if (breakOutInput && !breakOutInput.value && !breakOutInput.disabled) breakOutInput.value = breakOut;
             });
         }
 
@@ -617,21 +661,65 @@
                 const isRestDay = row.classList.contains('bg-gray-100'); // This is employee's rest day
                 const isHoliday = row.classList.contains('bg-yellow-50');
                 
+                // Skip rest days and holidays (but handle suspensions properly)
+                if (isRestDay || isHoliday) {
+                    return;
+                }
+                
                 // Check if the row has suspension type selected
                 const logTypeSelect = row.querySelector(`select[name="time_logs[${index}][log_type]"]`);
                 const selectedOption = logTypeSelect ? logTypeSelect.options[logTypeSelect.selectedIndex] : null;
                 const selectedText = selectedOption ? selectedOption.text : '';
                 const isSuspension = selectedText.toLowerCase().includes('suspension');
                 
-                if (!isRestDay && !isHoliday && !isSuspension) {
+                // For suspension days, apply the same logic as setRegularHours
+                if (isSuspension) {
+                    // Check if time inputs are disabled (this catches paid full suspensions)
                     const timeInInput = row.querySelector(`input[name="time_logs[${index}][time_in]"]`);
-                    const timeOutInput = row.querySelector(`input[name="time_logs[${index}][time_out]"]`);
+                    if (timeInInput && timeInInput.disabled) {
+                        console.log('Skipping fillTimeOnly for disabled inputs (paid full suspension) on row:', index);
+                        return;
+                    }
                     
-                    // Only fill empty fields to avoid overwriting existing data
-                    if (timeInInput && !timeInInput.value && !timeInInput.disabled) timeInInput.value = timeIn;
-                    if (timeOutInput && !timeOutInput.value && !timeOutInput.disabled) timeOutInput.value = timeOut;
-                    // Do not fill break fields for flexible break employees
+                    // Get suspension details to determine if filling should be allowed
+                    const isPartialSuspension = row && row.dataset.isPartialSuspension === 'true';
+                    const isPaidSuspension = row && row.dataset.isPaidSuspension === 'true';
+                    const employeeHasBenefits = row && row.dataset.employeeHasBenefits === 'true';
+                    
+                    // Get suspension pay settings
+                    const suspensionPayApplicableToInput = document.querySelector(`input[name="time_logs[${index}][suspension_pay_applicable_to]"][type="hidden"]`);
+                    const suspensionPayApplicableTo = suspensionPayApplicableToInput ? suspensionPayApplicableToInput.value : 'all';
+                    
+                    // Check if this employee should receive paid suspension
+                    let shouldReceivePaidSuspension = false;
+                    if (isPaidSuspension) {
+                        if (suspensionPayApplicableTo === 'all') {
+                            shouldReceivePaidSuspension = true;
+                        } else if (suspensionPayApplicableTo === 'with_benefits' && employeeHasBenefits) {
+                            shouldReceivePaidSuspension = true;
+                        } else if (suspensionPayApplicableTo === 'without_benefits' && !employeeHasBenefits) {
+                            shouldReceivePaidSuspension = true;
+                        }
+                    }
+                    
+                    // Block auto-fill ONLY for paid full-day suspensions
+                    // Allow for: 1. Partial suspensions 2. Unpaid suspensions
+                    if (!isPartialSuspension && shouldReceivePaidSuspension) {
+                        console.log('Skipping fillTimeOnly for paid full-day suspension on row:', index);
+                        return;
+                    } else {
+                        console.log('Allowing fillTimeOnly for suspension (partial or unpaid) on row:', index);
+                    }
                 }
+                
+                // Fill the time inputs
+                const timeInInput = row.querySelector(`input[name="time_logs[${index}][time_in]"]`);
+                const timeOutInput = row.querySelector(`input[name="time_logs[${index}][time_out]"]`);
+                
+                // Only fill empty fields to avoid overwriting existing data
+                if (timeInInput && !timeInInput.value && !timeInInput.disabled) timeInInput.value = timeIn;
+                if (timeOutInput && !timeOutInput.value && !timeOutInput.disabled) timeOutInput.value = timeOut;
+                // Do not fill break fields for flexible break employees
             });
         }
 

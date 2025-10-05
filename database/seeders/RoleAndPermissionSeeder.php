@@ -47,7 +47,9 @@ class RoleAndPermissionSeeder extends Seeder
             'mark payrolls as paid',
             'generate payslips',
             'send payslips',
+            'view payslips',
             'email payslip',
+            'email all payslips',
 
             // Time Management
             'view time logs',
@@ -175,6 +177,7 @@ class RoleAndPermissionSeeder extends Seeder
             'mark payrolls as paid',
             'generate payslips',
             'send payslips',
+            'view payslips',
             'email payslip',
             'view time logs',
             'create time logs',
@@ -255,6 +258,7 @@ class RoleAndPermissionSeeder extends Seeder
             'email payslip',
             'generate payslips',
             'send payslips',
+            'view payslips',
             'view time logs',
             'create time logs',
             'edit time logs',

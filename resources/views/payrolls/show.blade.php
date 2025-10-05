@@ -26,6 +26,31 @@
         </div>
     </x-slot>
 
+    <style>
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #e5e7eb;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50" style="display: none; backdrop-filter: blur(5px); opacity: 0; transition: opacity 0.2s ease-in-out;">
+        <div class="bg-white p-8 rounded-xl text-center max-w-md mx-4 shadow-2xl">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <div class="text-lg font-semibold text-gray-800 mb-2" id="loadingText">Sending Email...</div>
+            <div class="text-sm text-gray-600" id="loadingSubtext">Please wait while we process your request.</div>
+        </div>
+    </div>
+
     <div class="py-6">
         <div class="max-w-9xl mx-auto sm:px-6 lg:px-8 space-y-6">
                
@@ -672,18 +697,27 @@
                         @endif
                         @endcan
 
-                        @can('email payslip')
-                        @if($payroll->status == 'approved')
-                        <form method="POST" action="{{ route('payslips.email-all', $payroll) }}" class="inline">
-                            @csrf
-                            <button type="submit"
-                                    class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150"
-                                    onclick="return confirm('Send payslip to this employee?')">
-                                Email Payslip
-                            </button>
-                        </form>
-                        @endif
-                        @endcan
+                        @canany(['email payslip'], [auth()->user()])
+                            @if(auth()->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff']))
+                                @if($payroll->status == 'approved')
+                                    @if($payroll->payrollDetails->count() == 1)
+                                        {{-- Single employee - use individual email --}}
+                                        <button type="button"
+                                                class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                                onclick="emailIndividualPayslip('{{ $payroll->payrollDetails->first()->employee_id }}', '{{ $payroll->payrollDetails->first()->employee->first_name }} {{ $payroll->payrollDetails->first()->employee->last_name }}', '{{ $payroll->payrollDetails->first()->employee->user->email ?? 'No email' }}')">
+                                            Email Payslip
+                                        </button>
+                                    @else
+                                        {{-- Multiple employees - use email all --}}
+                                        <button type="button"
+                                                class="inline-flex items-center px-4 py-2 bg-purple-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-purple-700 focus:bg-purple-700 active:bg-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition ease-in-out duration-150"
+                                                onclick="emailAllPayslips('{{ $payroll->payrollDetails->count() }}')">
+                                            Email All Payslips
+                                        </button>
+                                    @endif
+                                @endif
+                            @endif
+                        @endcanany
 
                         @can('download all payslips')
                         @if($payroll->status == 'approved')
@@ -3196,16 +3230,15 @@
                                             <a href="{{ route('payslips.download', $detail) }}" 
                                                class="text-blue-600 hover:text-blue-900 text-xs">PDF</a>
                                             @endcan
-                                            @can('email payslips')
-                                            <form method="POST" action="{{ route('payslips.email', $detail) }}" class="inline">
-                                                @csrf
-                                                <button type="submit" 
-                                                        class="text-green-600 hover:text-green-900 text-xs"
-                                                        onclick="return confirm('Send payslip to {{ $detail->employee->user->email ?? 'employee' }}?')">
-                                                    Email
-                                                </button>
-                                            </form>
-                                            @endcan
+                                            @canany(['email payslip'], [auth()->user()])
+                                                @if(auth()->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff']))
+                                                    <button type="button" 
+                                                            class="text-green-600 hover:text-green-900 text-xs"
+                                                            onclick="emailIndividualPayslip('{{ $detail->id }}', '{{ $detail->employee->first_name }} {{ $detail->employee->last_name }}', '{{ $detail->employee->user->email ?? 'No email' }}')">
+                                                        Email
+                                                    </button>
+                                                @endif
+                                            @endcanany
                                         </div>
                                     </td>
                                     @endif --}}
@@ -4427,5 +4460,114 @@
                 closeMarkAsPaidModal();
             }
         });
+        
+        // Email payslip functions
+        function emailIndividualPayslip(employeeId, employeeName, employeeEmail) {
+            if (confirm(`Send payslip to ${employeeName} via email?\nEmail address: ${employeeEmail}`)) {
+                showLoading('Sending Payslip...', `Sending payslip to ${employeeName}. Please wait while we generate and send the PDF.`);
+                
+                const formData = new FormData();
+                formData.append('_token', '{{ csrf_token() }}');
+                formData.append('employee_id', employeeId);
+                
+                fetch('{{ route("payslips.email-individual", $payroll) }}', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        hideLoading();
+                        if (response.status === 403) {
+                            throw new Error('This action is unauthorized. Please check your permissions.');
+                        }
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    hideLoading();
+                    
+                    setTimeout(() => {
+                        if (data.success) {
+                            alert('Individual payslip sent successfully!');
+                        } else {
+                            alert('Error sending payslip: ' + data.message);
+                        }
+                    }, 100);
+                })
+                .catch(error => {
+                    hideLoading();
+                    
+                    setTimeout(() => {
+                        alert('Error sending payslip: ' + error.message);
+                    }, 100);
+                    console.error('Error:', error);
+                });
+            }
+        }
+        
+        function emailAllPayslips(employeeCount) {
+            if (confirm(`Send payslips to ALL ${employeeCount} employees in this payroll via email?`)) {
+                showLoading('Sending All Payslips...', `Sending payslips to all ${employeeCount} employees. This may take several minutes.`);
+                
+                fetch('{{ route("payslips.email-all", $payroll) }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    
+                    setTimeout(() => {
+                        if (data.success) {
+                            alert('All payslips sent successfully!');
+                        } else {
+                            alert('Error sending payslips: ' + data.message);
+                        }
+                    }, 100);
+                })
+                .catch(error => {
+                    hideLoading();
+                    
+                    setTimeout(() => {
+                        alert('Error sending payslips');
+                    }, 100);
+                    console.error('Error:', error);
+                });
+            }
+        }
+        
+        // Loading helper functions
+        function showLoading(title = 'Processing...', message = 'Please wait while we process your request.') {
+            const loadingText = document.getElementById('loadingText');
+            const loadingSubtext = document.getElementById('loadingSubtext');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            
+            if (loadingText) loadingText.textContent = title;
+            if (loadingSubtext) loadingSubtext.textContent = message;
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'flex';
+                loadingOverlay.style.opacity = '1';
+            }
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+        }
+        
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                overlay.style.opacity = '0';
+            }
+            document.body.style.overflow = 'auto'; // Restore scrolling
+        }
     </script>
 </x-app-layout>

@@ -14,6 +14,31 @@
         </div>
     </x-slot>
 
+    <style>
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #e5e7eb;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50" style="display: none; backdrop-filter: blur(3px);">
+        <div class="bg-white p-8 rounded-xl text-center max-w-md mx-4 shadow-2xl">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <div class="text-lg font-semibold text-gray-800 mb-2" id="loadingText">Sending Email...</div>
+            <div class="text-sm text-gray-600" id="loadingSubtext">Please wait while we process your request.</div>
+        </div>
+    </div>
+
     <div class="py-6">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <!-- Filters -->
@@ -73,6 +98,17 @@
                                 </svg>
                                  Payroll Summary
                             </button>
+                            
+                            @canany(['email all payslips'], [auth()->user()])
+                                @if(auth()->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff']))
+                                    <button type="button" id="send_all_payslips" class="inline-flex items-center px-4 h-10 bg-purple-600 border border-transparent rounded-md text-white text-sm hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors" style="display: none;">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                        </svg>
+                                        Send All Payslips
+                                    </button>
+                                @endif
+                            @endcanany
                         </div>
                         
                     </div>
@@ -222,6 +258,8 @@
         let contextMenu = document.getElementById('contextMenu');
         let currentPayrollId = null;
         let currentPayrollStatus = null;
+        let currentEmployeeId = null;
+        let currentEmployeeName = '';
         
         // Hide context menu when clicking outside
         document.addEventListener('click', function(event) {
@@ -229,15 +267,17 @@
             contextMenu.classList.remove('opacity-100', 'scale-100');
             contextMenu.classList.add('opacity-0', 'scale-95');
         });
-
-        function showContextMenu(event, payrollId, payrollNumber, period, status, payrollType, paySchedule, employeeId) {
+        
+        function showContextMenu(event, payrollId, payrollNumber, period, status, payrollType, paySchedule, employeeId, employeeName = '') {
             event.preventDefault();
             event.stopPropagation();
             
-            console.log('Context menu called with:', { payrollId, payrollNumber, period, status, payrollType, paySchedule, employeeId });
+            // Context menu called for payroll
             
             currentPayrollId = payrollId;
             currentPayrollStatus = status;
+            currentEmployeeId = employeeId;
+            currentEmployeeName = employeeName || 'employee';
             
             // Update header info
             document.getElementById('contextMenuPayroll').textContent = payrollNumber;
@@ -255,11 +295,10 @@
             showHideContextMenuItems(status);
             
             // Position and show menu
-            let x = event.pageX;
-            let y = event.pageY;
+            let x = event.clientX;
+            let y = event.clientY;
             
-            console.log('Positioning menu at:', { x, y });
-            console.log('Context menu element:', contextMenu);
+            // Position context menu
             
             // Adjust position if menu would go off screen
             let menuWidth = 208; // min-w-52 = 13rem = 208px
@@ -277,7 +316,7 @@
             contextMenu.style.top = y + 'px';
             contextMenu.classList.remove('hidden');
             
-            console.log('Menu should now be visible');
+            // Menu is now visible
             
             // Animate in
             setTimeout(() => {
@@ -287,7 +326,7 @@
         }
         
         function showHideContextMenuItems(status) {
-            console.log('Setting menu items for status:', status);
+            // Setting menu items based on status
             
             // Reset all items to hidden
             document.getElementById('contextMenuEdit').style.display = 'none';
@@ -319,12 +358,14 @@
             @endif
             @endcan
             
-            // Show Send Payslip if payroll is approved and user has permission
-            @can('email all payslips')
-            if (status === 'approved') {
-                document.getElementById('contextMenuSendPayroll').style.display = 'flex';
-            }
-            @endcan
+            // Show Send Payslip if payroll is approved and user has permission and proper role
+            @canany(['email all payslips'], [auth()->user()])
+                @if(auth()->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff']))
+                    if (status === 'approved') {
+                        document.getElementById('contextMenuSendPayroll').style.display = 'flex';
+                    }
+                @endif
+            @endcanany
             
             // Show Delete if user has permission - only for pending/processing
             @can('delete payrolls')
@@ -382,24 +423,47 @@
         // Handle send payslip action
         document.getElementById('contextMenuSendPayroll').addEventListener('click', function(e) {
             e.preventDefault();
-            if (confirm('Send payslip to this employee via email?')) {
-                fetch('{{ route("payslips.email-all", ":payrollId") }}'.replace(':payrollId', currentPayrollId), {
+            const employeeName = currentEmployeeName || 'this employee';
+            if (confirm(`Send payslip to ${employeeName} via email?`)) {
+                showLoading('Sending Payslip...', `Sending payslip to ${employeeName}. Please wait while we generate and send the PDF.`);
+                
+                // Use individual email route with optional employee_id parameter
+                const formData = new FormData();
+                formData.append('_token', '{{ csrf_token() }}');
+                
+                // If we have a specific employee ID from context, add it
+                if (currentEmployeeId) {
+                    formData.append('employee_id', currentEmployeeId);
+                }
+                
+                fetch('{{ url("/payrolls") }}/' + currentPayrollId + '/email-individual', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    }
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
-                        alert('Payslip sent successfully!');
-                    } else {
-                        alert('Error sending payslip: ' + (data.message || 'Unknown error'));
-                    }
+                    hideLoading();
+                    
+                    // Small delay to ensure loading overlay is fully hidden before alert
+                    setTimeout(() => {
+                        if (data.success) {
+                            alert('Payslip sent successfully!');
+                        } else {
+                            alert('Error sending payslip: ' + (data.message || 'Unknown error'));
+                        }
+                    }, 100);
                 })
                 .catch(error => {
-                    alert('Error sending payslip. Please try again.');
+                    hideLoading();
+                    
+                    // Small delay to ensure loading overlay is fully hidden before alert
+                    setTimeout(() => {
+                        alert('Error sending payslip. Please try again.');
+                    }, 100);
                     console.error('Error:', error);
                 });
             }
@@ -452,9 +516,18 @@
                         'Accept': 'application/json'
                     }
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        throw new Error('Response is not JSON');
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    if (data.periods) {
+                    if (data && data.periods && Array.isArray(data.periods)) {
                         data.periods.forEach(period => {
                             const option = document.createElement('option');
                             option.value = period.value;
@@ -463,7 +536,11 @@
                         });
                     }
                 })
-                .catch(error => console.error('Error fetching periods:', error));
+                .catch(error => {
+                    console.error('Error fetching periods:', error);
+                    // Reset to default state on error
+                    payPeriodSelect.innerHTML = '<option value="">All Periods</option>';
+                });
             }
 
             // Function to apply filters via AJAX (no page reload)
@@ -498,16 +575,42 @@
                         'Accept': 'application/json',
                     },
                 })
-                .then(response => response.json())
-                .then(data => {
-                    // Update payroll list
-                    document.getElementById('payroll-list-container').innerHTML = data.html;
+                .then(response => {
+                    // Check if response is ok and content type is JSON
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
                     
-                    // Update pagination
-                    document.getElementById('pagination-container').innerHTML = data.pagination;
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        // If response is not JSON, reload the page to prevent corruption
+                        console.warn('Received non-JSON response, reloading page to prevent corruption');
+                        window.location.reload();
+                        return;
+                    }
+                    
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && typeof data === 'object' && data.html && data.pagination) {
+                        // Update payroll list only if we have valid data
+                        const listContainer = document.getElementById('payroll-list-container');
+                        const paginationContainer = document.getElementById('pagination-container');
+                        
+                        if (listContainer && paginationContainer) {
+                            listContainer.innerHTML = data.html;
+                            paginationContainer.innerHTML = data.pagination;
+                        }
+                    } else {
+                        console.error('Invalid data format received:', data);
+                        // Reload page if data format is invalid
+                        window.location.reload();
+                    }
                 })
                 .catch(error => {
                     console.error('Error:', error);
+                    // On any error, reload the page to ensure clean state
+                    window.location.reload();
                 });
             }
 
@@ -638,6 +741,122 @@
                     applyFilters(); // Use AJAX instead of page reload
                 });
             }
+
+            // Show/hide "Send All Payslips" button based on status filter
+            function toggleSendAllButton() {
+                const statusSelect = document.getElementById('status');
+                const sendAllButton = document.getElementById('send_all_payslips');
+                
+                if (statusSelect && sendAllButton) {
+                    if (statusSelect.value === 'approved') {
+                        sendAllButton.style.display = 'inline-flex';
+                    } else {
+                        sendAllButton.style.display = 'none';
+                    }
+                }
+            }
+
+            // Initial check for send all button visibility
+            toggleSendAllButton();
+
+            // Listen for status filter changes
+            document.getElementById('status').addEventListener('change', toggleSendAllButton);
+
+            // Handle Send All Payslips button click
+            document.getElementById('send_all_payslips').addEventListener('click', function() {
+                if (confirm('Send payslips to ALL employees with approved payrolls based on current filters? This action will email PDF payslips to all matching employees.')) {
+                    // Get current filter values
+                    const formData = new FormData();
+                    
+                    // Add current filter parameters
+                    const nameSearch = document.getElementById('name_search').value;
+                    const paySchedule = document.getElementById('pay_schedule').value;
+                    const status = document.getElementById('status').value;
+                    const type = document.getElementById('type').value;
+                    const payPeriod = document.getElementById('pay_period').value;
+                    
+                    if (nameSearch) formData.append('name_search', nameSearch);
+                    if (paySchedule) formData.append('pay_schedule', paySchedule);
+                    if (status) formData.append('status', status);
+                    if (type) formData.append('type', type);
+                    if (payPeriod) formData.append('pay_period', payPeriod);
+                    
+                    // Add CSRF token
+                    formData.append('_token', '{{ csrf_token() }}');
+
+                    // Show loading overlay instead of just button state
+                    showLoading('Sending All Payslips...', 'Sending payslips to all employees with approved payrolls. This may take several minutes depending on the number of employees.');
+                    
+                    fetch('{{ route("payslips.bulk-email-approved") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideLoading();
+                        
+                        // Small delay to ensure loading overlay is fully hidden before alert
+                        setTimeout(() => {
+                            if (data.success) {
+                                alert(`Success! ${data.message}`);
+                                if (data.errors && data.errors.length > 0) {
+                                    console.warn('Some emails failed:', data.errors);
+                                }
+                            } else {
+                                alert('Error: ' + (data.message || 'Unknown error occurred'));
+                            }
+                        }, 100);
+                    })
+                    .catch(error => {
+                        hideLoading();
+                        
+                        // Small delay to ensure loading overlay is fully hidden before alert
+                        setTimeout(() => {
+                            alert('Failed to send payslips. Please try again.');
+                        }, 100);
+                        console.error('Error:', error);
+                    });
+                }
+            });
+        });
+        
+        // Loading helper functions
+        function showLoading(title = 'Processing...', message = 'Please wait while we process your request.') {
+            const loadingText = document.getElementById('loadingText');
+            const loadingSubtext = document.getElementById('loadingSubtext');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            
+            if (loadingText) loadingText.textContent = title;
+            if (loadingSubtext) loadingSubtext.textContent = message;
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'flex';
+                loadingOverlay.style.opacity = '1';
+            }
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+        }
+        
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                overlay.style.opacity = '0';
+            }
+            document.body.style.overflow = 'auto'; // Restore scrolling
+        }
+        
+        // Global error handler to prevent display corruption
+        window.addEventListener('error', function(event) {
+            console.error('JavaScript error detected:', event.error);
+            // Don't reload automatically, just log the error
+        });
+        
+        // Handle unhandled promise rejections
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
         });
     </script>
 

@@ -130,9 +130,79 @@
         .compact-spacing .border-b-2 { border-bottom-width: 2px; border-color: #374151; }
         .compact-spacing .border-b { border-bottom-width: 1px; border-color: #d1d5db; }
         .compact-spacing .border-t-2 { border-top-width: 2px; border-color: #374151; }
+        
+        /* Loading overlay styles */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999;
+            backdrop-filter: blur(5px);
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        
+        .loading-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            max-width: 400px;
+            margin: 1rem;
+        }
+        
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #e5e7eb;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+        
+        .loading-subtext {
+            font-size: 0.9rem;
+            color: #6b7280;
+        }
+        
+        /* Button loading state */
+        .btn-loading {
+            opacity: 0.7;
+            pointer-events: none;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body class="bg-gray-100 p-2">
+    
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text" id="loadingText">Sending Email...</div>
+            <div class="loading-subtext" id="loadingSubtext">Please wait while we process your request.</div>
+        </div>
+    </div>
     
     <!-- Action Buttons -->
     <div class="flex justify-center space-x-2 mb-4 no-print print:hidden">
@@ -159,15 +229,20 @@
                         </svg>
                     </button>
                     
-                    @can('email payslip')
-                        <button onclick="emailPayslips()" 
-                                class="inline-flex items-center p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl"
-                                title="Email Payslip">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                            </svg>
-                        </button>
-                    @endcan
+                    {{-- Individual email buttons for each employee --}}
+                    @canany(['email payslip'], [auth()->user()])
+                        @if(auth()->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff']))
+                            @foreach($payroll->payrollDetails as $emailDetail)
+                                <button onclick="emailIndividualPayslip({{ $emailDetail->employee_id }})" 
+                                        class="inline-flex items-center p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl"
+                                        title="Email Payslip to {{ $emailDetail->employee->first_name }} {{ $emailDetail->employee->last_name }}">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                    </svg>
+                                </button>
+                            @endforeach
+                        @endif
+                    @endcanany
                     
             
                 </div>
@@ -336,11 +411,13 @@
                 <!-- Employee Information -->
                 <div class="grid grid-cols-2 gap-6 mb-6">
                     <div>
-                        <h3 class="text-base font-semibold text-gray-800 mb-3 border-b border-gray-300 pb-2">Employee Information</h3>
+                                                <div class="mb-3 border-b border-gray-300 pb-2">
+                            <h3 class="text-base font-semibold text-gray-800">Employee Information</h3>
+                        </div>
                         <div class="space-y-2 text-sm">
                             <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Name:</span>
-                                <span>{{ $detail->employee->first_name }} {{ $detail->employee->last_name }}</span>
+                                <span data-employee-id="{{ $detail->employee_id }}" data-employee-email="{{ $detail->employee->user->email ?? 'No email' }}">{{ $detail->employee->first_name }} {{ $detail->employee->last_name }}</span>
                             </div>
                             <div class="flex justify-between">
                                 <span class="font-medium text-gray-700">Employee #:</span>
@@ -615,7 +692,12 @@
         }
         
         function emailPayslips() {
-            if (confirm('Send payslips to all employees via email?')) {
+            if (confirm('Send payslips to ALL employees in this payroll via email?')) {
+                showLoading('Sending Payslips...', `Sending payslips to all {{ count($payroll->payrollDetails) }} employees. This may take a few moments.`);
+                
+                // Disable all action buttons
+                disableActionButtons();
+                
                 // Make AJAX call to email endpoint
                 fetch('{{ route("payslips.email-all", $payroll) }}', {
                     method: 'POST',
@@ -626,17 +708,134 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
-                        alert('Payslips sent successfully!');
-                    } else {
-                        alert('Error sending payslips: ' + data.message);
-                    }
+                    hideLoading();
+                    enableActionButtons();
+                    
+                    // Small delay to ensure loading overlay is fully hidden before alert
+                    setTimeout(() => {
+                        if (data.success) {
+                            alert('Payslips sent successfully!');
+                        } else {
+                            alert('Error sending payslips: ' + data.message);
+                        }
+                    }, 100);
                 })
                 .catch(error => {
-                    alert('Error sending payslips');
+                    hideLoading();
+                    enableActionButtons();
+                    
+                    // Small delay to ensure loading overlay is fully hidden before alert
+                    setTimeout(() => {
+                        alert('Error sending payslips');
+                    }, 100);
                     console.error('Error:', error);
                 });
             }
+        }
+        
+        function emailIndividualPayslip(employeeId) {
+            const employeeElement = document.querySelector(`[data-employee-id="${employeeId}"]`);
+            const name = employeeElement ? employeeElement.textContent.trim() : 'this employee';
+            const email = employeeElement ? employeeElement.getAttribute('data-employee-email') : 'unknown email';
+            
+            if (confirm(`Send payslip to ${name} via email?\nEmail address: ${email}`)) {
+                // Always show loading with consistent message format
+                showLoading('Sending Payslip...', `Sending payslip to ${name}. Please wait while we generate and send the PDF.`);
+                
+                // Disable all action buttons
+                disableActionButtons();
+                
+                const formData = new FormData();
+                formData.append('_token', '{{ csrf_token() }}');
+                formData.append('employee_id', employeeId);
+                
+                fetch('{{ route("payslips.email-individual", $payroll) }}', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        hideLoading();
+                        enableActionButtons();
+                        if (response.status === 403) {
+                            throw new Error('This action is unauthorized. Please check your permissions.');
+                        }
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    hideLoading();
+                    enableActionButtons();
+                    
+                    // Small delay to ensure loading overlay is fully hidden before alert
+                    setTimeout(() => {
+                        if (data.success) {
+                            alert('Individual payslip sent successfully!');
+                        } else {
+                            alert('Error sending payslip: ' + data.message);
+                        }
+                    }, 100);
+                })
+                .catch(error => {
+                    hideLoading();
+                    enableActionButtons();
+                    
+                    // Small delay to ensure loading overlay is fully hidden before alert
+                    setTimeout(() => {
+                        alert('Error sending payslip: ' + error.message);
+                    }, 100);
+                    console.error('Error:', error);
+                });
+            }
+        }
+        
+        // Loading helper functions
+        function showLoading(title = 'Processing...', message = 'Please wait while we process your request.') {
+            const loadingText = document.getElementById('loadingText');
+            const loadingSubtext = document.getElementById('loadingSubtext');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            
+            if (loadingText) loadingText.textContent = title;
+            if (loadingSubtext) loadingSubtext.textContent = message;
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'flex';
+                loadingOverlay.style.opacity = '1';
+            }
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+        }
+        
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                overlay.style.opacity = '0';
+            }
+            document.body.style.overflow = 'auto'; // Restore scrolling
+        }
+        
+        function disableActionButtons() {
+            const buttons = document.querySelectorAll('.no-print button, .no-print a');
+            buttons.forEach(button => {
+                button.classList.add('btn-loading');
+                button.setAttribute('disabled', 'disabled');
+                button.style.pointerEvents = 'none';
+                button.style.opacity = '0.6';
+            });
+        }
+        
+        function enableActionButtons() {
+            const buttons = document.querySelectorAll('.no-print button, .no-print a');
+            buttons.forEach(button => {
+                button.classList.remove('btn-loading');
+                button.removeAttribute('disabled');
+                button.style.pointerEvents = 'auto';
+                button.style.opacity = '1';
+            });
         }
     </script>
 </body>

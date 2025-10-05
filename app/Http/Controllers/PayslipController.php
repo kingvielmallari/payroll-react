@@ -93,7 +93,7 @@ class PayslipController extends Controller
      */
     public function email(PayrollDetail $payrollDetail)
     {
-        $this->authorize('email payslips');
+        $this->authorize('email payslip');
 
         $payrollDetail->load([
             'payroll',
@@ -118,8 +118,24 @@ class PayslipController extends Controller
             Mail::to($payrollDetail->employee->user->email)
                 ->send(new PayslipMail($payrollDetail, $snapshot));
 
+            // Check if this is an AJAX request
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Payslip sent successfully to ' . $payrollDetail->employee->user->email
+                ]);
+            }
+
             return back()->with('success', 'Payslip sent successfully to ' . $payrollDetail->employee->user->email);
         } catch (\Exception $e) {
+            // Check if this is an AJAX request
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to send payslip: ' . $e->getMessage()
+                ], 500);
+            }
+
             return back()->with('error', 'Failed to send payslip: ' . $e->getMessage());
         }
     }
@@ -144,9 +160,17 @@ class PayslipController extends Controller
                 continue;
             }
 
+            // Get snapshot data for accurate amounts if payroll is not draft
+            $snapshot = null;
+            if ($payroll->status !== 'draft') {
+                $snapshot = $payroll->snapshots()
+                    ->where('employee_id', $payrollDetail->employee_id)
+                    ->first();
+            }
+
             try {
                 Mail::to($payrollDetail->employee->user->email)
-                    ->send(new PayslipMail($payrollDetail));
+                    ->send(new PayslipMail($payrollDetail, $snapshot));
                 $sent++;
             } catch (\Exception $e) {
                 $failed++;
@@ -254,5 +278,168 @@ class PayslipController extends Controller
             ->pluck('year');
 
         return view('payslips.my-payslips', compact('payslips', 'employee', 'years'));
+    }
+
+    /**
+     * Send payslips to all employees with approved payrolls (bulk send for filtered results).
+     */
+    public function bulkEmailApproved(Request $request)
+    {
+        $this->authorize('email all payslips');
+
+        // Get all approved payrolls that match the current filters
+        $query = Payroll::with(['payrollDetails.employee.user'])
+            ->where('status', 'approved');
+
+        // Apply the same filters as the payroll index
+        if ($request->filled('pay_schedule')) {
+            $query->where('pay_schedule', $request->pay_schedule);
+        }
+
+        if ($request->filled('name_search')) {
+            $query->whereHas('payrollDetails.employee', function ($q) use ($request) {
+                $q->where('first_name', 'like', '%' . $request->name_search . '%')
+                    ->orWhere('last_name', 'like', '%' . $request->name_search . '%');
+            });
+        }
+
+        if ($request->filled('type')) {
+            $query->where('payroll_type', $request->type);
+        }
+
+        $payrolls = $query->get();
+
+        $sent = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($payrolls as $payroll) {
+            foreach ($payroll->payrollDetails as $payrollDetail) {
+                if (!$payrollDetail->employee->user || !$payrollDetail->employee->user->email) {
+                    $failed++;
+                    $errors[] = $payrollDetail->employee->first_name . ' ' . $payrollDetail->employee->last_name . ' - No email address';
+                    continue;
+                }
+
+                // Get snapshot data for accurate amounts
+                $snapshot = $payroll->snapshots()
+                    ->where('employee_id', $payrollDetail->employee_id)
+                    ->first();
+
+                try {
+                    Mail::to($payrollDetail->employee->user->email)
+                        ->send(new PayslipMail($payrollDetail, $snapshot));
+                    $sent++;
+                } catch (\Exception $e) {
+                    $failed++;
+                    $errors[] = $payrollDetail->employee->first_name . ' ' . $payrollDetail->employee->last_name . ' - ' . $e->getMessage();
+                }
+            }
+        }
+
+        $message = "Bulk payslips sent: {$sent}, Failed: {$failed}";
+
+        // Check if this is an AJAX request
+        if (request()->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'sent' => $sent,
+                'failed' => $failed,
+                'errors' => $errors
+            ]);
+        }
+
+        if ($failed > 0) {
+            return back()->with('warning', $message)->with('email_errors', $errors);
+        }
+
+        return back()->with('success', $message);
+    }
+
+    /**
+     * Send individual payslip email by payroll ID (for single-employee payrolls or specific employee).
+     */
+    public function emailIndividual(Payroll $payroll, Request $request)
+    {
+        $this->authorize('email payslip');
+
+        $payroll->load(['payrollDetails.employee.user']);
+
+        // Check if this is for a specific employee (via employee_id parameter)
+        $employeeId = $request->input('employee_id');
+
+        if ($employeeId) {
+            // Find the specific payroll detail for this employee
+            $payrollDetail = $payroll->payrollDetails()
+                ->where('employee_id', $employeeId)
+                ->with(['employee.user', 'employee.department', 'employee.position'])
+                ->first();
+
+            if (!$payrollDetail) {
+                if (request()->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Employee not found in this payroll'
+                    ], 404);
+                }
+                return back()->with('error', 'Employee not found in this payroll');
+            }
+
+            $payrollDetailsToEmail = [$payrollDetail];
+        } else {
+            // Send to all employees in the payroll (fallback to emailAll behavior)
+            $payrollDetailsToEmail = $payroll->payrollDetails;
+        }
+
+        $sent = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($payrollDetailsToEmail as $payrollDetail) {
+            if (!$payrollDetail->employee->user || !$payrollDetail->employee->user->email) {
+                $failed++;
+                $errors[] = $payrollDetail->employee->first_name . ' ' . $payrollDetail->employee->last_name . ' - No email address';
+                continue;
+            }
+
+            // Get snapshot data for accurate amounts
+            $snapshot = null;
+            if ($payroll->status !== 'draft') {
+                $snapshot = $payroll->snapshots()
+                    ->where('employee_id', $payrollDetail->employee_id)
+                    ->first();
+            }
+
+            try {
+                Mail::to($payrollDetail->employee->user->email)
+                    ->send(new PayslipMail($payrollDetail, $snapshot));
+                $sent++;
+            } catch (\Exception $e) {
+                $failed++;
+                $errors[] = $payrollDetail->employee->first_name . ' ' . $payrollDetail->employee->last_name . ' - ' . $e->getMessage();
+            }
+        }
+
+        $message = $employeeId
+            ? "Individual payslip sent: {$sent}, Failed: {$failed}"
+            : "Payslips sent: {$sent}, Failed: {$failed}";
+
+        // Check if this is an AJAX request
+        if (request()->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'sent' => $sent,
+                'failed' => $failed,
+                'errors' => $errors
+            ]);
+        }
+
+        if ($failed > 0) {
+            return back()->with('warning', $message)->with('email_errors', $errors);
+        }
+
+        return back()->with('success', $message);
     }
 }

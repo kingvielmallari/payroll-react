@@ -421,7 +421,9 @@ class Employee extends Model
     }
 
     /**
-     * Calculate Basic Pay for a specific payroll period based on rate type
+     * Calculate Basic Pay for a specific payroll period based on actual time logs
+     * Uses the same logic as 13th month pay calculation: sums regular workday amounts + 
+     * paid suspension fixed_amounts + paid holiday fixed_amounts (excluding time_log amounts)
      * 
      * @param \Carbon\Carbon $periodStart
      * @param \Carbon\Carbon $periodEnd
@@ -429,101 +431,114 @@ class Employee extends Model
      */
     public function calculateBasicPayForPeriod(\Carbon\Carbon $periodStart, \Carbon\Carbon $periodEnd)
     {
-        // If no fixed_rate or rate_type, return 0
-        if (!$this->fixed_rate || !$this->rate_type) {
+        $basicPay = 0;
+
+        // Get time logs for the period
+        $timeLogs = $this->timeLogs()
+            ->whereBetween('log_date', [$periodStart->format('Y-m-d'), $periodEnd->format('Y-m-d')])
+            ->get();
+
+        if ($timeLogs->isEmpty()) {
             return 0;
         }
 
-        // Count working days in payroll period based on employee's day schedule
-        $workingDaysInPeriod = 0;
-        $currentDate = $periodStart->copy();
+        // Calculate hourly rate for calculations using the same logic as PayrollController
+        $hourlyRate = $this->calculateBasicPayHourlyRate($periodStart, $periodEnd);
 
-        while ($currentDate->lte($periodEnd)) {
-            // Use employee's isWorkingDay method to respect their day schedule
-            if ($this->isWorkingDay($currentDate)) {
-                $workingDaysInPeriod++;
+        // Process each time log
+        foreach ($timeLogs as $timeLog) {
+            // Get rate configuration for this log type
+            $rateConfig = $timeLog->getRateConfiguration();
+            if (!$rateConfig) continue;
+
+            $logType = $timeLog->log_type;
+            $regularHours = $timeLog->regular_hours ?? 0;
+
+            // Calculate pay based on log type (same logic as 13th month calculation)
+            if ($logType === 'regular_workday') {
+                // Regular workday: include full amount
+                $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                $amount = $regularHours * $hourlyRate * $regularMultiplier;
+                $basicPay += $amount;
+            } elseif (in_array($logType, ['full_day_suspension', 'partial_suspension'])) {
+                // Paid suspensions: include fixed_amount only (same as 13th month logic)
+                $dailyRate = $hourlyRate * 8;
+
+                // Check if this suspension is paid based on employee benefits and suspension settings
+                $suspensionSettings = \App\Models\NoWorkSuspendedSetting::where('status', 'active')
+                    ->where('date_from', '<=', $timeLog->log_date)
+                    ->where('date_to', '>=', $timeLog->log_date)
+                    ->first();
+
+                if ($suspensionSettings && $this->benefits_status === 'with_benefits') {
+                    $payRule = $suspensionSettings->pay_rule ?? 'full';
+                    $multiplier = $payRule === 'half' ? 0.5 : 1.0;
+                    $fixedAmount = $dailyRate * $multiplier;
+                    $basicPay += $fixedAmount;
+                }
+            } elseif (in_array($logType, ['special_holiday', 'regular_holiday'])) {
+                // Paid holidays: include fixed_amount only (same as 13th month logic)
+                $dailyRate = $hourlyRate * 8;
+
+                // Check if holiday is paid for this employee
+                $holiday = \App\Models\Holiday::where('date', $timeLog->log_date)
+                    ->where('is_paid', true)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($holiday && $this->benefits_status === 'with_benefits') {
+                    $payRule = $holiday->pay_rule ?? 'full';
+                    $multiplier = $payRule === 'half' ? 0.5 : 1.0;
+                    $fixedAmount = $dailyRate * $multiplier;
+                    $basicPay += $fixedAmount;
+                }
             }
-            $currentDate->addDay();
         }
 
-        // Get assigned total hours from employee's time schedule
-        $assignedTotalHours = 8.0; // Default fallback
-        if ($this->time_schedule_id && $this->timeSchedule && $this->timeSchedule->total_hours) {
-            $assignedTotalHours = $this->timeSchedule->total_hours;
-        }
-
-        // Calculate based on rate type using the formulas
-        switch ($this->rate_type) {
-            case 'hourly':
-                // hourly rate * assigned total hours * total workdays on payroll period
-                return $this->fixed_rate * $assignedTotalHours * $workingDaysInPeriod;
-
-            case 'daily':
-                // daily rate * total workdays on payroll period
-                return $this->fixed_rate * $workingDaysInPeriod;
-
-            case 'weekly':
-                // Calculate total working days in a standard week for this employee
-                $sampleWeekStart = $periodStart->copy()->startOfWeek(); // Monday
-                $sampleWeekEnd = $sampleWeekStart->copy()->addDays(6); // Sunday
-                $totalWorkdaysInWeeklyPeriod = 0;
-                $sampleDate = $sampleWeekStart->copy();
-
-                while ($sampleDate->lte($sampleWeekEnd)) {
-                    if ($this->isWorkingDay($sampleDate)) {
-                        $totalWorkdaysInWeeklyPeriod++;
-                    }
-                    $sampleDate->addDay();
-                }
-
-                // weekly rate / total workdays in a period * total workdays in a payroll period
-                return $totalWorkdaysInWeeklyPeriod > 0 ?
-                    ($this->fixed_rate / $totalWorkdaysInWeeklyPeriod) * $workingDaysInPeriod : 0;
-
-            case 'semi_monthly':
-            case 'semi-monthly':
-                // Get total working days in a semi-monthly period
-                // Calculate working days in a typical semi-monthly period (first 15 days)
-                $sampleSemiStart = $periodStart->copy()->startOfMonth();
-                $sampleSemiEnd = $sampleSemiStart->copy()->addDays(14); // First 15 days
-                $totalWorkdaysInSemiPeriod = 0;
-                $sampleDate = $sampleSemiStart->copy();
-
-                while ($sampleDate->lte($sampleSemiEnd)) {
-                    // Use employee's day schedule to determine working days
-                    if ($this->isWorkingDay($sampleDate)) {
-                        $totalWorkdaysInSemiPeriod++;
-                    }
-                    $sampleDate->addDay();
-                }
-
-                // fixed semi rate / total workdays in a period * total workdays in a payroll period
-                return $totalWorkdaysInSemiPeriod > 0 ?
-                    ($this->fixed_rate / $totalWorkdaysInSemiPeriod) * $workingDaysInPeriod : 0;
-
-            case 'monthly':
-                // Get total working days in the month (based on employee's day schedule)
-                $monthStart = $periodStart->copy()->startOfMonth();
-                $monthEnd = $periodStart->copy()->endOfMonth();
-                $totalWorkdaysInMonth = 0;
-                $monthDate = $monthStart->copy();
-
-                while ($monthDate->lte($monthEnd)) {
-                    // Use employee's day schedule to determine working days
-                    if ($this->isWorkingDay($monthDate)) {
-                        $totalWorkdaysInMonth++;
-                    }
-                    $monthDate->addDay();
-                }
-
-                // fixed monthly / total workdays in a period * total workdays in a period
-                return $totalWorkdaysInMonth > 0 ?
-                    ($this->fixed_rate / $totalWorkdaysInMonth) * $workingDaysInPeriod : 0;
-
-            default:
-                return 0;
-        }
+        return round($basicPay, 2);
     }
+
+    /**
+     * Calculate hourly rate using the same logic as PayrollController
+     */
+    private function calculateBasicPayHourlyRate($periodStart = null, $periodEnd = null)
+    {
+        // Use fixed_rate and rate_type if available
+        if ($this->fixed_rate && $this->fixed_rate > 0 && $this->rate_type) {
+            // Get employee's assigned time schedule total hours for calculation
+            $timeSchedule = $this->timeSchedule;
+            $dailyHours = $timeSchedule ? $timeSchedule->total_hours : 8; // Default to 8 hours if no schedule
+
+            switch ($this->rate_type) {
+                case 'hourly':
+                    return $this->fixed_rate;
+
+                case 'daily':
+                    return $this->fixed_rate / $dailyHours;
+
+                case 'weekly':
+                    // Calculate working days in a typical week
+                    $daysPerWeek = $this->getDaysPerWeek();
+                    $hoursPerWeek = $daysPerWeek * $dailyHours;
+                    return $hoursPerWeek > 0 ? ($this->fixed_rate / $hoursPerWeek) : 0;
+
+                case 'semi_monthly':
+                case 'semi-monthly':
+                    return $this->fixed_rate / 86.67; // Assuming ~86.67 hours per semi-month
+
+                case 'monthly':
+                    return $this->fixed_rate / 173.33; // Assuming ~173.33 hours per month
+
+                default:
+                    return $this->fixed_rate / 173.33;
+            }
+        }
+
+        // Fallback to existing calculateHourlyRate method
+        return $this->calculateHourlyRate();
+    }
+
+
 
     /**
      * Get working days for a specific period (always Monday-Friday for payroll calculations)
@@ -624,95 +639,93 @@ class Employee extends Model
     }
 
     /**
-     * Calculate Monthly Basic Salary (MBS) dynamically based on fixed_rate and rate_type
+     * Calculate Monthly Basic Salary (MBS) based on actual time logs from the current month
+     * Uses the same logic as 13th month pay calculation: sums regular workday amounts + 
+     * paid suspension fixed_amounts + paid holiday fixed_amounts (excluding time_log amounts)
      * 
-     * @param \Carbon\Carbon $periodStart - For daily/hourly calculations that need working days/hours
-     * @param \Carbon\Carbon $periodEnd - For daily/hourly calculations that need working days/hours
+     * @param \Carbon\Carbon $periodStart - For determining the month to calculate
+     * @param \Carbon\Carbon $periodEnd - For determining the month to calculate
      * @return float
      */
     public function calculateMonthlyBasicSalary(\Carbon\Carbon $periodStart = null, \Carbon\Carbon $periodEnd = null)
     {
-        // If no fixed_rate or rate_type, return 0 as requested
-        if (!$this->fixed_rate || !$this->rate_type) {
+        // Determine the month to calculate for
+        if (!$periodStart) {
+            $periodStart = now()->startOfMonth();
+            $periodEnd = now()->endOfMonth();
+        } else {
+            // Always calculate for the full month containing the period
+            $monthStart = $periodStart->copy()->startOfMonth();
+            $monthEnd = $periodStart->copy()->endOfMonth();
+            $periodStart = $monthStart;
+            $periodEnd = $monthEnd;
+        }
+
+        $monthlyBasicPay = 0;
+
+        // Get time logs for the entire month
+        $timeLogs = $this->timeLogs()
+            ->whereBetween('log_date', [$periodStart->format('Y-m-d'), $periodEnd->format('Y-m-d')])
+            ->get();
+
+        if ($timeLogs->isEmpty()) {
             return 0;
         }
 
-        $fixedRate = $this->fixed_rate;
+        // Calculate hourly rate for calculations
+        $hourlyRate = $this->calculateBasicPayHourlyRate($periodStart, $periodEnd);
 
-        switch ($this->rate_type) {
-            case 'monthly':
-                // If fixed monthly rate = MBS/basic salary same fixed monthly rate amount
-                return $fixedRate;
+        // Process each time log (same logic as basic pay calculation and 13th month calculation)
+        foreach ($timeLogs as $timeLog) {
+            // Get rate configuration for this log type
+            $rateConfig = $timeLog->getRateConfiguration();
+            if (!$rateConfig) continue;
 
-            case 'semi_monthly':
-            case 'semi-monthly':
-                // If fixed semi monthly rate = MBS/basic salary is fixed semi-monthly rate amount * 2
-                return $fixedRate * 2;
+            $logType = $timeLog->log_type;
+            $regularHours = $timeLog->regular_hours ?? 0;
 
-            case 'weekly':
-                // If fixed weekly = MBS/basic salary is weekly rate / emp days per week * total workdays in current payroll month
-                if ($periodStart && $periodEnd) {
-                    // Get the employee's days per week from their day schedule
-                    $daysPerWeek = $this->getDaysPerWeek();
+            // Calculate pay based on log type (same logic as 13th month calculation)
+            if ($logType === 'regular_workday') {
+                // Regular workday: include full amount
+                $regularMultiplier = $rateConfig->regular_rate_multiplier ?? 1.0;
+                $amount = $regularHours * $hourlyRate * $regularMultiplier;
+                $monthlyBasicPay += $amount;
+            } elseif (in_array($logType, ['full_day_suspension', 'partial_suspension'])) {
+                // Paid suspensions: include fixed_amount only (same as 13th month logic)
+                $dailyRate = $hourlyRate * 8;
 
-                    // Calculate actual working days in the current payroll month
-                    $workingDaysInMonth = $this->getWorkingDaysForPeriod($periodStart, $periodEnd);
+                // Check if this suspension is paid based on employee benefits and suspension settings
+                $suspensionSettings = \App\Models\NoWorkSuspendedSetting::where('status', 'active')
+                    ->where('date_from', '<=', $timeLog->log_date)
+                    ->where('date_to', '>=', $timeLog->log_date)
+                    ->first();
 
-                    // Calculate: weekly rate / emp days per week * total workdays in current payroll month
-                    return ($fixedRate / $daysPerWeek) * $workingDaysInMonth;
-                } else {
-                    // Fallback: Use the old calculation if no period provided
-                    return ($fixedRate * 52) / 12;
+                if ($suspensionSettings && $this->benefits_status === 'with_benefits') {
+                    $payRule = $suspensionSettings->pay_rule ?? 'full';
+                    $multiplier = $payRule === 'half' ? 0.5 : 1.0;
+                    $fixedAmount = $dailyRate * $multiplier;
+                    $monthlyBasicPay += $fixedAmount;
                 }
+            } elseif (in_array($logType, ['special_holiday', 'regular_holiday'])) {
+                // Paid holidays: include fixed_amount only (same as 13th month logic)
+                $dailyRate = $hourlyRate * 8;
 
-            case 'daily':
-                // If fixed daily rate = MBS/basic salary is fixed daily rate amount * emp total work days in a FULL MONTH
-                // MBS should always be calculated for a full month, not just the payroll period
+                // Check if holiday is paid for this employee
+                $holiday = \App\Models\Holiday::where('date', $timeLog->log_date)
+                    ->where('is_paid', true)
+                    ->where('is_active', true)
+                    ->first();
 
-                if ($periodStart && $periodEnd) {
-                    // Calculate working days for the full month (not just the payroll period)
-                    // Get the start and end of the month that contains the period
-                    $monthStart = $periodStart->copy()->startOfMonth();
-                    $monthEnd = $periodStart->copy()->endOfMonth();
-                    $workingDaysInMonth = $this->getWorkingDaysForPeriod($monthStart, $monthEnd);
-                    return $fixedRate * $workingDaysInMonth;
-                } else {
-                    // Fallback: Use average 22 working days per month
-                    return $fixedRate * 22;
+                if ($holiday && $this->benefits_status === 'with_benefits') {
+                    $payRule = $holiday->pay_rule ?? 'full';
+                    $multiplier = $payRule === 'half' ? 0.5 : 1.0;
+                    $fixedAmount = $dailyRate * $multiplier;
+                    $monthlyBasicPay += $fixedAmount;
                 }
-
-            case 'hourly':
-                // If fixed hourly rate = MBS/basic salary is fixed hourly rate amount * emp total hours * emp total work days in a FULL MONTH
-                // MBS should always be calculated for a full month, not just the payroll period
-
-                if ($periodStart && $periodEnd) {
-                    // Get expected hours per day from time schedule's total_hours field (dynamically calculated)
-                    $hoursPerDay = 8; // Default fallback
-                    if ($this->timeSchedule && $this->timeSchedule->total_hours) {
-                        // Use the total_hours field from time_schedules table - this is the correct total hours per day
-                        $hoursPerDay = $this->timeSchedule->total_hours;
-                    }
-
-                    // Calculate working days for the full month (not just the payroll period)
-                    // Get the start and end of the month that contains the period
-                    $monthStart = $periodStart->copy()->startOfMonth();
-                    $monthEnd = $periodStart->copy()->endOfMonth();
-                    $workingDaysInMonth = $this->getWorkingDaysForPeriod($monthStart, $monthEnd);
-
-                    return $fixedRate * $hoursPerDay * $workingDaysInMonth;
-                } else {
-                    // Fallback: Use hours from time schedule or default 8 hours * 22 working days per month
-                    $fallbackHours = 8; // Default
-                    if ($this->timeSchedule && $this->timeSchedule->total_hours) {
-                        $fallbackHours = $this->timeSchedule->total_hours;
-                    }
-                    return $fixedRate * $fallbackHours * 22;
-                }
-
-            default:
-                // Fallback to basic_salary if rate_type is not recognized
-                return $this->basic_salary ?? 0;
+            }
         }
+
+        return round($monthlyBasicPay, 2);
     }
 
     /**
