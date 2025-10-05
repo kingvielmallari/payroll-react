@@ -12,23 +12,13 @@
         <form method="POST" action="{{ route('settings.deductions.store') }}">
             @csrf
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 gap-6">
                 <div>
                     <label for="name" class="block text-sm font-medium text-gray-700 mb-2">Deduction Name</label>
                     <input type="text" name="name" id="name" 
                            class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
                            value="{{ old('name') }}" required>
                     @error('name')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="code" class="block text-sm font-medium text-gray-700 mb-2">Deduction Code</label>
-                    <input type="text" name="code" id="code" 
-                           class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
-                           value="{{ old('code') }}" required>
-                    @error('code')
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                     @enderror
                 </div>
@@ -79,10 +69,10 @@
                     <option value="">Select Calculation Type</option>
                     <option value="percentage" {{ old('calculation_type') == 'percentage' ? 'selected' : '' }}>Percentage</option>
                     <option value="fixed_amount" {{ old('calculation_type') == 'fixed_amount' ? 'selected' : '' }}>Fixed Amount</option>
-                    <option value="sss_table" {{ old('calculation_type') == 'sss_table' ? 'selected' : '' }}>SSS Table</option>
-                    <option value="philhealth_table" {{ old('calculation_type') == 'philhealth_table' ? 'selected' : '' }}>PhilHealth Table</option>
-                    <option value="pagibig_table" {{ old('calculation_type') == 'pagibig_table' ? 'selected' : '' }}>Pag-IBIG Table</option>
-                    <option value="withholding_tax_table" {{ old('calculation_type') == 'withholding_tax_table' ? 'selected' : '' }}>Withholding Tax Table</option>
+                    <option value="sss_table" data-deduction="sss" {{ old('calculation_type') == 'bracket' && old('tax_table_type') == 'sss' ? 'selected' : '' }}>SSS Table</option>
+                    <option value="philhealth_table" data-deduction="philhealth" {{ old('calculation_type') == 'bracket' && old('tax_table_type') == 'philhealth' ? 'selected' : '' }}>PhilHealth Table</option>
+                    <option value="pagibig_table" data-deduction="pagibig" {{ old('calculation_type') == 'bracket' && old('tax_table_type') == 'pagibig' ? 'selected' : '' }}>Pag-IBIG Table</option>
+                    <option value="withholding_tax_table" data-deduction="withholding_tax" {{ old('calculation_type') == 'bracket' && old('tax_table_type') == 'withholding_tax' ? 'selected' : '' }}>Withholding Tax Table</option>
                 </select>
                 @error('calculation_type')
                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -111,7 +101,6 @@
                     <select name="distribution_method" id="distribution_method" 
                             class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
                         <option value="">Select Distribution Method</option>
-                        <option value="first_payroll" {{ old('distribution_method') == 'first_payroll' ? 'selected' : '' }}>First Payroll Only</option>
                         <option value="last_payroll" {{ old('distribution_method') == 'last_payroll' ? 'selected' : '' }}>Last Payroll Only</option>
                         <option value="equally_distributed" {{ old('distribution_method') == 'equally_distributed' ? 'selected' : '' }}>Equally Distributed</option>
                     </select>
@@ -125,11 +114,15 @@
             <!-- Hidden Tax Table Type field -->
             <input type="hidden" name="tax_table_type" id="hidden_tax_table_type" value="{{ old('tax_table_type') }}">
 
-            <!-- View Tax Table Section -->
+            <!-- View Tax Table Button (shown for table types) -->
             <div class="mt-4" id="view_table_section" style="display: none;">
                 <button type="button" id="view_tax_table_btn" 
                         class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                    <i class="fas fa-eye mr-2"></i>View Tax Table
+                    <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                    </svg>
+                    View Tax Table Guide
                 </button>
             </div>
 
@@ -241,12 +234,7 @@
                 <p class="mt-1 text-xs text-gray-500">Choose which employees this deduction/tax setting applies to based on their benefit status.</p>
             </div>
 
-
-                    </ul>
-                </div>
-            </div>
-
-            <div class="mt-8 flex justify-end space-x-3">
+            <div class="mt-8 pt-6 border-t border-gray-200 flex justify-end space-x-3">
                 <a href="{{ route('settings.deductions.index') }}" 
                    class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
                     Cancel

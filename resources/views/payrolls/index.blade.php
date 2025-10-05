@@ -242,7 +242,10 @@
                 <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                 </svg>
-                Send Payslip
+                <div>
+                    <div id="contextMenuSendText">Send Payslip</div>
+                    <div class="text-xs text-gray-500" id="contextMenuSendStatus"></div>
+                </div>
             </a>
             <div class="border-t border-gray-100 my-1"></div>
             <a href="#" id="contextMenuDelete" class="flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors duration-150">
@@ -268,7 +271,7 @@
             contextMenu.classList.add('opacity-0', 'scale-95');
         });
         
-        function showContextMenu(event, payrollId, payrollNumber, period, status, payrollType, paySchedule, employeeId, employeeName = '') {
+        function showContextMenu(event, payrollId, payrollNumber, period, status, payrollType, paySchedule, employeeId, employeeName = '', sendStatus = '', sendDetails = '') {
             event.preventDefault();
             event.stopPropagation();
             
@@ -291,6 +294,14 @@
             
             document.getElementById('contextMenuEdit').href = baseUrl + '/' + payrollId + '/edit';
             
+            // Get current send status from row data attributes (for real-time updates)
+            const payrollRow = document.getElementById(`payroll-row-${payrollId}`);
+            const currentSendStatus = payrollRow ? payrollRow.getAttribute('data-send-status') : sendStatus;
+            const currentSendDetails = payrollRow ? payrollRow.getAttribute('data-send-details') : sendDetails;
+            
+            // Update send payslip context menu info
+            updateSendPayslipContextMenu(currentSendStatus, currentSendDetails);
+
             // Show/hide actions based on status and permissions
             showHideContextMenuItems(status);
             
@@ -381,6 +392,21 @@
             }
             @endcan
         }
+
+        function updateSendPayslipContextMenu(sendStatus, sendDetails) {
+            const sendTextElement = document.getElementById('contextMenuSendText');
+            const sendStatusElement = document.getElementById('contextMenuSendStatus');
+            
+            if (sendStatus === 'All Sent') {
+                sendTextElement.textContent = 'Resend Payslip';
+                sendStatusElement.textContent = sendDetails;
+                sendStatusElement.className = 'text-xs text-gray-500';
+            } else {
+                sendTextElement.textContent = 'Send Payslip';
+                sendStatusElement.textContent = '';
+                sendStatusElement.className = 'text-xs text-gray-500';
+            }
+        }
         
         // Handle process action
         document.getElementById('contextMenuProcess').addEventListener('click', function(e) {
@@ -452,6 +478,25 @@
                     setTimeout(() => {
                         if (data.success) {
                             alert('Payslip sent successfully!');
+                            
+                            // Create timestamp
+                            const timestamp = 'Sent: ' + new Date().toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                            });
+                            
+                            // Update context menu to show "Resend" status
+                            updateSendPayslipContextMenu('All Sent', timestamp);
+                            
+                            // Update row data attributes for persistent changes
+                            const payrollRow = document.getElementById(`payroll-row-${currentPayrollId}`);
+                            if (payrollRow) {
+                                payrollRow.setAttribute('data-send-status', 'All Sent');
+                                payrollRow.setAttribute('data-send-details', timestamp);
+                            }
                         } else {
                             alert('Error sending payslip: ' + (data.message || 'Unknown error'));
                         }

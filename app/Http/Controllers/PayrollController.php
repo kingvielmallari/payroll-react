@@ -76,7 +76,9 @@ class PayrollController extends Controller
         }
 
         // Show all payrolls with filters
-        $query = Payroll::with(['creator', 'approver', 'payrollDetails.employee'])
+        $query = Payroll::with(['creator', 'approver', 'payrollDetails' => function ($query) {
+            $query->with('employee');
+        }])
             ->withCount('payrollDetails')
             ->orderBy('created_at', 'desc');
 
@@ -3327,6 +3329,134 @@ class PayrollController extends Controller
         ];
 
         return view('payrolls.payslip', compact('payroll', 'company', 'isDynamic', 'employerSettings', 'activeDeductions'));
+    }
+
+    /**
+     * Download payslip as PDF using the same format as the payslip view
+     */
+    public function payslipDownload(Payroll $payroll)
+    {
+        // Use same authorization logic as payslip method
+        if (!Auth::user()->hasRole('Employee')) {
+            $this->authorize('view payrolls');
+        } else {
+            // For employees, check if they have access to this payroll
+            $employee = Auth::user()->employee;
+            if (!$employee) {
+                abort(404, 'Employee record not found');
+            }
+
+            // Check if this payroll contains the employee's data
+            $hasAccess = $payroll->payrollDetails()->where('employee_id', $employee->id)->exists();
+            if (!$hasAccess) {
+                abort(403, 'You can only download your own payslips.');
+            }
+        }
+
+        // Get the same data as the payslip method - we need to replicate the logic
+        $payroll->load([
+            'payrollDetails.employee.user',
+            'payrollDetails.employee.department',
+            'payrollDetails.employee.position',
+            'payrollDetails.employee.daySchedule',
+            'payrollDetails.employee.timeSchedule',
+            'creator',
+            'approver'
+        ]);
+
+        // Apply the same snapshot logic as payslip method for approved/processing payrolls
+        $isDynamic = $payroll->status === 'draft';
+
+        if (!$isDynamic) {
+            // For processing/approved payrolls, use snapshot data
+            $snapshots = $payroll->snapshots()->get();
+            if ($snapshots->isNotEmpty()) {
+                // Update payroll details with snapshot values to ensure consistency
+                foreach ($payroll->payrollDetails as $detail) {
+                    $snapshot = $snapshots->where('employee_id', $detail->employee_id)->first();
+                    if ($snapshot) {
+                        // Apply all the same snapshot overrides as the payslip method
+                        $detail->basic_salary = $snapshot->basic_salary;
+                        $detail->daily_rate = $snapshot->daily_rate;
+                        $detail->hourly_rate = $snapshot->hourly_rate;
+                        $detail->days_worked = $snapshot->days_worked;
+                        $detail->regular_hours = $snapshot->regular_hours;
+                        $detail->overtime_hours = $snapshot->overtime_hours;
+                        $detail->holiday_hours = $snapshot->holiday_hours;
+                        $detail->regular_pay = $snapshot->regular_pay;
+                        $detail->overtime_pay = $snapshot->overtime_pay;
+                        $detail->holiday_pay = $snapshot->holiday_pay;
+                        $detail->allowances = $snapshot->allowances_total;
+                        $detail->bonuses = $snapshot->bonuses_total;
+                        $detail->incentives = $snapshot->incentives_total;
+                        $detail->gross_pay = $snapshot->gross_pay;
+                        $detail->sss_contribution = $snapshot->sss_contribution;
+                        $detail->philhealth_contribution = $snapshot->philhealth_contribution;
+                        $detail->pagibig_contribution = $snapshot->pagibig_contribution;
+                        $detail->withholding_tax = $snapshot->withholding_tax;
+                        $detail->late_deductions = $snapshot->late_deductions;
+                        $detail->undertime_deductions = $snapshot->undertime_deductions;
+                        $detail->cash_advance_deductions = $snapshot->cash_advance_deductions;
+                        $detail->other_deductions = $snapshot->other_deductions;
+                        $detail->total_deductions = $snapshot->total_deductions;
+                        $detail->net_pay = $snapshot->net_pay;
+
+                        // Set breakdown data from snapshots
+                        if ($snapshot->allowances_breakdown) {
+                            $detail->earnings_breakdown = json_encode([
+                                'allowances' => is_string($snapshot->allowances_breakdown)
+                                    ? json_decode($snapshot->allowances_breakdown, true)
+                                    : $snapshot->allowances_breakdown
+                            ]);
+                        }
+
+                        if ($snapshot->bonuses_breakdown) {
+                            $detail->bonuses_breakdown = is_string($snapshot->bonuses_breakdown)
+                                ? json_decode($snapshot->bonuses_breakdown, true)
+                                : $snapshot->bonuses_breakdown;
+                        }
+
+                        if ($snapshot->deductions_breakdown) {
+                            $detail->deduction_breakdown = is_string($snapshot->deductions_breakdown)
+                                ? json_decode($snapshot->deductions_breakdown, true)
+                                : $snapshot->deductions_breakdown;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Get dynamic company data from employer_settings table
+        $employerSettings = \App\Models\EmployerSetting::first();
+
+        // Get active deduction settings for breakdown display
+        $activeDeductions = \App\Models\DeductionTaxSetting::active()->orderBy('name')->get();
+
+        $company = (object)[
+            'name' => $employerSettings->registered_business_name ?? 'Payroll-System',
+            'address' => $employerSettings->registered_address ?? 'Company Address, City, Province',
+            'phone' => $employerSettings->landline_mobile ?? '+63 (000) 000-0000',
+            'email' => $employerSettings->office_business_email ?? 'hr@company.com'
+        ];
+
+        // Create a PDF-optimized version of the payslip view
+        $html = view('payrolls.payslip-pdf', compact('payroll', 'company', 'isDynamic', 'employerSettings', 'activeDeductions'))->render();
+
+        // Generate PDF using DomPDF
+        $pdf = app('dompdf.wrapper');
+        $pdf->loadHTML($html);
+        $pdf->setPaper('letter', 'portrait'); // Use letter size (8.5" x 11")
+
+        // Generate filename based on employee and period
+        $firstEmployee = $payroll->payrollDetails->first();
+        if ($firstEmployee) {
+            $filename = 'payslip_' . $firstEmployee->employee->employee_number . '_' .
+                $payroll->period_start->format('Y-m') . '.pdf';
+        } else {
+            $filename = 'payslip_' . $payroll->payroll_number . '.pdf';
+        }
+
+        return $pdf->download($filename);
     }
 
     /**
@@ -6950,13 +7080,16 @@ class PayrollController extends Controller
                         $payBasisName .= ' (capped at ₱' . number_format($setting->salary_cap, 2) . ')';
                     }
 
+                    // Calculate basic pay components (regular + holiday + rest) for proper deduction calculation
+                    $basicPayComponents = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+
                     $amount = $setting->calculateDeduction(
-                        $taxableIncomeForDeductions, // Use taxable income (with allowances/bonuses) instead of just basic pay components
+                        $basicPayComponents, // Use actual basic pay components, not full taxable income
                         $detail->overtime_pay ?? 0,
                         $detail->bonuses ?? 0,
                         $detail->allowances ?? 0,
                         $grossPay ?? ($detail->gross_pay ?? 0), // Use passed grossPay if available
-                        null, // taxableIncome
+                        $taxableIncomeForDeductions, // Pass taxable income as the proper taxableIncome parameter
                         null, // netPay
                         $employee->calculateMonthlyBasicSalary($detail->payroll->period_start ?? null, $detail->payroll->period_end ?? null), // monthlyBasicSalary - DYNAMIC
                         $payFrequency // Add pay frequency parameter
@@ -6992,15 +7125,18 @@ class PayrollController extends Controller
             // Withholding tax is calculated on the taxable income BEFORE government deductions
             foreach ($deductionSettings as $setting) {
                 if ($setting->tax_table_type === 'withholding_tax') {
+                    // Calculate basic pay components (regular + holiday + rest) for proper deduction calculation
+                    $basicPayComponents = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+
                     $amount = $setting->calculateDeduction(
-                        $taxableIncomeForDeductions, // basicPay
+                        $basicPayComponents, // Use actual basic pay components, not full taxable income
                         $detail->overtime_pay ?? 0,
                         $detail->bonuses ?? 0,
                         $detail->allowances ?? 0,
                         $grossPay ?? ($detail->gross_pay ?? 0), // Use passed grossPay if available
                         $taxableIncomeForDeductions, // Use the same taxable income - withholding tax is not calculated after government deductions
                         null, // netPay
-                        $employee->basic_salary, // monthlyBasicSalary
+                        $employee->calculateMonthlyBasicSalary($detail->payroll->period_start ?? null, $detail->payroll->period_end ?? null), // Use dynamic MBS calculation for consistency
                         $payFrequency // Add pay frequency parameter
                     );
 
@@ -7212,13 +7348,16 @@ class PayrollController extends Controller
                     }
                 } else {
                     // For other deductions, use the calculateEmployerShare method
+                    // Calculate basic pay components (regular + holiday + rest) for proper deduction calculation
+                    $basicPayComponents = ($detail->regular_pay ?? 0) + ($detail->holiday_pay ?? 0) + ($detail->rest_day_pay ?? 0);
+
                     $employeeDeduction = $setting->calculateDeduction(
-                        $taxableIncomeForDeductions,
+                        $basicPayComponents, // Use actual basic pay components, not full taxable income
                         $detail->overtime_pay ?? 0,
                         $detail->bonuses ?? 0,
                         $detail->allowances ?? 0,
                         $detail->gross_pay ?? 0,
-                        null,
+                        $taxableIncomeForDeductions, // Pass taxable income as the proper taxableIncome parameter
                         null,
                         $employee->calculateMonthlyBasicSalary($payroll->period_start ?? null, $payroll->period_end ?? null),
                         $payFrequency

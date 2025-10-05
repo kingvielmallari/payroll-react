@@ -118,11 +118,27 @@ class PayslipController extends Controller
             Mail::to($payrollDetail->employee->user->email)
                 ->send(new PayslipMail($payrollDetail, $snapshot));
 
+            // Update payslip send tracking
+            $payrollDetail->update([
+                'payslip_sent' => true,
+                'payslip_sent_at' => now(),
+                'payslip_sent_to_email' => $payrollDetail->employee->user->email,
+                'payslip_sent_by' => Auth::id(),
+                'payslip_send_count' => $payrollDetail->payslip_send_count + 1,
+                'payslip_last_sent_at' => now(),
+            ]);
+
             // Check if this is an AJAX request
             if (request()->expectsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'Payslip sent successfully to ' . $payrollDetail->employee->user->email
+                    'message' => 'Payslip sent successfully to ' . $payrollDetail->employee->user->email,
+                    'payslip_data' => [
+                        'sent' => true,
+                        'sent_at' => $payrollDetail->payslip_last_sent_at->format('M j, Y g:i A'),
+                        'sent_count' => $payrollDetail->payslip_send_count,
+                        'sent_to' => $payrollDetail->payslip_sent_to_email
+                    ]
                 ]);
             }
 
@@ -171,6 +187,17 @@ class PayslipController extends Controller
             try {
                 Mail::to($payrollDetail->employee->user->email)
                     ->send(new PayslipMail($payrollDetail, $snapshot));
+
+                // Update payslip send tracking
+                $payrollDetail->update([
+                    'payslip_sent' => true,
+                    'payslip_sent_at' => now(),
+                    'payslip_sent_to_email' => $payrollDetail->employee->user->email,
+                    'payslip_sent_by' => Auth::id(),
+                    'payslip_send_count' => $payrollDetail->payslip_send_count + 1,
+                    'payslip_last_sent_at' => now(),
+                ]);
+
                 $sent++;
             } catch (\Exception $e) {
                 $failed++;
@@ -329,6 +356,17 @@ class PayslipController extends Controller
                 try {
                     Mail::to($payrollDetail->employee->user->email)
                         ->send(new PayslipMail($payrollDetail, $snapshot));
+
+                    // Update payslip send tracking
+                    $payrollDetail->update([
+                        'payslip_sent' => true,
+                        'payslip_sent_at' => now(),
+                        'payslip_sent_to_email' => $payrollDetail->employee->user->email,
+                        'payslip_sent_by' => Auth::id(),
+                        'payslip_send_count' => $payrollDetail->payslip_send_count + 1,
+                        'payslip_last_sent_at' => now(),
+                    ]);
+
                     $sent++;
                 } catch (\Exception $e) {
                     $failed++;
@@ -414,6 +452,17 @@ class PayslipController extends Controller
             try {
                 Mail::to($payrollDetail->employee->user->email)
                     ->send(new PayslipMail($payrollDetail, $snapshot));
+
+                // Update payslip send tracking
+                $payrollDetail->update([
+                    'payslip_sent' => true,
+                    'payslip_sent_at' => now(),
+                    'payslip_sent_to_email' => $payrollDetail->employee->user->email,
+                    'payslip_sent_by' => Auth::id(),
+                    'payslip_send_count' => $payrollDetail->payslip_send_count + 1,
+                    'payslip_last_sent_at' => now(),
+                ]);
+
                 $sent++;
             } catch (\Exception $e) {
                 $failed++;

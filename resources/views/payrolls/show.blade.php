@@ -697,37 +697,7 @@
                         @endif
                         @endcan
 
-                        @canany(['email payslip'], [auth()->user()])
-                            @if(auth()->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff']))
-                                @if($payroll->status == 'approved')
-                                    @if($payroll->payrollDetails->count() == 1)
-                                        {{-- Single employee - use individual email --}}
-                                        <button type="button"
-                                                class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 focus:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150"
-                                                onclick="emailIndividualPayslip('{{ $payroll->payrollDetails->first()->employee_id }}', '{{ $payroll->payrollDetails->first()->employee->first_name }} {{ $payroll->payrollDetails->first()->employee->last_name }}', '{{ $payroll->payrollDetails->first()->employee->user->email ?? 'No email' }}')">
-                                            Email Payslip
-                                        </button>
-                                    @else
-                                        {{-- Multiple employees - use email all --}}
-                                        <button type="button"
-                                                class="inline-flex items-center px-4 py-2 bg-purple-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-purple-700 focus:bg-purple-700 active:bg-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition ease-in-out duration-150"
-                                                onclick="emailAllPayslips('{{ $payroll->payrollDetails->count() }}')">
-                                            Email All Payslips
-                                        </button>
-                                    @endif
-                                @endif
-                            @endif
-                        @endcanany
-
-                        @can('download all payslips')
-                        @if($payroll->status == 'approved')
-                        <a href="{{ route('payslips.download-all', $payroll) }}"
-                           class="inline-flex items-center px-4 py-2 bg-orange-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-orange-700 focus:bg-orange-700 active:bg-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition ease-in-out duration-150">
-                            Download All Payslips
-                        </a>
-                        @endif
-                        @endcan
-
+                       
                         {{-- Mark as Paid/Unpaid buttons --}}
                         @can('mark payrolls as paid')
                         @if($payroll->canBeMarkedAsPaid())

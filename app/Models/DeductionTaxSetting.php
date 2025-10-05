@@ -124,9 +124,6 @@ class DeductionTaxSetting extends Model
         $periodEnd = \Carbon\Carbon::parse($payrollEnd);
 
         switch ($this->distribution_method) {
-            case 'first_payroll':
-                return $this->isFirstPayrollOfMonth($periodStart, $periodEnd);
-
             case 'last_payroll':
                 return $this->isLastPayrollOfMonth($periodStart, $periodEnd);
 
@@ -232,7 +229,12 @@ class DeductionTaxSetting extends Model
         if ($this->apply_to_gross_pay && $grossPay) $applicableSalary = $grossPay;
         if ($this->apply_to_taxable_income && $taxableIncome) $applicableSalary = $taxableIncome;
         if ($this->apply_to_net_pay && $netPay) $applicableSalary = $netPay;
-        if ($this->apply_to_monthly_basic_salary && $monthlyBasicSalary) $applicableSalary = $monthlyBasicSalary;
+
+        // For monthly basic salary, always use monthly basic salary for proper calculation
+        // The distribution will be handled in calculateDistributedAmount method
+        if ($this->apply_to_monthly_basic_salary && $monthlyBasicSalary) {
+            $applicableSalary = $monthlyBasicSalary;
+        }
 
         // Apply salary cap if set
         if ($this->salary_cap && $applicableSalary > $this->salary_cap) {
@@ -252,7 +254,8 @@ class DeductionTaxSetting extends Model
 
             case 'bracket':
                 if ($this->tax_table_type) {
-                    // For PhilHealth and Pag-IBIG, always use monthly basic salary regardless of pay basis
+                    // For PhilHealth and Pag-IBIG, always use monthly basic salary for accurate table calculations
+                    // Distribution will be handled in calculateDistributedAmount method
                     if (($this->tax_table_type === 'philhealth' || $this->tax_table_type === 'pagibig') && $monthlyBasicSalary) {
                         $deduction = $this->calculateTaxTableDeduction($monthlyBasicSalary, $this->tax_table_type, $payFrequency);
                     } else {

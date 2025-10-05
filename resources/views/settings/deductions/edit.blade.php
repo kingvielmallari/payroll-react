@@ -121,7 +121,6 @@
                     <select name="distribution_method" id="distribution_method" 
                             class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
                         <option value="">Select Distribution Method</option>
-                        <option value="first_payroll" {{ old('distribution_method', $deduction->distribution_method) == 'first_payroll' ? 'selected' : '' }}>First Payroll Only</option>
                         <option value="last_payroll" {{ old('distribution_method', $deduction->distribution_method) == 'last_payroll' ? 'selected' : '' }}>Last Payroll Only</option>
                         <option value="equally_distributed" {{ old('distribution_method', $deduction->distribution_method) == 'equally_distributed' ? 'selected' : '' }}>Equally Distributed</option>
                     </select>

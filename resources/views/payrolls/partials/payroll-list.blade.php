@@ -3,24 +3,32 @@
     <table class="min-w-full divide-y divide-gray-200">
         <thead class="bg-gray-50">
             <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">
                     Payroll Number
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">
                     Period
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                     Employee
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                     Status
                 </th>
             </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
             @foreach($payrolls as $payroll)
-            <tr class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
-               oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $payroll->payroll_type }}', '{{ $payroll->pay_schedule }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : '' }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee->first_name . ' ' . $payroll->payrollDetails->first()->employee->last_name : 'employees' }}')"
+            @php
+                $sendStatus = $payroll->payslip_send_status;
+                $statusText = $sendStatus['status'] === 'all' ? 'All Sent' : 'Not Sent';
+                $statusDetails = $sendStatus['status'] === 'all' ? 'Sent: ' . ($sendStatus['latest_sent_at'] ? $sendStatus['latest_sent_at']->format('M j, g:i A') : 'N/A') : '';
+            @endphp
+            <tr id="payroll-row-{{ $payroll->id }}" class="hover:bg-gray-50 cursor-pointer transition-colors duration-150" 
+               data-payroll-id="{{ $payroll->id }}"
+               data-send-status="{{ $statusText }}"
+               data-send-details="{{ $statusDetails }}"
+               oncontextmenu="showContextMenu(event, '{{ $payroll->id }}', '{{ $payroll->payroll_number }}', '{{ $payroll->period_start->format('M d') }} - {{ $payroll->period_end->format('M d, Y') }}', '{{ $payroll->status }}', '{{ $payroll->payroll_type }}', '{{ $payroll->pay_schedule }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee_id : '' }}', '{{ $payroll->payrollDetails->count() === 1 ? $payroll->payrollDetails->first()->employee->first_name . ' ' . $payroll->payrollDetails->first()->employee->last_name : 'employees' }}', '{{ $statusText }}', '{{ $statusDetails }}')"
                onclick="window.open('{{ route('payrolls.automation.show', ['schedule' => $payroll->pay_schedule, 'id' => $payroll->id]) }}', '_blank')"
                title="Click to open in new tab, Right-click for actions">
                

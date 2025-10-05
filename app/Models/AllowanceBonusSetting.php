@@ -643,9 +643,6 @@ class AllowanceBonusSetting extends Model
     private function calculateMonthlyDistribution($originalAmount, $periodStart, $periodEnd, $employeePaySchedule)
     {
         switch ($this->distribution_method) {
-            case 'first_payroll':
-                return $this->isFirstPayrollOfMonth($periodStart, $periodEnd, $employeePaySchedule) ? $originalAmount : 0;
-
             case 'last_payroll':
                 return $this->isLastPayrollOfMonth($periodStart, $periodEnd, $employeePaySchedule) ? $originalAmount : 0;
 
@@ -664,9 +661,6 @@ class AllowanceBonusSetting extends Model
     private function calculateQuarterlyDistribution($originalAmount, $periodStart, $periodEnd, $employeePaySchedule)
     {
         switch ($this->distribution_method) {
-            case 'first_payroll':
-                return $this->isFirstPayrollOfQuarter($periodStart, $periodEnd, $employeePaySchedule) ? $originalAmount : 0;
-
             case 'last_payroll':
                 return $this->isLastPayrollOfQuarter($periodStart, $periodEnd, $employeePaySchedule) ? $originalAmount : 0;
 
@@ -685,9 +679,6 @@ class AllowanceBonusSetting extends Model
     private function calculateAnnualDistribution($originalAmount, $periodStart, $periodEnd, $employeePaySchedule)
     {
         switch ($this->distribution_method) {
-            case 'first_payroll':
-                return $this->isFirstPayrollOfYear($periodStart, $periodEnd, $employeePaySchedule) ? $originalAmount : 0;
-
             case 'last_payroll':
                 return $this->isLastPayrollOfYear($periodStart, $periodEnd, $employeePaySchedule) ? $originalAmount : 0;
 

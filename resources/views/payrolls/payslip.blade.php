@@ -233,9 +233,18 @@
                     @canany(['email payslip'], [auth()->user()])
                         @if(auth()->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff']))
                             @foreach($payroll->payrollDetails as $emailDetail)
-                                <button onclick="emailIndividualPayslip({{ $emailDetail->employee_id }})" 
-                                        class="inline-flex items-center p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl"
-                                        title="Email Payslip to {{ $emailDetail->employee->first_name }} {{ $emailDetail->employee->last_name }}">
+                                @php
+                                    $buttonClass = $emailDetail->payslip_sent 
+                                        ? 'bg-purple-600 hover:bg-purple-700' 
+                                        : 'border border-gray-300 text-gray-700 hover:bg-gray-50';
+                                    $buttonTitle = $emailDetail->payslip_sent 
+                                        ? "Resend Payslip Sent: " . ($emailDetail->payslip_last_sent_at ? $emailDetail->payslip_last_sent_at->format('M j, g:i A') : 'N/A')
+                                        : "Send Payslip to {$emailDetail->employee->first_name} {$emailDetail->employee->last_name}";
+                                    $textClass = $emailDetail->payslip_sent ? 'text-white' : 'text-gray-700';
+                                @endphp
+                                <button id="payslip-btn-{{ $emailDetail->employee_id }}" onclick="emailIndividualPayslip({{ $emailDetail->employee_id }})" 
+                                        class="inline-flex items-center p-2 {{ $buttonClass }} {{ $textClass }} rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl relative group"
+                                        title="{{ $buttonTitle }}">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
                                     </svg>
@@ -556,12 +565,12 @@
                                     $activeDeductionCodes = $activeDeductions->pluck('name', 'code')->toArray();
                                     $allDeductions = collect($detail->deduction_breakdown);
                                     
-                                    // Ensure all active deductions are represented, even with 0 amount
-                                    foreach($activeDeductions as $deduction) {
-                                        if (!$allDeductions->has($deduction->code)) {
-                                            $allDeductions->put($deduction->code, ['name' => $deduction->name, 'amount' => 0]);
-                                        }
-                                    }
+                                    // // Ensure all active deductions are represented, even with 0 amount
+                                    // foreach($activeDeductions as $deduction) {
+                                    //     if (!$allDeductions->has($deduction->code)) {
+                                    //         $allDeductions->put($deduction->code, ['name' => $deduction->name, 'amount' => 0]);
+                                    //     }
+                                    // }
                                     
                                     // // Ensure cash advance is always shown
                                     // if (!$allDeductions->has('CASH_ADVANCE')) {
@@ -687,8 +696,8 @@
         });
         
         function downloadPDF() {
-            // Simple implementation - you can enhance this with jsPDF
-            window.print();
+            // Use the server-side PDF generation route
+            window.location.href = '{{ route("payrolls.payslip.download", $payroll) }}';
         }
         
         function emailPayslips() {
@@ -776,6 +785,23 @@
                     setTimeout(() => {
                         if (data.success) {
                             alert('Individual payslip sent successfully!');
+                            
+                            // Update button styling and title after successful send
+                            const button = document.getElementById(`payslip-btn-${employeeId}`);
+                            if (button) {
+                                // Change to purple styling for sent state
+                                button.className = 'inline-flex items-center p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors duration-200 shadow-lg hover:shadow-xl relative group';
+                                
+                                // Update title with timestamp
+                                const timestamp = new Date().toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true
+                                });
+                                button.title = `Resend Payslip Sent: ${timestamp}`;
+                            }
                         } else {
                             alert('Error sending payslip: ' + data.message);
                         }

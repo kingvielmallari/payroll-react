@@ -182,8 +182,9 @@ Route::middleware(['auth', 'verified', 'license'])->group(function () {
             ->middleware('can:view payrolls');
     });
 
-    // Payslip route - accessible to both HR and employees (authorization handled in controller)
+    // Payslip routes - accessible to both HR and employees (authorization handled in controller)
     Route::get('payrolls/{payroll}/payslip', [PayrollController::class, 'payslip'])->name('payrolls.payslip');
+    Route::get('payrolls/{payroll}/payslip/download', [PayrollController::class, 'payslipDownload'])->name('payrolls.payslip.download');
 
     // Payslip Management
     Route::middleware('can:view payslips')->group(function () {

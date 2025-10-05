@@ -118,50 +118,30 @@
 @endif
 
 <!-- Context Menu -->
-<div id="payslipContextMenu" class="fixed bg-white rounded-md shadow-xl border border-gray-200 py-1 min-w-56 z-50 hidden" style="box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);">
-    <!-- Header with Payslip Number -->
-    <div class="px-4 py-3 border-b border-gray-100 bg-gray-50 rounded-t-md">
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Payslip Actions</div>
-        <div class="text-sm font-semibold text-gray-900 mt-1" id="contextPayslipNumber">Loading...</div>
+<div id="payslipContextMenu" class="fixed bg-white rounded-md shadow-xl border border-gray-200 py-1 z-50 hidden min-w-52 backdrop-blur-sm transition-all duration-150 transform opacity-0 scale-95">
+    <div id="contextMenuHeader" class="px-3 py-2 border-b border-gray-100 bg-gray-50 rounded-t-md">
+        <div class="text-sm font-medium text-gray-900" id="contextPayslipNumber">Loading...</div>
+        <div class="text-xs text-gray-500" id="contextPayslipPeriod"></div>
     </div>
-    
-    <!-- Action Buttons -->
     <div class="py-1">
-        <button id="viewPayslip" class="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center transition-colors duration-150 group">
-            <div class="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center mr-3 group-hover:bg-blue-200 transition-colors duration-150">
-                <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                </svg>
-            </div>
-            <div>
-                <div class="text-sm font-medium text-gray-900">View Payslip</div>
-                <div class="text-xs text-gray-500">Open in new tab</div>
-            </div>
-        </button>
-        
-        <button id="downloadPayslip" class="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center transition-colors duration-150 group">
-            <div class="w-8 h-8 bg-green-100 rounded-md flex items-center justify-center mr-3 group-hover:bg-green-200 transition-colors duration-150">
-                <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                </svg>
-            </div>
-            <div>
-                <div class="text-sm font-medium text-gray-900">Download Payslip</div>
-                <div class="text-xs text-gray-500">Save as PDF</div>
-            </div>
-        </button>
-        
-        <button id="sendPayslip" class="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center transition-colors duration-150 group">
-            <div class="w-8 h-8 bg-purple-100 rounded-md flex items-center justify-center mr-3 group-hover:bg-purple-200 transition-colors duration-150">
-                <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                </svg>
-            </div>
-            <div>
-                <div class="text-sm font-medium text-gray-900">Send Payslip</div>
-                <div class="text-xs text-gray-500">Email to employee</div>
-            </div>
-        </button>
+        <a href="#" id="viewPayslip" class="flex items-center px-3 py-2 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors duration-150">
+            <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            </svg>
+            View Payslip
+        </a>
+        <a href="#" id="downloadPayslip" class="flex items-center px-3 py-2 text-sm text-green-600 hover:bg-green-50 hover:text-green-700 transition-colors duration-150">
+            <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Download Payslip
+        </a>
+        <a href="#" id="sendPayslip" class="flex items-center px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 hover:text-purple-700 transition-colors duration-150">
+            <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+            Send Payslip
+        </a>
     </div>
 </div>

@@ -230,4 +230,36 @@ class Payroll extends Model
     {
         return $query->where('payroll_type', $type);
     }
+
+    /**
+     * Get payslip send status summary.
+     */
+    public function getPayslipSendStatusAttribute()
+    {
+        $totalPayslips = $this->payrollDetails()->count();
+        $sentPayslips = $this->payrollDetails()->where('payslip_sent', true)->count();
+
+        if ($totalPayslips === 0) {
+            return [
+                'status' => 'none',
+                'sent' => 0,
+                'total' => 0,
+                'percentage' => 0,
+                'latest_sent_at' => null
+            ];
+        }
+
+        $latestSent = $this->payrollDetails()
+            ->whereNotNull('payslip_last_sent_at')
+            ->orderBy('payslip_last_sent_at', 'desc')
+            ->first();
+
+        return [
+            'status' => $sentPayslips === 0 ? 'none' : ($sentPayslips === $totalPayslips ? 'all' : 'partial'),
+            'sent' => $sentPayslips,
+            'total' => $totalPayslips,
+            'percentage' => $totalPayslips > 0 ? round(($sentPayslips / $totalPayslips) * 100) : 0,
+            'latest_sent_at' => $latestSent ? $latestSent->payslip_last_sent_at : null
+        ];
+    }
 }

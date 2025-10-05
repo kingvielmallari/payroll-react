@@ -44,6 +44,12 @@ class PayrollDetail extends Model
         'total_deductions',
         'net_pay',
         'remarks',
+        'payslip_sent',
+        'payslip_sent_at',
+        'payslip_sent_to_email',
+        'payslip_sent_by',
+        'payslip_send_count',
+        'payslip_last_sent_at',
     ];
 
     protected $casts = [
@@ -75,6 +81,9 @@ class PayrollDetail extends Model
         'other_deductions' => 'decimal:2',
         'total_deductions' => 'decimal:2',
         'net_pay' => 'decimal:2',
+        'payslip_sent' => 'boolean',
+        'payslip_sent_at' => 'datetime',
+        'payslip_last_sent_at' => 'datetime',
     ];
 
     /**
@@ -102,6 +111,14 @@ class PayrollDetail extends Model
     public function employee()
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Get the user who sent the payslip.
+     */
+    public function payslipSentBy()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'payslip_sent_by');
     }
 
     /**

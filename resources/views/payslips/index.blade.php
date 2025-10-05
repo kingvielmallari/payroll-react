@@ -216,14 +216,24 @@
                     hideContextMenu();
                 });
 
-                document.getElementById('downloadPayslip').addEventListener('click', function() {
+                document.getElementById('downloadPayslip').addEventListener('click', function(e) {
+                    e.preventDefault();
                     if (currentPayrollDetailId) {
-                        const link = document.createElement('a');
-                        link.href = `{{ url('payslips') }}/${currentPayrollDetailId}/download`;
-                        link.download = '';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
+                        // Create a temporary form to handle the download properly
+                        const form = document.createElement('form');
+                        form.method = 'GET';
+                        form.action = `{{ url('payslips') }}/${currentPayrollDetailId}/download`;
+                        
+                        // Add CSRF token as hidden input for security
+                        const csrfToken = document.createElement('input');
+                        csrfToken.type = 'hidden';
+                        csrfToken.name = '_token';
+                        csrfToken.value = '{{ csrf_token() }}';
+                        form.appendChild(csrfToken);
+                        
+                        document.body.appendChild(form);
+                        form.submit();
+                        document.body.removeChild(form);
                     }
                     hideContextMenu();
                 });
@@ -231,12 +241,17 @@
                 document.getElementById('sendPayslip').addEventListener('click', function() {
                     if (currentPayrollDetailId) {
                         if (confirm('Send payslip via email?')) {
+                            // Use FormData to match payroll implementation
+                            const formData = new FormData();
+                            formData.append('_token', '{{ csrf_token() }}');
+                            
                             fetch(`{{ url('payslips') }}/${currentPayrollDetailId}/email`, {
                                 method: 'POST',
                                 headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                                }
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: formData
                             })
                             .then(response => response.json())
                             .then(data => {
@@ -268,31 +283,66 @@
                         }
                         
                         e.preventDefault();
+                        e.stopPropagation();
+                        
                         currentPayrollId = this.dataset.payrollId;
                         currentPayrollDetailId = this.dataset.payrollDetailId;
                         
-                        // Update payslip number in context menu
+                        // Update context menu header info
                         const payslipNumber = this.dataset.payrollNumber;
+                        const period = this.querySelector('td:nth-child(2) .text-sm')?.textContent || 'N/A';
                         document.getElementById('contextPayslipNumber').textContent = payslipNumber || 'Unknown';
+                        document.getElementById('contextPayslipPeriod').textContent = period;
                         
-                        // Position context menu
-                        contextMenu.style.left = e.pageX + 'px';
-                        contextMenu.style.top = e.pageY + 'px';
+                        // Position context menu with proper bounds checking
+                        let x = e.clientX;
+                        let y = e.clientY;
+                        
+                        // Adjust position if menu would go off screen
+                        let menuWidth = 208; // min-w-52 = 13rem = 208px
+                        let menuHeight = 200; // approximate height
+                        
+                        if (x + menuWidth > window.innerWidth) {
+                            x = window.innerWidth - menuWidth - 10;
+                        }
+                        
+                        if (y + menuHeight > window.innerHeight) {
+                            y = window.innerHeight - menuHeight - 10;
+                        }
+                        
+                        contextMenu.style.left = x + 'px';
+                        contextMenu.style.top = y + 'px';
                         contextMenu.classList.remove('hidden');
+                        
+                        // Animate in
+                        setTimeout(() => {
+                            contextMenu.classList.remove('opacity-0', 'scale-95');
+                            contextMenu.classList.add('opacity-100', 'scale-100');
+                        }, 10);
                     });
                 });
             }
 
             function hideContextMenu() {
                 if (contextMenu) {
-                    contextMenu.classList.add('hidden');
+                    contextMenu.classList.add('opacity-0', 'scale-95');
+                    contextMenu.classList.remove('opacity-100', 'scale-100');
+                    
+                    setTimeout(() => {
+                        contextMenu.classList.add('hidden');
+                    }, 150);
+                    
                     currentPayrollId = null;
                     currentPayrollDetailId = null;
                 }
             }
 
             // Hide context menu when clicking elsewhere
-            document.addEventListener('click', hideContextMenu);
+            document.addEventListener('click', function(event) {
+                if (contextMenu && !contextMenu.contains(event.target)) {
+                    hideContextMenu();
+                }
+            });
             document.addEventListener('scroll', hideContextMenu);
 
             // Initialize context menu on page load

@@ -29,11 +29,8 @@
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                        {{-- <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th> --}}
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>                     
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deduct</th>
-                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Apply To</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     </tr>
                 </thead>
@@ -42,90 +39,97 @@
                         <tr class="hover:bg-gray-50 cursor-pointer {{ !$deduction->is_active ? 'opacity-50 bg-gray-50' : '' }}" 
                             data-context-menu
                             oncontextmenu="showDeductionContextMenu(event, {{ $deduction->id }}, {{ json_encode($deduction->name) }}, {{ json_encode($type) }}, {{ $deduction->is_active ? 'true' : 'false' }})">
+                            
+                            {{-- Name Column: Deduction Name + Calculation Type --}}
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">{{ $deduction->name }}</div>
-                            </td>
-                            {{-- <td class="px-6 py-4">
-                                <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-500' }}">{{ $deduction->description ?: 'No description' }}</div>
-                            </td> --}}
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">
-                                    @if($deduction->calculation_type === 'sss_table' || ($deduction->calculation_type === 'bracket' && $deduction->tax_table_type === 'sss'))
-                                        <span class="text-indigo-600 font-medium">SSS Table</span>
-                                    @elseif($deduction->calculation_type === 'philhealth_table' || ($deduction->calculation_type === 'bracket' && $deduction->tax_table_type === 'philhealth'))
-                                        <span class="text-indigo-600 font-medium">PhilHealth Table</span>
-                                    @elseif($deduction->calculation_type === 'pagibig_table' || ($deduction->calculation_type === 'bracket' && $deduction->tax_table_type === 'pagibig'))
-                                        <span class="text-indigo-600 font-medium">Pag-IBIG Table</span>
-                                    @elseif($deduction->calculation_type === 'withholding_tax_table' || ($deduction->calculation_type === 'bracket' && $deduction->tax_table_type === 'withholding_tax'))
-                                        <span class="text-indigo-600 font-medium">BIR Tax Table</span>
-                                    @elseif($deduction->calculation_type === 'percentage')
-                                        <span class="text-indigo-600 font-medium">Percentage</span>
-                                    @elseif($deduction->calculation_type === 'fixed_amount')
-                                        <span class="text-indigo-600 font-medium">Fixed Amount</span>
-                                    @elseif($deduction->calculation_type === 'bracket')
-                                        <span class="text-indigo-600 font-medium">Custom Bracket</span>
-                                    @else
-                                        <span class="text-gray-400">N/A</span>
-                                    @endif
+                                <div class="flex flex-col">
+                                    <div class="text-sm font-medium {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">
+                                        {{ $deduction->name }}
+                                    </div>
+                                    <div class="text-xs {{ !$deduction->is_active ? 'text-gray-300' : 'text-indigo-600' }} font-medium">
+                                        @if($deduction->calculation_type === 'sss_table' || ($deduction->calculation_type === 'bracket' && $deduction->tax_table_type === 'sss'))
+                                            SSS Table
+                                        @elseif($deduction->calculation_type === 'philhealth_table' || ($deduction->calculation_type === 'bracket' && $deduction->tax_table_type === 'philhealth'))
+                                            PhilHealth Table
+                                        @elseif($deduction->calculation_type === 'pagibig_table' || ($deduction->calculation_type === 'bracket' && $deduction->tax_table_type === 'pagibig'))
+                                            Pag-IBIG Table
+                                        @elseif($deduction->calculation_type === 'withholding_tax_table' || ($deduction->calculation_type === 'bracket' && $deduction->tax_table_type === 'withholding_tax'))
+                                            BIR Tax Table
+                                        @elseif($deduction->calculation_type === 'percentage')
+                                            Percentage
+                                        @elseif($deduction->calculation_type === 'fixed_amount')
+                                            Fixed Amount
+                                        @elseif($deduction->calculation_type === 'bracket')
+                                            Custom Bracket
+                                        @else
+                                            N/A
+                                        @endif
+                                    </div>
                                 </div>
                             </td>
-                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">
-                                    @php
-                                        $payBasis = [];
-                                        if($deduction->apply_to_basic_pay) $payBasis[] = 'Basic Pay';
-                                        if($deduction->apply_to_gross_pay) $payBasis[] = 'Gross Pay';
-                                        if($deduction->apply_to_taxable_income) $payBasis[] = 'Taxable Income';
-                                        if($deduction->apply_to_net_pay) $payBasis[] = 'Net Pay';
-                                        if($deduction->apply_to_monthly_basic_salary) $payBasis[] = 'Monthly Basic';
-                                        echo !empty($payBasis) ? implode(', ', $payBasis) : 'N/A';
-                                    @endphp
+
+                            {{-- Deduct Column: Pay Basis + Distribution Method --}}
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex flex-col">
+                                    <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">
+                                        @php
+                                            $payBasis = [];
+                                            if($deduction->apply_to_basic_pay) $payBasis[] = 'Basic Pay';
+                                            if($deduction->apply_to_gross_pay) $payBasis[] = 'Gross Pay';
+                                            if($deduction->apply_to_taxable_income) $payBasis[] = 'Taxable Income';
+                                            if($deduction->apply_to_net_pay) $payBasis[] = 'Net Pay';
+                                            if($deduction->apply_to_monthly_basic_salary) $payBasis[] = 'Monthly Basic';
+                                            echo !empty($payBasis) ? implode(', ', $payBasis) : 'N/A';
+                                        @endphp
+                                    </div>
+                                    <div class="text-xs {{ !$deduction->is_active ? 'text-gray-300' : 'text-blue-600' }}">
+                                        @if($deduction->distribution_method === 'equally_distributed')
+                                            Equally Distributed
+                                        @elseif($deduction->distribution_method === 'last_payroll')
+                                            Last Payroll
+                                        @elseif($deduction->distribution_method === 'first_payroll')
+                                            First Payroll
+                                        @else
+                                            N/A
+                                        @endif
+                                    </div>
                                 </div>
                             </td>
+
+                            {{-- Amount Column: Employee/Employer Share Info --}}
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">
+                                <div class="flex flex-col space-y-1">
                                     @if($deduction->calculation_type === 'percentage' && $deduction->rate_percentage)
-                                        {{ rtrim(rtrim(number_format($deduction->rate_percentage, 4), '0'), '.') }}%
+                                        <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">
+                                            {{ rtrim(rtrim(number_format($deduction->rate_percentage, 4), '0'), '.') }}%
+                                        </div>
                                     @elseif($deduction->calculation_type === 'fixed_amount' && $deduction->fixed_amount)
-                                        ₱{{ number_format($deduction->fixed_amount, 2) }}
+                                        <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-900' }}">
+                                            ₱{{ number_format($deduction->fixed_amount, 2) }}
+                                        </div>
                                     @elseif(in_array($deduction->calculation_type, ['sss_table', 'philhealth_table', 'pagibig_table', 'withholding_tax_table']) || 
                                             ($deduction->calculation_type === 'bracket' && in_array($deduction->tax_table_type, ['sss', 'philhealth', 'pagibig', 'withholding_tax'])))
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-gray-500 italic">Table-based</span>
+                                        {{-- For government deductions, show separate employee/employer badges --}}
+                                        <div class="flex flex-wrap gap-1">
                                             @if($deduction->share_with_employer && in_array($deduction->tax_table_type, ['sss', 'philhealth', 'pagibig']))
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                    50% Share
+                                                {{-- Show both EE and ER badges separately --}}
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                    50% EE
                                                 </span>
-                                                @else
-                                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                    50% ER
+                                                </span>
+                                            @else
+                                                {{-- Employee only --}}
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                                     100% EE
                                                 </span>
-                                            @endif  
+                                            @endif
                                         </div>
                                     @elseif($deduction->calculation_type === 'bracket')
-                                        <span class="text-gray-500 italic">Bracket-based</span>
+                                        <span class="text-sm text-gray-500 italic">Table-based</span>
                                     @else
-                                        <span class="text-gray-400">N/A</span>
-                                    @endif
-                                </div>
-                            </td>
-                           
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm {{ !$deduction->is_active ? 'text-gray-400' : 'text-gray-700' }}">
-                                    @if($deduction->benefit_eligibility === 'both')
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                            Both
-                                        </span>
-                                    @elseif($deduction->benefit_eligibility === 'with_benefits')
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            With Benefits
-                                        </span>
-                                    @elseif($deduction->benefit_eligibility === 'without_benefits')
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                            Without Benefits
-                                        </span>
-                                    @else
-                                        <span class="text-gray-400">Both</span>
+                                        <span class="text-sm text-gray-400">N/A</span>
                                     @endif
                                 </div>
                             </td>
