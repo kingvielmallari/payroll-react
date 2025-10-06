@@ -72,17 +72,7 @@
                     
                     <!-- Records per page selector -->
                     <div class="flex items-center justify-between">
-                        {{-- <div class="flex items-center space-x-2">
-                            <label for="per_page" class="text-sm font-medium text-gray-700">Records per page:</label>
-                            <select name="per_page" id="per_page" 
-                                    class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                                <option value="10" {{ request('per_page', 10) == 10 ? 'selected' : '' }}>10</option>
-                                <option value="25" {{ request('per_page') == 25 ? 'selected' : '' }}>25</option>
-                                <option value="50" {{ request('per_page') == 50 ? 'selected' : '' }}>50</option>
-                                <option value="100" {{ request('per_page') == 100 ? 'selected' : '' }}>100</option>
-                            </select>
-                        </div> --}}
-                        {{-- <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-4">
                             <div class="text-sm text-gray-500">
                                 Total: {{ $employees->total() }} employees
                             </div>
@@ -90,7 +80,7 @@
                                class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
                                 Add Employee
                             </a>
-                        </div> --}}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -222,6 +212,10 @@
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6" id="employee-list-container">
                     @include('employees.partials.employee-list', ['employees' => $employees])
+                </div>
+                
+                <div class="px-6 pb-6" id="pagination-container">
+                    @include('employees.partials.pagination', ['employees' => $employees])
                 </div>
             </div>
         </div>

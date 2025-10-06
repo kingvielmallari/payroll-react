@@ -415,6 +415,12 @@
             // Add filter parameters
             if (searchInput.value.trim()) params.set('search', searchInput.value.trim());
             if (roleSelect.value) params.set('role', roleSelect.value);
+            
+            // Add per_page parameter if not default
+            const perPageSelect = document.getElementById('per_page');
+            if (perPageSelect && perPageSelect.value && perPageSelect.value !== '10') {
+                params.set('per_page', perPageSelect.value);
+            }
 
             // Update URL without page reload
             url.search = params.toString();
@@ -448,6 +454,13 @@
         // Add event listeners for live filtering
         searchInput.addEventListener('input', debounce(updateFilters, 500));
         roleSelect.addEventListener('change', updateFilters);
+        
+        // Add event listener for per_page changes
+        document.addEventListener('change', function(e) {
+            if (e.target && e.target.id === 'per_page') {
+                updateFilters();
+            }
+        });
 
         // Reset filter button functionality
         const resetButton = document.getElementById('reset_filters');

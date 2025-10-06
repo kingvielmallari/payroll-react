@@ -8,9 +8,7 @@
                 <a href="{{ route('payrolls.automation.index') }}" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
                     Automate Payroll
                 </a>
-                <a href="{{ route('payrolls.manual.index') }}" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                    Manual Payroll
-                </a>
+
             </div>
         </div>
     </x-slot>
@@ -191,10 +189,7 @@
                                    class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
                                     Create Automated Payroll
                                 </a>
-                                <a href="{{ route('payrolls.manual.index') }}" 
-                                   class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                                    Create Manual Payroll
-                                </a>
+
                             </div>
                         </div>
                     @endif

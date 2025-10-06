@@ -11,9 +11,7 @@
                 <a href="{{ route('payrolls.index') }}" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
                     View All Payrolls
                 </a>
-                <a href="{{ route('payrolls.manual.index') }}" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                    Manual Payroll
-                </a>
+
             </div>
         </div>
     </x-slot>
@@ -39,8 +37,8 @@
                             {{-- Only show cards if schedule is active --}}
                             @if($schedule->is_active)
                             <a href="{{ route('payrolls.automation.create', ['schedule' => $schedule->code]) }}" 
-                               class="block border border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg hover:bg-blue-50 transition-all duration-200 cursor-pointer transform hover:scale-105">
-                                <div class="p-6">
+                               class="block border border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg hover:bg-blue-50 transition-all duration-200 cursor-pointer transform hover:scale-105 h-80 min-h-80 max-h-80 w-full">
+                                <div class="py-6 px-8 h-full flex flex-col">
                                     <div class="flex items-center justify-between mb-4">
                                         <h4 class="text-lg font-semibold text-gray-900">{{ $schedule->name }}</h4>
                                         <span class="px-3 py-1 text-xs font-medium rounded-full
@@ -61,26 +59,33 @@
                                             <span class="font-medium ml-1">{{ $schedule->active_employees_count ?? 0 }}</span>
                                         </div>
                                         
-                                        @if(isset($schedule->last_payroll_date))
+                                        @if(isset($schedule->last_payroll_period))
                                             <div class="flex items-center text-sm text-gray-500">
                                                 <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                                     <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"></path>
                                                 </svg>
-                                                Last payroll: {{ \Carbon\Carbon::parse($schedule->last_payroll_date)->format('M d, Y') }}
+                                                Last payroll: {{ $schedule->last_payroll_period }}
+                                            </div>
+                                        @else
+                                            <div class="flex items-center text-sm text-gray-500">
+                                                <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"></path>
+                                                </svg>
+                                                Last payroll: No previous payrolls
                                             </div>
                                         @endif
                                     </div>
 
                                     <!-- Current Pay Period Info -->
                                     @if(isset($schedule->next_period))
-                                        <div class="bg-gray-50 rounded-md p-3 mb-4">
+                                        <div class="bg-gray-50 rounded-md p-3 mb-4 flex-grow">
                                             <h5 class="text-sm font-medium text-gray-900 mb-2">Current Pay Period</h5>
                                             <div class="text-sm text-gray-600">
                                                 <div class="flex justify-between mb-1">
                                                     <span>Period:</span>
                                                     <span class="font-medium">
                                                         {{ \Carbon\Carbon::parse($schedule->next_period['start'])->format('M d') }} - 
-                                                        {{ \Carbon\Carbon::parse($schedule->next_period['end'])->format('M d, Y') }}
+                                                        {{ \Carbon\Carbon::parse($schedule->next_period['end'])->format('d, Y') }}
                                                     </span>
                                                 </div>
                                                 <div class="flex justify-between">
@@ -89,29 +94,30 @@
                                                 </div>
                                             </div>
                                         </div>
+                                    @else
+                                        <div class="bg-gray-50 rounded-md p-3 mb-4 flex-grow">
+                                            <h5 class="text-sm font-medium text-gray-900 mb-2">Current Pay Period</h5>
+                                            <div class="text-sm text-gray-500">
+                                                No period information available
+                                            </div>
+                                        </div>
                                     @endif
 
                                     <!-- Click to Continue Indicator -->
-                                    <div class="text-center">
-                                        @if(($schedule->active_employees_count ?? 0) > 0)
-                                            <div class="text-sm text-blue-600 font-medium">
-                                                <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd"></path>
-                                                </svg>
-                                                Create Payroll Now
-                                            </div>
-                                            <div class="text-xs text-gray-500 mt-1">
-                                                Click to automatically create payroll for {{ $schedule->active_employees_count }} active employee{{ $schedule->active_employees_count > 1 ? 's' : '' }}
-                                            </div>
-                                        @else
-                                            <div class="text-sm text-gray-500 font-medium">
-                                                <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
-                                                </svg>
-                                                View Payrolls
-                                            </div>
-                                            <p class="text-xs text-red-600 mt-1">No active employees for automation</p>
-                                        @endif
+                                    <div class="text-center mt-auto">
+                                        <div class="text-sm text-blue-600 font-medium">
+                                            <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd"></path>
+                                            </svg>
+                                            Create Payroll Now
+                                        </div>
+                                        <div class="text-xs text-gray-500 mt-1">
+                                            @if(($schedule->active_employees_count ?? 0) > 0)
+                                                Click to create payroll for {{ $schedule->active_employees_count }} active employee{{ $schedule->active_employees_count > 1 ? 's' : '' }}
+                                            @else
+                                                Click to view payrolls (no active employees)
+                                            @endif
+                                        </div>
                                     </div>
                                 </div>
                             </a>

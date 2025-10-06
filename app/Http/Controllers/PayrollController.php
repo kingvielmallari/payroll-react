@@ -1080,13 +1080,23 @@ class PayrollController extends Controller
                 ->where('employment_status', 'active')
                 ->count();
 
-            // Get last payroll date if exists
-            $lastPayroll = \App\Models\Payroll::where('pay_schedule', $setting->code)
-                ->orderBy('pay_date', 'desc')
-                ->first();
+            // Calculate and format last payroll period
+            try {
+                $previousPeriod = $this->calculatePreviousPayPeriod($setting);
+                $startDate = \Carbon\Carbon::parse($previousPeriod['start']);
+                $endDate = \Carbon\Carbon::parse($previousPeriod['end']);
 
-            if ($lastPayroll) {
-                $setting->last_payroll_date = $lastPayroll->pay_date;
+                $setting->last_payroll_period = $startDate->format('M d') . ' - ' . $endDate->format('d, Y');
+            } catch (\Exception $e) {
+                // If calculation fails, fallback to checking actual last payroll
+                $lastPayroll = \App\Models\Payroll::where('pay_schedule', $setting->code)
+                    ->orderBy('pay_date', 'desc')
+                    ->first();
+
+                if ($lastPayroll) {
+                    $setting->last_payroll_period = \Carbon\Carbon::parse($lastPayroll->period_start)->format('M d') . ' - ' .
+                        \Carbon\Carbon::parse($lastPayroll->period_end)->format('d, Y');
+                }
             }
         }
 
@@ -1199,18 +1209,15 @@ class PayrollController extends Controller
         $allEmployees = $employeesQuery->get();
 
         if ($allEmployees->isEmpty()) {
-            // If no employees are available for draft payrolls, show the automation page with a message
+            // If no employees are available for draft payrolls, show the page anyway
             // This could mean all employees already have payrolls or no active employees exist
             $allActiveEmployees = Employee::where('pay_schedule', $schedule)
                 ->where('employment_status', 'active')
                 ->count();
 
-            if ($allActiveEmployees == 0) {
-                return redirect()->route('payrolls.automation.index')
-                    ->withErrors(['employees' => 'No active employees found for this pay schedule.']);
-            }
+            // Don't redirect, show the page with appropriate message
 
-            // All active employees already have payrolls - show empty state with information
+            // Show empty state with information (no active employees or all already have payrolls)
             $mockPaginator = new \Illuminate\Pagination\LengthAwarePaginator(
                 collect(),
                 0,
@@ -1228,7 +1235,8 @@ class PayrollController extends Controller
                 'payrolls' => $mockPaginator,
                 'hasPayrolls' => false,
                 'allApproved' => false,
-                'allEmployeesHavePayrolls' => true,
+                'allEmployeesHavePayrolls' => ($allActiveEmployees > 0),
+                'noActiveEmployees' => ($allActiveEmployees == 0),
                 'totalActiveEmployees' => $allActiveEmployees,
                 'draftTotals' => [
                     'gross' => 0,
@@ -2518,117 +2526,7 @@ class PayrollController extends Controller
             ->with('success', 'Viewing draft payrolls. Review and process individual employees as needed.');
     }
 
-    /**
-     * Manual Payroll - Show schedule selection
-     */
-    public function manualIndex()
-    {
-        $this->authorize('view payrolls');
-
-        // Get all payroll schedule settings for selection (including disabled ones)
-        $scheduleSettings = \App\Models\PayScheduleSetting::systemDefaults()
-            ->orderBy('sort_order')
-            ->get();
-
-        // Calculate current periods and employee counts for each schedule
-        foreach ($scheduleSettings as $setting) {
-            // Get current period display
-            $currentPeriods = $this->getCurrentPeriodDisplayForSchedule($setting);
-            $setting->current_period_display = $currentPeriods;
-
-            // Calculate next pay period (use current for manual too)
-            $setting->next_period = $this->calculateCurrentPayPeriod($setting);
-
-            // Count all employees for this schedule (active and inactive)
-            $setting->total_employees_count = \App\Models\Employee::where('pay_schedule', $setting->code)
-                ->count();
-
-            // Count active employees for this schedule
-            $setting->active_employees_count = \App\Models\Employee::where('pay_schedule', $setting->code)
-                ->where('employment_status', 'active')
-                ->count();
-
-            // Get last payroll date if exists
-            $lastPayroll = \App\Models\Payroll::where('pay_schedule', $setting->code)
-                ->orderBy('pay_date', 'desc')
-                ->first();
-
-            if ($lastPayroll) {
-                $setting->last_payroll_date = $lastPayroll->pay_date;
-            }
-        }
-
-        return view('payrolls.manual.index', [
-            'scheduleSettings' => $scheduleSettings
-        ]);
-    }
-
-    /**
-     * Manual Payroll - Show employee selection
-     */
-    public function manualCreate(Request $request)
-    {
-        $this->authorize('create payrolls');
-
-        // Get the selected pay schedule
-        $scheduleCode = $request->input('schedule');
-
-        if (!$scheduleCode) {
-            return redirect()->route('payrolls.manual.index')
-                ->with('error', 'Please select a pay schedule.');
-        }
-
-        // Get schedule setting
-        $selectedSchedule = \App\Models\PayScheduleSetting::systemDefaults()
-            ->where('code', $scheduleCode)
-            ->first();
-
-        if (!$selectedSchedule) {
-            return redirect()->route('payrolls.manual.index')
-                ->with('error', 'Invalid pay schedule selected.');
-        }
-
-        // Get suggested pay period (current period)
-        $suggestedPeriod = $this->calculateCurrentPayPeriod($selectedSchedule);
-
-        // Get suggested payroll number
-        $suggestedPayrollNumber = $this->generatePayrollNumber($scheduleCode);
-
-        // Get employees for this schedule (both active and inactive for manual selection)
-        $employees = Employee::with(['user', 'department', 'position'])
-            ->where('pay_schedule', $scheduleCode)
-            ->orderByRaw("CASE WHEN employment_status = 'active' THEN 0 ELSE 1 END")
-            ->orderBy('first_name')
-            ->get();
-
-        // Get departments for filtering
-        $departments = \App\Models\Department::orderBy('name')->get();
-
-        return view('payrolls.manual.create', compact(
-            'selectedSchedule',
-            'suggestedPeriod',
-            'suggestedPayrollNumber',
-            'employees',
-            'departments'
-        ));
-    }
-
-    /**
-     * Store manual payroll
-     */
-    public function manualStore(Request $request)
-    {
-        $this->authorize('create payrolls');
-
-        $validated = $request->validate([
-            'selected_period' => 'required|string',
-            'employee_ids' => 'required|array|min:1',
-            'employee_ids.*' => 'exists:employees,id',
-        ]);
-
-        // Use the same store logic but mark as manual
-        return $this->processPayrollCreation($validated, 'manual');
-    }
+    // Manual payroll functionality removed
 
     /**
      * Process payroll creation (shared logic)
@@ -5380,6 +5278,56 @@ class PayrollController extends Controller
             default:
                 // Fallback to weekly if unknown
                 return $this->calculateCurrentWeeklyPayPeriod($scheduleSetting, $today);
+        }
+    }
+
+    /**
+     * Calculate the previous pay period based on current pay period
+     */
+    private function calculatePreviousPayPeriod($scheduleSetting)
+    {
+        $currentPeriod = $this->calculateCurrentPayPeriod($scheduleSetting);
+        $currentStart = Carbon::parse($currentPeriod['start']);
+
+        switch ($scheduleSetting->code) {
+            case 'weekly':
+                // Go back one week
+                $previousStart = $currentStart->copy()->subWeek();
+                return $this->calculateCurrentWeeklyPayPeriod($scheduleSetting, $previousStart);
+
+            case 'semi_monthly':
+                // For semi-monthly, we need to handle crossing month boundaries
+                $cutoffPeriods = $scheduleSetting->cutoff_periods;
+                if (is_string($cutoffPeriods)) {
+                    $cutoffPeriods = json_decode($cutoffPeriods, true);
+                }
+
+                $firstPeriodStart = $this->parseDayNumber($cutoffPeriods[0]['start_day'] ?? 1);
+
+                if ($currentStart->day == $firstPeriodStart) {
+                    // Current is first period, previous is second period of last month
+                    $previousDate = $currentStart->copy()->subMonth()->endOfMonth();
+                } else {
+                    // Current is second period, previous is first period of same month
+                    $previousDate = $currentStart->copy()->startOfMonth();
+                }
+
+                return $this->calculateCurrentSemiMonthlyPayPeriod($scheduleSetting, $previousDate);
+
+            case 'monthly':
+                // Go back one month
+                $previousDate = $currentStart->copy()->subMonth();
+                return $this->calculateCurrentMonthlyPayPeriod($scheduleSetting, $previousDate);
+
+            case 'daily':
+                // Go back one day
+                $previousDate = $currentStart->copy()->subDay();
+                return $this->calculateCurrentDailyPayPeriod($scheduleSetting, $previousDate);
+
+            default:
+                // Fallback to weekly
+                $previousStart = $currentStart->copy()->subWeek();
+                return $this->calculateCurrentWeeklyPayPeriod($scheduleSetting, $previousStart);
         }
     }
 

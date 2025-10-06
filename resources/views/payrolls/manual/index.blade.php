@@ -29,8 +29,8 @@
                     <!-- Schedule Selection -->
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         @forelse($scheduleSettings as $schedule)
-                            <div class="border border-gray-200 rounded-lg hover:border-green-500 hover:shadow-md transition-all duration-200">
-                                <div class="p-6">
+                            <div class="border border-gray-200 rounded-lg hover:border-green-500 hover:shadow-md transition-all duration-200 h-80 w-full">
+                                <div class="p-6 h-full flex flex-col">
                                     <div class="flex items-center justify-between mb-4">
                                         <h4 class="text-lg font-semibold text-gray-900">{{ $schedule->name }}</h4>
                                         <span class="px-3 py-1 text-xs font-medium rounded-full
@@ -65,12 +65,19 @@
                                             Inactive: {{ ($schedule->total_employees_count ?? 0) - ($schedule->active_employees_count ?? 0) }}
                                         </div>
                                         
-                                        @if(isset($schedule->last_payroll_date))
+                                        @if(isset($schedule->last_payroll_period))
                                             <div class="flex items-center text-sm text-gray-500 mt-2">
                                                 <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                                     <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"></path>
                                                 </svg>
-                                                Last payroll: {{ \Carbon\Carbon::parse($schedule->last_payroll_date)->format('M d, Y') }}
+                                                Last payroll: {{ $schedule->last_payroll_period }}
+                                            </div>
+                                        @else
+                                            <div class="flex items-center text-sm text-gray-500 mt-2">
+                                                <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"></path>
+                                                </svg>
+                                                Last payroll: No previous payrolls
                                             </div>
                                         @endif
                                     </div>
@@ -96,7 +103,7 @@
                                     @endif
 
                                     <!-- Create Button -->
-                                    <form action="{{ route('payrolls.manual.create') }}" method="GET" class="w-full">
+                                    <form action="{{ route('payrolls.manual.create') }}" method="GET" class="w-full mt-auto">
                                         <input type="hidden" name="schedule" value="{{ $schedule->code }}">
                                         <button type="submit" class="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-4 rounded transition-colors duration-200
                                             {{ ($schedule->total_employees_count ?? 0) === 0 ? 'opacity-50 cursor-not-allowed' : '' }}"

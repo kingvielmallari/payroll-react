@@ -133,10 +133,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // // Test Dynamic Payroll Settings
         // Route::get('payrolls/test-dynamic', [PayrollController::class, 'testDynamic'])->name('payrolls.test-dynamic');
 
-        // Manual Payroll - manual employee selection
-        Route::get('payrolls/manual', [PayrollController::class, 'manualIndex'])->name('payrolls.manual.index');
-        Route::get('payrolls/manual/create', [PayrollController::class, 'manualCreate'])->name('payrolls.manual.create');
-        Route::post('payrolls/manual/store', [PayrollController::class, 'manualStore'])->name('payrolls.manual.store');
+        // Manual payroll functionality removed
 
         // Existing payroll routes
         Route::get('payrolls/{payroll}', [PayrollController::class, 'show'])->name('payrolls.show');

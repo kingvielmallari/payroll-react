@@ -148,7 +148,39 @@
                         </div>
                     @else
                         <div class="text-center py-8">
-                            @if(isset($allEmployeesHavePayrolls) && $allEmployeesHavePayrolls)
+                            @if(isset($noActiveEmployees) && $noActiveEmployees)
+                                <!-- No active employees for this schedule -->
+                                <svg class="mx-auto h-12 w-12 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <h3 class="mt-2 text-sm font-medium text-gray-900">No Active Employees</h3>
+                                <p class="mt-1 text-sm text-gray-500">
+                                    There are no active employees assigned to the {{ $selectedSchedule->name }} schedule for the current period ({{ \Carbon\Carbon::parse($currentPeriod['start'])->format('M d') }} - {{ \Carbon\Carbon::parse($currentPeriod['end'])->format('M d, Y') }}).
+                                </p>
+                                <div class="mt-6 space-y-3">
+                                    <div class="flex justify-center space-x-4">
+                                        <a href="{{ route('employees.index') }}" 
+                                           class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                            View Employees
+                                        </a>
+                                        <a href="{{ route('payrolls.automation.index') }}" 
+                                           class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd"></path>
+                                            </svg>
+                                            Back to Automation
+                                        </a>
+                                    </div>
+                                    <p class="text-xs text-gray-400">
+                                        Add employees to this pay schedule to start creating automated payrolls.
+                                    </p>
+                                </div>
+                            @elseif(isset($allEmployeesHavePayrolls) && $allEmployeesHavePayrolls)
                                 <!-- All employees already have payrolls -->
                                 <svg class="mx-auto h-12 w-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 

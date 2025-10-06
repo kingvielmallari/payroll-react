@@ -79,10 +79,10 @@
                             Employment
                         </th>
                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
+                            Pay Rate
                         </th>
                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Pay Rate
+                            Status
                         </th>
                     </tr>
                 </thead>
@@ -123,6 +123,14 @@
                                     {{ $employee->hire_date->format('M d, Y') }}
                                 </div>
                             </td>
+                            <td class="px-3 py-4 text-sm">
+                                <div class="text-gray-900 font-medium">
+                                    {{ ucwords(str_replace('_', '-', $employee->pay_schedule)) }}
+                                </div>
+                                <div class="text-gray-500">
+                                    ₱{{ number_format($employee->fixed_rate ?? 0, 2) }}/{{ $employee->rate_type ?? 'hour' }}
+                                </div>
+                            </td>
                             <td class="px-3 py-4">
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                     {{ $employee->employment_status === 'active' ? 'bg-green-100 text-green-800' : '' }}
@@ -132,38 +140,12 @@
                                     {{ ucfirst($employee->employment_status) }}
                                 </span>
                             </td>
-                            <td class="px-3 py-4 text-sm">
-                                <div class="text-gray-900 font-medium">
-                                    {{ ucwords(str_replace('_', '-', $employee->pay_schedule)) }}
-                                </div>
-                                <div class="text-gray-500">
-                                    @if($employee->pay_schedule === 'weekly')
-                                        ₱{{ number_format($employee->weekly_rate ?? 0, 2) }}
-                                    @elseif($employee->pay_schedule === 'semi_monthly')
-                                        ₱{{ number_format($employee->semi_monthly_rate ?? 0, 2) }}
-                                    @else
-                                        ₱{{ number_format($employee->basic_salary, 2) }}
-                                    @endif
-                                </div>
-                            </td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
         </div>
 
-        <!-- Pagination -->
-        <div class="mt-6">
-            <div class="flex items-center justify-between mb-5">
-                <div class="text-sm text-gray-700">
-                    Showing {{ $employees->firstItem() ?? 0 }} to {{ $employees->lastItem() ?? 0 }} of {{ $employees->total() }} employees
-                </div>
-                <div class="text-sm text-gray-500">
-                    Page {{ $employees->currentPage() }} of {{ $employees->lastPage() }}
-                </div>
-            </div>
-            {{ $employees->links() }}
-        </div>
     </div>
 @else
     <div class="text-center py-12">
