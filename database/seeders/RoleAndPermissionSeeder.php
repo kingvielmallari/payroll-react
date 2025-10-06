@@ -47,9 +47,9 @@ class RoleAndPermissionSeeder extends Seeder
             'mark payrolls as paid',
             'generate payslips',
             'send payslips',
-            'download payslips',
-            'email all payslips',
             'email payslip',
+            'email all payslips',
+            'download payslips',
 
             // Time Management
             'view time logs',
@@ -146,6 +146,10 @@ class RoleAndPermissionSeeder extends Seeder
             'view own profile',
             'edit own profile',
             'view own payslips',
+
+            // Payslip Management
+            'view payslips',
+            'view all payslips',
         ];
 
         foreach ($permissions as $permission) {
@@ -177,9 +181,9 @@ class RoleAndPermissionSeeder extends Seeder
             'mark payrolls as paid',
             'generate payslips',
             'send payslips',
-            'download payslips',
-            'email all payslips',
             'email payslip',
+            'email all payslips',
+            'download payslips',
             'view time logs',
             'create time logs',
             'edit time logs',
@@ -238,6 +242,8 @@ class RoleAndPermissionSeeder extends Seeder
             'view own profile',
             'edit own profile',
             'view own payslips',
+            'view payslips',
+            'view all payslips',
         ]);
 
         // HR Staff - Can create/send payroll and import time logs
@@ -287,6 +293,8 @@ class RoleAndPermissionSeeder extends Seeder
             'view own profile',
             'edit own profile',
             'view own payslips',
+            'view payslips',
+            'view all payslips',
         ]);
 
         // Employee - Can view DTR, payslip, request leave, and email own payslips

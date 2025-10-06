@@ -8,21 +8,48 @@ use Carbon\Carbon;
 class GenerateLicenseKey extends Command
 {
     protected $signature = 'license:generate 
-                           {--employees=100 : Maximum number of employees allowed}
-                           {--price=2999 : Price in Philippine Pesos}
-                           {--duration=30 : License duration in days}
-                           {--customer= : Customer name}';
+                           {--employees= : Maximum number of employees allowed (required)}
+                           {--price= : Price in Philippine Pesos (required)}
+                           {--duration= : License duration in days (required)}
+                           {--customer= : Customer name (required)}';
 
     protected $description = 'Generate a license key with subscription plan information';
 
     public function handle()
     {
-        $employees = (int) $this->option('employees');
-        $price = (float) $this->option('price');
-        $duration = (int) $this->option('duration');
+        // Check if all required parameters are provided
+        $employees = $this->option('employees');
+        $price = $this->option('price');
+        $duration = $this->option('duration');
         $customer = $this->option('customer');
 
-        // Validate input
+        // Validate that all required parameters are provided
+        if (empty($employees)) {
+            $this->error('--employees parameter is required');
+            return 1;
+        }
+
+        if (empty($price)) {
+            $this->error('--price parameter is required');
+            return 1;
+        }
+
+        if (empty($duration)) {
+            $this->error('--duration parameter is required');
+            return 1;
+        }
+
+        if (empty($customer)) {
+            $this->error('--customer parameter is required');
+            return 1;
+        }
+
+        // Convert to appropriate types after validation
+        $employees = (int) $employees;
+        $price = (float) $price;
+        $duration = (int) $duration;
+
+        // Validate input ranges
         if ($employees <= 0) {
             $this->error('Employee limit must be greater than 0');
             return 1;
@@ -81,14 +108,23 @@ class GenerateLicenseKey extends Command
 
     private function generateLicenseKey(array $data)
     {
-        // Encode data
-        $payload = base64_encode(json_encode($data));
+        // Create compact payload with only essential data
+        $compactData = [
+            'e' => $data['max_employees'],           // employees
+            'p' => $data['price'],                   // price  
+            'd' => $data['duration_days'],           // duration
+            't' => Carbon::now()->timestamp,         // issued timestamp
+            'c' => $data['customer']                 // customer name (full)
+        ];
 
-        // Generate signature
+        // Encode data more efficiently
+        $payload = base64_encode(json_encode($compactData));
+
+        // Generate shorter signature (first 16 characters of HMAC)
         $secret = config('app.license_secret', config('app.key'));
-        $signature = hash_hmac('sha256', $payload, $secret);
+        $signature = substr(hash_hmac('sha256', $payload, $secret), 0, 16);
 
-        // Combine
+        // Combine - this results in a much shorter license key
         return $payload . '.' . $signature;
     }
 

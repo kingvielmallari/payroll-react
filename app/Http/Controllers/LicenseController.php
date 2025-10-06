@@ -9,11 +9,17 @@ use Illuminate\View\View;
 
 class LicenseController extends Controller
 {
-    public function showActivation(Request $request): View
+    public function showActivation(Request $request)
     {
         // Check if already licensed
         $currentLicense = SystemLicense::current();
         $isUpgrade = $request->has('upgrade') && $request->get('upgrade') == '1';
+
+        // If upgrade is requested but there's no current valid license, redirect to regular activation
+        if ($isUpgrade && (!$currentLicense || !$currentLicense->isValid())) {
+            return redirect()->route('license.activate')
+                ->with('error', 'You must have an active license before you can upgrade.');
+        }
 
         return view('license.activate', [
             'currentLicense' => $currentLicense,

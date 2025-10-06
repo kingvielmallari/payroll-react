@@ -79,9 +79,15 @@
     @endif --}}
 
     <div class="mt-4 text-center">
-        <a href="{{ url('/') }}" class="text-sm text-gray-600 underline">
-            Already have access? Login here
-        </a>
+        @auth
+            <a href="{{ route('system-settings.index') }}" class="text-sm text-gray-600 underline">
+                View License Information
+            </a>
+        @else
+            <a href="{{ url('/') }}" class="text-sm text-gray-600 underline">
+                Already have access? Login here
+            </a>
+        @endauth
     </div>
 
     <script>

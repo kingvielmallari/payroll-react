@@ -105,24 +105,54 @@ class LicenseService
                 return false;
             }
 
-            $payloadEncoded = $parts[0]; // Keep base64 encoded for signature verification
+            $payloadEncoded = $parts[0];
             $signature = $parts[1];
 
-            // Verify signature using the base64-encoded payload (same as generation)
+            // Verify signature - check both new short format (16 chars) and old format (64 chars)
             $secret = config('app.license_secret', config('app.key'));
             $expectedSignature = hash_hmac('sha256', $payloadEncoded, $secret);
-            if (!hash_equals($expectedSignature, $signature)) {
+
+            // Support both new short signature (16 chars) and old full signature (64 chars)
+            $isValidSignature = hash_equals($signature, $expectedSignature) ||
+                hash_equals($signature, substr($expectedSignature, 0, 16));
+
+            if (!$isValidSignature) {
                 return false;
             }
 
-            // Decode after signature verification
+            // Decode payload
             $payload = base64_decode($payloadEncoded);
             $decoded = json_decode($payload, true);
-            if (!$decoded || !isset($decoded['max_employees']) || !isset($decoded['duration_days'])) {
+            if (!$decoded) {
                 return false;
             }
 
-            return $decoded;
+            // Handle both compact format (new) and full format (old)
+            if (isset($decoded['e'])) {
+                // New compact format
+                return [
+                    'max_employees' => $decoded['e'],
+                    'price' => $decoded['p'],
+                    'duration_days' => $decoded['d'],
+                    'issued_at' => $decoded['t'],
+                    'customer' => $decoded['c'] ?? 'License Holder', // actual customer name
+                    'currency' => 'PHP',
+                    'features' => [
+                        'payroll_management',
+                        'employee_management',
+                        'time_tracking',
+                        'reports',
+                        'email_notifications'
+                    ],
+                    'version' => '2.1'
+                ];
+            } else {
+                // Old full format - validate required fields
+                if (!isset($decoded['max_employees']) || !isset($decoded['duration_days'])) {
+                    return false;
+                }
+                return $decoded;
+            }
         } catch (\Exception $e) {
             return false;
         }
