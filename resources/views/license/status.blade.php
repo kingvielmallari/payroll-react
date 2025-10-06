@@ -45,13 +45,13 @@
                                 <h3 class="text-lg font-medium text-gray-900 mb-4">License Details</h3>
                                 <dl class="space-y-3">
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500">Plan</dt>
-                                        <dd class="text-sm text-gray-900">{{ $license->subscriptionPlan->name }}</dd>
+                                        <dt class="text-sm font-medium text-gray-500">Customer</dt>
+                                        <dd class="text-sm text-gray-900">{{ $license->customer ?? 'Licensed User' }}</dd>
                                     </div>
                                     <div>
                                         <dt class="text-sm font-medium text-gray-500">Max Employees</dt>
                                         <dd class="text-sm text-gray-900">
-                                            {{ $license->subscriptionPlan->max_employees == -1 ? 'Unlimited' : $license->subscriptionPlan->max_employees }}
+                                            {{ $license->employee_limit == -1 ? 'Unlimited' : $license->employee_limit }}
                                         </dd>
                                     </div>
                                     <div>
@@ -82,11 +82,11 @@
                                         <dt class="text-sm font-medium text-gray-500">Current Employees</dt>
                                         <dd class="text-sm text-gray-900">{{ $employeeCount }}</dd>
                                     </div>
-                                    @if($license->subscriptionPlan->max_employees != -1)
+                                    @if($license->employee_limit != -1)
                                         <div>
                                             <dt class="text-sm font-medium text-gray-500">Usage</dt>
                                             <dd class="text-sm text-gray-900">
-                                                {{ number_format(($employeeCount / $license->subscriptionPlan->max_employees) * 100, 1) }}%
+                                                {{ number_format(($employeeCount / $license->employee_limit) * 100, 1) }}%
                                             </dd>
                                         </div>
                                     @endif
@@ -98,11 +98,11 @@
                             </div>
                         </div>
 
-                        @if($license->subscriptionPlan->features)
+                        @if($license->plan_info && isset($license->plan_info['features']))
                             <div class="mt-8">
                                 <h3 class="text-lg font-medium text-gray-900 mb-4">Available Features</h3>
                                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                    @foreach($license->subscriptionPlan->features as $feature)
+                                    @foreach($license->plan_info['features'] as $feature)
                                         <div class="flex items-center">
                                             <svg class="h-5 w-5 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>

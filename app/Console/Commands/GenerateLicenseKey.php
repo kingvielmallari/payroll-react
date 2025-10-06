@@ -3,48 +3,58 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Models\SubscriptionPlan;
 use Carbon\Carbon;
 
 class GenerateLicenseKey extends Command
 {
     protected $signature = 'license:generate 
-                           {plan : The subscription plan slug}
-                           {--months=12 : License duration in months}
-                           {--customer= : Customer name}
-                           {--employees= : Max employees override}';
+                           {--employees=100 : Maximum number of employees allowed}
+                           {--price=2999 : Price in Philippine Pesos}
+                           {--duration=30 : License duration in days}
+                           {--customer= : Customer name}';
 
-    protected $description = 'Generate a license key for a subscription plan';
+    protected $description = 'Generate a license key with subscription plan information';
 
     public function handle()
     {
-        $planSlug = $this->argument('plan');
-        $months = (int) $this->option('months');
+        $employees = (int) $this->option('employees');
+        $price = (float) $this->option('price');
+        $duration = (int) $this->option('duration');
         $customer = $this->option('customer');
-        $employeesOverride = $this->option('employees') ? (int) $this->option('employees') : null;
 
-        // Find the plan
-        $plan = SubscriptionPlan::where('slug', $planSlug)->first();
-
-        if (!$plan) {
-            $this->error("Plan '{$planSlug}' not found!");
-            $this->info("Available plans:");
-            SubscriptionPlan::where('is_active', true)->each(function ($p) {
-                $this->line("  - {$p->slug} ({$p->name})");
-            });
+        // Validate input
+        if ($employees <= 0) {
+            $this->error('Employee limit must be greater than 0');
             return 1;
         }
 
-        // Generate license key
+        if ($price <= 0) {
+            $this->error('Price must be greater than 0');
+            return 1;
+        }
+
+        if ($duration <= 0) {
+            $this->error('Duration must be greater than 0 days');
+            return 1;
+        }
+
+        // Generate license key with subscription plan information
         $licenseData = [
-            'plan_id' => $plan->id,
-            'plan_slug' => $plan->slug,
-            'max_employees' => $employeesOverride ?: $plan->max_employees,
-            'features' => $plan->features,
+            'max_employees' => $employees,
+            'price' => $price,
+            'duration_days' => $duration,
+            'currency' => 'PHP',
             'issued_at' => Carbon::now()->timestamp,
-            'expires_at' => Carbon::now()->addMonths($months)->timestamp,
+            'expires_at' => Carbon::now()->addDays($duration)->timestamp,
             'customer' => $customer,
-            'version' => '1.0'
+            'features' => [
+                'payroll_management',
+                'employee_management',
+                'time_tracking',
+                'reports',
+                'email_notifications'
+            ],
+            'version' => '2.0'
         ];
 
         $licenseKey = $this->generateLicenseKey($licenseData);
@@ -53,8 +63,9 @@ class GenerateLicenseKey extends Command
         $this->info('License Key Generated Successfully!');
         $this->line('');
         $this->line('Customer: ' . ($customer ?: 'N/A'));
-        $this->line('Plan: ' . $plan->name);
-        $this->line('Max Employees: ' . ($employeesOverride ?: $plan->max_employees));
+        $this->line('Max Employees: ' . $employees);
+        $this->line('Price: ₱' . number_format($price, 2));
+        $this->line('Duration: ' . $duration . ' days');
         $this->line('Valid Until: ' . Carbon::createFromTimestamp($licenseData['expires_at'])->format('Y-m-d H:i:s'));
         $this->line('');
         $this->line('LICENSE KEY:');

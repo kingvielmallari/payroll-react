@@ -238,6 +238,12 @@
                 </svg>
                 Approve Payroll
             </a>
+            <a href="#" id="contextMenuDownloadPayslip" class="flex items-center px-3 py-2 text-sm text-green-600 hover:bg-green-50 hover:text-green-700 transition-colors duration-150" style="display: none;">
+                <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Download Payslip
+            </a>
             <a href="#" id="contextMenuSendPayroll" class="flex items-center px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors duration-150" style="display: none;">
                 <svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
@@ -343,6 +349,7 @@
             document.getElementById('contextMenuEdit').style.display = 'none';
             document.getElementById('contextMenuProcess').style.display = 'none';
             document.getElementById('contextMenuApprove').style.display = 'none';
+            document.getElementById('contextMenuDownloadPayslip').style.display = 'none';
             document.getElementById('contextMenuSendPayroll').style.display = 'none';
             document.getElementById('contextMenuDelete').style.display = 'none';
             
@@ -369,6 +376,13 @@
             @endif
             @endcan
             
+            // Show Download Payslip if payroll is approved and has single employee and user has permission
+            @can('download payslips')
+                if (status === 'approved' && currentEmployeeId) {
+                    document.getElementById('contextMenuDownloadPayslip').style.display = 'flex';
+                }
+            @endcan
+
             // Show Send Payslip if payroll is approved and user has permission and proper role
             @canany(['email all payslips'], [auth()->user()])
                 @if(auth()->user()->hasAnyRole(['System Administrator', 'HR Head', 'HR Staff']))
@@ -514,6 +528,17 @@
             }
         });
         
+        // Handle download payslip action
+        document.getElementById('contextMenuDownloadPayslip').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (currentPayrollId && currentEmployeeId) {
+                // Use the same route as individual payslip view: payrolls.payslip.download
+                window.location.href = '{{ url("/payrolls") }}/' + currentPayrollId + '/payslip/download';
+            } else {
+                alert('Download is only available for single-employee payrolls.');
+            }
+            hideContextMenu();
+        });
 
         
         // Handle delete action

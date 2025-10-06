@@ -23,21 +23,16 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 
 Route::get('/', function () {
-    // Check if license exists
-    $license = \App\Models\SystemLicense::current();
-    if (!$license) {
-        return redirect()->route('license.activate');
-    }
-    // Show login page directly instead of redirecting
+    // Show login page directly
     return app(\App\Http\Controllers\Auth\AuthenticatedSessionController::class)->create();
 })->name('login');
 
 // Dashboard
 Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified', 'license'])
+    ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
-Route::middleware(['auth', 'verified', 'license'])->group(function () {
+Route::middleware(['auth', 'verified'])->group(function () {
     // Profile routes
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -113,6 +108,8 @@ Route::middleware(['auth', 'verified', 'license'])->group(function () {
     // Employee Payslips - for employees to view their own payslips
     Route::middleware(['role:Employee'])->group(function () {
         Route::get('payslips', [PayrollController::class, 'employeePayslips'])->name('payslips.index');
+        Route::post('payrolls/{payroll}/email-employee-payslip', [App\Http\Controllers\PayslipController::class, 'emailEmployeePayslip'])
+            ->name('payslips.email-employee');
     });
 
     // Payroll Management

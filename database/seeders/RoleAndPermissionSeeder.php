@@ -284,7 +284,7 @@ class RoleAndPermissionSeeder extends Seeder
             'view own payslips',
         ]);
 
-        // Employee - Can view DTR, payslip, request leave
+        // Employee - Can view DTR, payslip, request leave, and email own payslips
         $employee = Role::firstOrCreate(['name' => 'Employee']);
         $employee->syncPermissions([
             'view dashboard',
@@ -299,6 +299,7 @@ class RoleAndPermissionSeeder extends Seeder
             'view own profile',
             'edit own profile',
             'view own payslips',
+            'email payslip', // Allow employees to email their own payslips
         ]);
 
         $this->command->info('Roles and permissions created successfully!');

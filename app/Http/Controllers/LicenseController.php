@@ -3,21 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\SystemLicense;
-use App\Models\SubscriptionPlan;
 use App\Services\LicenseService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class LicenseController extends Controller
 {
-    public function showActivation(): View
+    public function showActivation(Request $request): View
     {
         // Check if already licensed
         $currentLicense = SystemLicense::current();
+        $isUpgrade = $request->has('upgrade') && $request->get('upgrade') == '1';
 
         return view('license.activate', [
             'currentLicense' => $currentLicense,
-            'plans' => SubscriptionPlan::where('is_active', true)->get()
+            'isUpgrade' => $isUpgrade
         ]);
     }
 
@@ -30,8 +30,8 @@ class LicenseController extends Controller
         $result = LicenseService::activateLicense($request->license_key);
 
         if ($result['success']) {
-            return redirect()->route('dashboard')
-                ->with('success', 'License activated successfully! Welcome to your payroll system.');
+            return redirect()->route('license.activate')
+                ->with('success', 'License activated successfully!');
         }
 
         return back()
@@ -54,12 +54,11 @@ class LicenseController extends Controller
     public function manage(): View
     {
         $currentLicense = SystemLicense::current();
-        $allLicenses = SystemLicense::with('subscriptionPlan')->orderBy('created_at', 'desc')->get();
+        $allLicenses = SystemLicense::orderBy('created_at', 'desc')->get();
 
         return view('license.manage', [
             'currentLicense' => $currentLicense,
-            'allLicenses' => $allLicenses,
-            'plans' => SubscriptionPlan::where('is_active', true)->get()
+            'allLicenses' => $allLicenses
         ]);
     }
 

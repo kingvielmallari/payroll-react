@@ -407,6 +407,36 @@ class PayslipController extends Controller
         // Check if this is for a specific employee (via employee_id parameter)
         $employeeId = $request->input('employee_id');
 
+        // Additional authorization for employees: they can only send their own payslips
+        if (Auth::user()->hasRole('Employee')) {
+            $userEmployee = Auth::user()->employee;
+            if (!$userEmployee) {
+                if (request()->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Employee record not found'
+                    ], 403);
+                }
+                return back()->with('error', 'Employee record not found');
+            }
+
+            // Ensure employee can only send their own payslip
+            if ($employeeId && $employeeId != $userEmployee->id) {
+                if (request()->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You can only send your own payslip'
+                    ], 403);
+                }
+                return back()->with('error', 'You can only send your own payslip');
+            }
+
+            // If no specific employee ID, default to the logged-in employee
+            if (!$employeeId) {
+                $employeeId = $userEmployee->id;
+            }
+        }
+
         if ($employeeId) {
             // Find the specific payroll detail for this employee
             $payrollDetail = $payroll->payrollDetails()
@@ -490,5 +520,110 @@ class PayslipController extends Controller
         }
 
         return back()->with('success', $message);
+    }
+
+    /**
+     * Send payslip via email - Employee self-service version
+     * This method is specifically for employees to email their own payslips
+     */
+    public function emailEmployeePayslip(Payroll $payroll, Request $request)
+    {
+        // Employee-specific authorization - no need for 'email payslip' permission
+        // Only check that user is an employee and can access this payroll
+        $user = Auth::user();
+
+        if (!$user->hasRole('Employee')) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This action is only available to employees'
+                ], 403);
+            }
+            return back()->with('error', 'This action is only available to employees');
+        }
+
+        $userEmployee = $user->employee;
+        if (!$userEmployee) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee record not found'
+                ], 403);
+            }
+            return back()->with('error', 'Employee record not found');
+        }
+
+        // Check if employee has access to this payroll
+        $payrollDetail = $payroll->payrollDetails()
+            ->where('employee_id', $userEmployee->id)
+            ->with(['employee.user', 'employee.department', 'employee.position'])
+            ->first();
+
+        if (!$payrollDetail) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have access to this payroll'
+                ], 403);
+            }
+            return back()->with('error', 'You do not have access to this payroll');
+        }
+
+        if (!$payrollDetail->employee->user || !$payrollDetail->employee->user->email) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No email address found for your account'
+                ], 400);
+            }
+            return back()->with('error', 'No email address found for your account');
+        }
+
+        // Get snapshot data for accurate amounts
+        $snapshot = null;
+        if ($payroll->status !== 'draft') {
+            $snapshot = $payroll->snapshots()
+                ->where('employee_id', $payrollDetail->employee_id)
+                ->first();
+        }
+
+        try {
+            Mail::to($payrollDetail->employee->user->email)
+                ->send(new \App\Mail\PayslipMail($payrollDetail, $snapshot));
+
+            // Update payslip send tracking
+            $payrollDetail->update([
+                'payslip_sent' => true,
+                'payslip_sent_at' => now(),
+                'payslip_sent_to_email' => $payrollDetail->employee->user->email,
+                'payslip_sent_by' => Auth::id(),
+                'payslip_send_count' => $payrollDetail->payslip_send_count + 1,
+                'payslip_last_sent_at' => now(),
+            ]);
+
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Payslip sent successfully to ' . $payrollDetail->employee->user->email,
+                    'payslip_data' => [
+                        'sent' => true,
+                        'sent_at' => $payrollDetail->payslip_last_sent_at->format('M j, Y g:i A'),
+                        'sent_count' => $payrollDetail->payslip_send_count,
+                        'sent_to' => $payrollDetail->payslip_sent_to_email
+                    ]
+                ]);
+            }
+
+            return back()->with('success', 'Payslip sent successfully to ' . $payrollDetail->employee->user->email);
+        } catch (\Exception $e) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to send payslip: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return back()->with('error', 'Failed to send payslip: ' . $e->getMessage());
+        }
     }
 }

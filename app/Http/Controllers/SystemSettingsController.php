@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Models\SystemLicense;
+use App\Models\Employee;
 
 class SystemSettingsController extends Controller
 {
@@ -14,7 +16,11 @@ class SystemSettingsController extends Controller
     {
         // Get current theme preference from session or default to 'light'
         $currentTheme = session('theme', 'light');
-        
+
+        // Get current license information
+        $currentLicense = SystemLicense::current();
+        $employeeCount = Employee::count();
+
         $settings = [
             'appearance' => [
                 'theme' => $currentTheme,
@@ -30,7 +36,7 @@ class SystemSettingsController extends Controller
             ],
         ];
 
-        return view('system-settings.index', compact('settings'));
+        return view('system-settings.index', compact('settings', 'currentLicense', 'employeeCount'));
     }
 
     /**
@@ -60,7 +66,7 @@ class SystemSettingsController extends Controller
     {
         $currentTheme = session('theme', 'light');
         $newTheme = $currentTheme === 'light' ? 'dark' : 'light';
-        
+
         session(['theme' => $newTheme]);
 
         return response()->json([

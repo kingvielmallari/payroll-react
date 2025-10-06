@@ -32,11 +32,6 @@ Route::middleware('guest')->group(function () {
 
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->name('password.store');
-
-    // License activation routes (accessible without login)
-    Route::get('/license/activate', [LicenseController::class, 'showActivation'])->name('license.activate');
-    Route::post('/license/activate', [LicenseController::class, 'activate'])->name('license.activate.store');
-    Route::get('/license/status', [LicenseController::class, 'showStatus'])->name('license.status');
 });
 
 Route::middleware('auth')->group(function () {
@@ -68,7 +63,8 @@ Route::middleware('auth')->group(function () {
     });
 });
 
-// License validation routes (accessible to all)
-Route::get('license/expired', [LicenseController::class, 'expired'])->name('license.expired');
-Route::get('license/invalid', [LicenseController::class, 'invalid'])->name('license.invalid');
-Route::get('license/limit-exceeded', [LicenseController::class, 'limitExceeded'])->name('license.limit-exceeded');
+
+
+// License activation routes (accessible to both guest and authenticated users)
+Route::get('/license/activate', [LicenseController::class, 'showActivation'])->name('license.activate');
+Route::post('/license/activate', [LicenseController::class, 'activate'])->name('license.activate.store');

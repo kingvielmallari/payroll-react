@@ -3,8 +3,6 @@
 namespace App\Services;
 
 use App\Models\SystemLicense;
-use App\Models\SubscriptionPlan;
-use App\Models\Employee;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -43,11 +41,7 @@ class LicenseService
         }
 
         // Check employee limit
-        $employeeCount = Employee::count();
-        if (
-            $license->subscriptionPlan->max_employees != -1 &&
-            $employeeCount > $license->subscriptionPlan->max_employees
-        ) {
+        if ($license->hasReachedEmployeeLimit()) {
             return ['valid' => false, 'reason' => 'Employee limit exceeded'];
         }
 
@@ -66,32 +60,31 @@ class LicenseService
             return ['success' => false, 'message' => 'Invalid license key format'];
         }
 
-        // Check expiry
-        if ($decoded['expires_at'] < time()) {
-            return ['success' => false, 'message' => 'License key has expired'];
-        }
+        // Note: We don't check expiry during activation since the license starts counting down from activation
 
         // Check if license key already exists
         if (SystemLicense::where('license_key', $cleanKey)->exists()) {
-            return ['success' => false, 'message' => 'License key already activated'];
-        }
-
-        // Find the plan
-        $plan = SubscriptionPlan::find($decoded['plan_id']);
-        if (!$plan) {
-            return ['success' => false, 'message' => 'Invalid subscription plan'];
+            return ['success' => false, 'message' => 'This license key has already been activated. Contact your system administrator if you need assistance.'];
         }
 
         // Deactivate existing licenses
         SystemLicense::where('is_active', true)->update(['is_active' => false]);
 
-        // Create new license
+        // Create new license with plan information embedded
         $license = SystemLicense::create([
             'license_key' => $cleanKey,
             'server_fingerprint' => self::generateServerFingerprint(),
-            'subscription_plan_id' => $decoded['plan_id'],
+            'plan_info' => [
+                'max_employees' => $decoded['max_employees'] ?? 100,
+                'price' => $decoded['price'] ?? 0,
+                'duration_days' => $decoded['duration_days'] ?? 30,
+                'currency' => $decoded['currency'] ?? 'PHP',
+                'customer' => $decoded['customer'] ?? null,
+                'features' => $decoded['features'] ?? [],
+            ],
             'activated_at' => Carbon::now(),
-            'expires_at' => Carbon::createFromTimestamp($decoded['expires_at']),
+            'countdown_started_at' => Carbon::now(), // Start countdown immediately
+            'expires_at' => Carbon::now()->addDays($decoded['duration_days'] ?? 30),
             'is_active' => true,
             'system_info' => [
                 'activated_by' => Auth::check() ? Auth::user()->email : 'system',
@@ -104,35 +97,33 @@ class LicenseService
         return ['success' => true, 'license' => $license, 'data' => $decoded];
     }
 
-    public static function decodeLicenseKey($licenseKey)
+    private static function decodeLicenseKey($licenseKey)
     {
         try {
             $parts = explode('.', $licenseKey);
-            if (count($parts) !== 2) return false;
+            if (count($parts) !== 2) {
+                return false;
+            }
 
-            [$payload, $signature] = $parts;
+            $payloadEncoded = $parts[0]; // Keep base64 encoded for signature verification
+            $signature = $parts[1];
 
-            // Verify signature
+            // Verify signature using the base64-encoded payload (same as generation)
             $secret = config('app.license_secret', config('app.key'));
-            $expectedSignature = hash_hmac('sha256', $payload, $secret);
-
+            $expectedSignature = hash_hmac('sha256', $payloadEncoded, $secret);
             if (!hash_equals($expectedSignature, $signature)) {
                 return false;
             }
 
-            $decoded = json_decode(base64_decode($payload), true);
-
-            // Validate required fields
-            $required = ['plan_id', 'expires_at', 'issued_at'];
-            foreach ($required as $field) {
-                if (!isset($decoded[$field])) {
-                    return false;
-                }
+            // Decode after signature verification
+            $payload = base64_decode($payloadEncoded);
+            $decoded = json_decode($payload, true);
+            if (!$decoded || !isset($decoded['max_employees']) || !isset($decoded['duration_days'])) {
+                return false;
             }
 
             return $decoded;
         } catch (\Exception $e) {
-            Log::error('License decode error: ' . $e->getMessage());
             return false;
         }
     }
@@ -140,7 +131,19 @@ class LicenseService
     public static function hasFeature($feature)
     {
         $license = SystemLicense::current();
-        return $license && $license->subscriptionPlan->hasFeature($feature);
+
+        if (!$license || !$license->plan_info) {
+            return false;
+        }
+
+        $features = $license->plan_info['features'] ?? [];
+
+        // If features is empty, assume basic features are available
+        if (empty($features)) {
+            return true;
+        }
+
+        return in_array($feature, $features);
     }
 
     public static function getLicenseInfo($licenseKey)

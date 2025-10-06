@@ -14,6 +14,31 @@
         </div>
     </x-slot>
 
+    <style>
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #e5e7eb;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50" style="display: none; backdrop-filter: blur(3px);">
+        <div class="bg-white p-8 rounded-xl text-center max-w-md mx-4 shadow-2xl">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <div class="text-lg font-semibold text-gray-800 mb-2" id="loadingText">Sending Email...</div>
+            <div class="text-sm text-gray-600" id="loadingSubtext">Please wait while we process your request.</div>
+        </div>
+    </div>
+
     <div class="py-6">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <!-- Filters -->
@@ -209,7 +234,8 @@
                 contextMenu = document.getElementById('payslipContextMenu');
                 
                 // Context menu actions - only initialize once
-                document.getElementById('viewPayslip').addEventListener('click', function() {
+                document.getElementById('viewPayslip').addEventListener('click', function(e) {
+                    e.preventDefault(); // Prevent anchor hash from being added to URL
                     if (currentPayrollId) {
                         window.open(`{{ url('payrolls') }}/${currentPayrollId}/payslip`, '_blank');
                     }
@@ -217,35 +243,37 @@
                 });
 
                 document.getElementById('downloadPayslip').addEventListener('click', function(e) {
-                    e.preventDefault();
-                    if (currentPayrollDetailId) {
-                        // Create a temporary form to handle the download properly
-                        const form = document.createElement('form');
-                        form.method = 'GET';
-                        form.action = `{{ url('payslips') }}/${currentPayrollDetailId}/download`;
-                        
-                        // Add CSRF token as hidden input for security
-                        const csrfToken = document.createElement('input');
-                        csrfToken.type = 'hidden';
-                        csrfToken.name = '_token';
-                        csrfToken.value = '{{ csrf_token() }}';
-                        form.appendChild(csrfToken);
-                        
-                        document.body.appendChild(form);
-                        form.submit();
-                        document.body.removeChild(form);
+                    e.preventDefault(); // Prevent anchor hash from being added to URL
+                    if (currentPayrollId) {
+                        // Use the same route as individual payslip view (payrolls.payslip.download)
+                        window.location.href = `{{ url('payrolls') }}/${currentPayrollId}/payslip/download`;
+                    } else {
+                        alert('Unable to download payslip. Please try again.');
                     }
                     hideContextMenu();
                 });
 
-                document.getElementById('sendPayslip').addEventListener('click', function() {
-                    if (currentPayrollDetailId) {
-                        if (confirm('Send payslip via email?')) {
-                            // Use FormData to match payroll implementation
+                document.getElementById('sendPayslip').addEventListener('click', function(e) {
+                    e.preventDefault(); // Prevent anchor hash from being added to URL
+                    if (currentPayrollId) {
+                        const employeeName = '{{ auth()->user()->name }}';
+                        const employeeEmail = '{{ auth()->user()->email }}';
+                        
+                        if (confirm(`Send payslip to ${employeeName} via email?\nEmail address: ${employeeEmail}`)) {
+                            // Store the payroll ID before hiding context menu (which clears the variables)
+                            const payrollIdToSend = currentPayrollId;
+                            
+                            // Hide context menu before showing loading screen
+                            hideContextMenu();
+                            
+                            // Show loading screen
+                            showLoading('Sending Payslip...', `Sending payslip to ${employeeName}. Please wait while we generate and send the PDF.`);
+                            
+                            // Use employee-specific route that doesn't require special permissions
                             const formData = new FormData();
                             formData.append('_token', '{{ csrf_token() }}');
                             
-                            fetch(`{{ url('payslips') }}/${currentPayrollDetailId}/email`, {
+                            fetch(`{{ url('payrolls') }}/${payrollIdToSend}/email-employee-payslip`, {
                                 method: 'POST',
                                 headers: {
                                     'Accept': 'application/json',
@@ -253,21 +281,60 @@
                                 },
                                 body: formData
                             })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    alert('Payslip sent successfully!');
-                                } else {
-                                    alert('Failed to send payslip: ' + (data.message || 'Unknown error'));
+                            .then(response => {
+                                if (!response.ok) {
+                                    hideLoading();
+                                    if (response.status === 403) {
+                                        throw new Error('You do not have access to this payroll.');
+                                    }
+                                    throw new Error(`HTTP error! status: ${response.status}`);
                                 }
+                                return response.json();
+                            })
+                            .then(data => {
+                                hideLoading();
+                                
+                                // Small delay to ensure loading overlay is fully hidden before alert
+                                setTimeout(() => {
+                                    if (data.success) {
+                                        alert('Payslip sent successfully to your email!');
+                                        
+                                        // Create timestamp
+                                        const timestamp = 'Sent: ' + new Date().toLocaleDateString('en-US', {
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: 'numeric',
+                                            minute: '2-digit',
+                                            hour12: true
+                                        });
+                                        
+                                        // Update row data attributes for persistent changes FIRST
+                                        const payslipRow = document.querySelector(`[data-payroll-id="${payrollIdToSend}"]`);
+                                        if (payslipRow) {
+                                            payslipRow.setAttribute('data-send-status', 'Sent');
+                                            payslipRow.setAttribute('data-send-details', timestamp);
+                                        }
+                                        
+                                        // Update context menu to show "Resend" status
+                                        updateSendPayslipContextMenu('Sent', timestamp);
+                                    } else {
+                                        alert('Failed to send payslip: ' + (data.message || 'Unknown error'));
+                                    }
+                                }, 100);
                             })
                             .catch(error => {
-                                console.error('Error:', error);
-                                alert('Failed to send payslip. Please try again.');
+                                hideLoading();
+                                
+                                // Small delay to ensure loading overlay is fully hidden before alert
+                                setTimeout(() => {
+                                    console.error('Error:', error);
+                                    alert('Failed to send payslip: ' + error.message);
+                                }, 100);
                             });
                         }
+                    } else {
+                        alert('Unable to send payslip. Please try again.');
                     }
-                    hideContextMenu();
                 });
                 
                 contextMenuInitialized = true;
@@ -293,6 +360,15 @@
                         const period = this.querySelector('td:nth-child(2) .text-sm')?.textContent || 'N/A';
                         document.getElementById('contextPayslipNumber').textContent = payslipNumber || 'Unknown';
                         document.getElementById('contextPayslipPeriod').textContent = period;
+                        
+                        // Get current send status from row data attributes (for real-time updates)
+                        const currentSendStatus = this.getAttribute('data-send-status');
+                        const currentSendDetails = this.getAttribute('data-send-details');
+                        
+                        // Update send payslip status in context menu
+                        updateSendPayslipContextMenu(currentSendStatus, currentSendDetails);
+                        
+
                         
                         // Position context menu with proper bounds checking
                         let x = e.clientX;
@@ -379,6 +455,49 @@
                     console.error('Error:', error);
                 });
             }
+
+            // Loading helper functions
+            function showLoading(title = 'Processing...', message = 'Please wait while we process your request.') {
+                const loadingText = document.getElementById('loadingText');
+                const loadingSubtext = document.getElementById('loadingSubtext');
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                
+                if (loadingText) loadingText.textContent = title;
+                if (loadingSubtext) loadingSubtext.textContent = message;
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'flex';
+                    loadingOverlay.style.opacity = '1';
+                }
+                document.body.style.overflow = 'hidden'; // Prevent scrolling
+            }
+            
+            function hideLoading() {
+                const overlay = document.getElementById('loadingOverlay');
+                if (overlay) {
+                    overlay.style.display = 'none';
+                    overlay.style.opacity = '0';
+                }
+                document.body.style.overflow = 'auto'; // Restore scrolling
+            }
+
+            function updateSendPayslipContextMenu(sendStatus, sendDetails) {
+                const sendTextElement = document.getElementById('contextPayslipSendText');
+                const sendStatusElement = document.getElementById('contextPayslipSendStatus');
+                
+                if (sendTextElement && sendStatusElement) {
+                    if (sendStatus === 'Sent') {
+                        sendTextElement.textContent = 'Resend Payslip';
+                        sendStatusElement.textContent = sendDetails;
+                        sendStatusElement.className = 'text-xs text-gray-500';
+                    } else {
+                        sendTextElement.textContent = 'Send Payslip';
+                        sendStatusElement.textContent = '';
+                        sendStatusElement.className = 'text-xs text-gray-500';
+                    }
+                }
+            }
+
+
         });
     </script>
 </x-app-layout>
