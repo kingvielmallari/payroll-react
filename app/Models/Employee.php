@@ -185,13 +185,8 @@ class Employee extends Model
         return $this->hasMany(Deduction::class);
     }
 
-    /**
-     * Get the leave requests for the employee.
-     */
-    public function leaveRequests()
-    {
-        return $this->hasMany(LeaveRequest::class);
-    }
+
+
 
     /**
      * Get the work schedules for the employee.

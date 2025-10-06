@@ -36,8 +36,8 @@
                     <div class="flex justify-center">
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl">
                         @forelse($scheduleSettings as $schedule)
-                            {{-- Only show cards if schedule is active AND has active employees --}}
-                            @if($schedule->is_active && ($schedule->active_employees_count ?? 0) > 0)
+                            {{-- Only show cards if schedule is active --}}
+                            @if($schedule->is_active)
                             <a href="{{ route('payrolls.automation.create', ['schedule' => $schedule->code]) }}" 
                                class="block border border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg hover:bg-blue-50 transition-all duration-200 cursor-pointer transform hover:scale-105">
                                 <div class="p-6">
@@ -138,7 +138,7 @@
                         @endforelse
 
                         {{-- Check if all schedules were filtered out --}}
-                        @if($scheduleSettings->isNotEmpty() && $scheduleSettings->where('is_active', true)->where('active_employees_count', '>', 0)->isEmpty())
+                        @if($scheduleSettings->isNotEmpty() && $scheduleSettings->where('is_active', true)->isEmpty())
                             <div class="col-span-full text-center py-8">
                                 <svg class="mx-auto h-12 w-12 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -146,13 +146,13 @@
                                 </svg>
                                 <h3 class="mt-2 text-sm font-medium text-gray-900">No available pay schedules</h3>
                                 <p class="mt-1 text-sm text-gray-500">
-                                    All pay schedules are either inactive or have no active employees assigned.
+                                    All pay schedules are currently inactive.
                                 </p>
                                 <div class="mt-4 text-sm text-gray-600">
                                     <p>To create automated payrolls, you need:</p>
                                     <ul class="mt-2 list-disc list-inside space-y-1">
-                                        <li>Active pay schedules</li>
-                                        <li>Active employees assigned to those schedules</li>
+                                        <li>At least one active pay schedule</li>
+                                        <li>Employees can be added after creating the schedule</li>
                                     </ul>
                                 </div>
                                 <div class="mt-6 space-x-3">

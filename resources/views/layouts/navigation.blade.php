@@ -195,7 +195,7 @@
                                     </svg>
                                     <div class="flex-1">
                                         <div class="font-medium text-gray-900">View Paid Leaves</div>
-                                        <div class="text-xs text-gray-500 mt-1">View all paid leave requests</div>
+                                        <div class="text-xs text-gray-500 mt-1">View all paid leave records</div>
                                     </div>
                                 </a>
                                 

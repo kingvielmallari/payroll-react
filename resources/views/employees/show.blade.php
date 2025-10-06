@@ -67,10 +67,7 @@
                             <h4 class="text-sm font-medium text-purple-900">This Month's Logs</h4>
                             <p class="text-2xl font-bold text-purple-700">{{ $employee->thisMonthTimeLogs()->count() }}</p>
                         </div>
-                        <div class="bg-orange-50 p-4 rounded-lg">
-                            <h4 class="text-sm font-medium text-orange-900">Leave Requests</h4>
-                            <p class="text-2xl font-bold text-orange-700">{{ $employee->leaveRequests()->where('status', 'pending')->count() }}</p>
-                        </div>
+
                     </div>
                 </div>
             </div>
@@ -326,61 +323,7 @@
             </div>
             @endif
 
-            <!-- Recent Leave Requests -->
-            @if($employee->leaveRequests()->count() > 0)
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-medium text-gray-900">Recent Leave Requests</h3>
-                        @can('leave_requests.view')
-                        <a href="#" class="text-blue-600 hover:text-blue-900 text-sm">View All Leave Requests</a>
-                        @endcan
-                    </div>
-                    
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Range</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Days</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                @foreach($employee->leaveRequests()->latest()->limit(5)->get() as $leaveRequest)
-                                <tr>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {{ ucfirst(str_replace('_', ' ', $leaveRequest->leave_type)) }}
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {{ $leaveRequest->start_date->format('M j') }} - {{ $leaveRequest->end_date->format('M j, Y') }}
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {{ $leaveRequest->total_days }}
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                            @if($leaveRequest->status === 'approved') bg-green-100 text-green-800
-                                            @elseif($leaveRequest->status === 'pending') bg-yellow-100 text-yellow-800
-                                            @elseif($leaveRequest->status === 'rejected') bg-red-100 text-red-800
-                                            @else bg-gray-100 text-gray-800
-                                            @endif">
-                                            {{ ucfirst($leaveRequest->status) }}
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {{ $leaveRequest->created_at->format('M j, Y') }}
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            @endif
+
 
             <!-- Recent Activity -->
             @if($employee->activities()->count() > 0)

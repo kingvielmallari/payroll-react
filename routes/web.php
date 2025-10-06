@@ -425,9 +425,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     // Leave Requests
-    Route::middleware('can:view own leave requests')->group(function () {
-        Route::resource('leave-requests', \App\Http\Controllers\LeaveRequestController::class);
-    });
+    Route::middleware('can:view own leave requests')->group(function () {});
 
     // User Management (System Administrator only)
     Route::middleware('role:System Administrator')->group(function () {

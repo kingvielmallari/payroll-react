@@ -41,7 +41,7 @@
             <!-- Main Statistics Cards (Hidden for Employee role) -->
             @if(!Auth::user()->hasRole('Employee'))
                 @isset($dashboardData)
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                     <!-- Employee Statistics -->
                     <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                         <div class="p-4">
@@ -148,6 +148,43 @@
                                 <div class="bg-yellow-50 rounded p-2">
                                     <div class="font-semibold text-gray-700">Completed</div>
                                     <div class="text-sm font-bold text-yellow-600">{{ $dashboardData['cash_advance_stats']['completed_requests'] ?? 0 }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Paid Leaves Statistics -->
+                    <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                        <div class="p-4">
+                            <div class="flex items-center mb-4">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="ml-3">
+                                    <h3 class="text-sm font-medium text-gray-900">Paid Leaves</h3>
+                                    <p class="text-2xl font-bold text-purple-600">{{ $dashboardData['paid_leave_stats']['total'] ?? 0 }}</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div class="bg-purple-50 rounded p-2">
+                                    <div class="font-semibold text-gray-700">Pending</div>
+                                    <div class="text-sm font-bold text-purple-600">{{ $dashboardData['paid_leave_stats']['pending'] ?? 0 }}</div>
+                                </div>
+                                <div class="bg-purple-50 rounded p-2">
+                                    <div class="font-semibold text-gray-700">Approved</div>
+                                    <div class="text-sm font-bold text-purple-600">{{ $dashboardData['paid_leave_stats']['approved'] ?? 0 }}</div>
+                                </div>
+                                <div class="bg-purple-50 rounded p-2">
+                                    <div class="font-semibold text-gray-700">Rejected</div>
+                                    <div class="text-sm font-bold text-purple-600">{{ $dashboardData['paid_leave_stats']['rejected'] ?? 0 }}</div>
+                                </div>
+                                <div class="bg-purple-50 rounded p-2">
+                                    <div class="font-semibold text-gray-700">Processing</div>
+                                    <div class="text-sm font-bold text-purple-600">{{ $dashboardData['paid_leave_stats']['processing'] ?? 0 }}</div>
                                 </div>
                             </div>
                         </div>
@@ -335,9 +372,7 @@
                                                         @case('pending_payrolls')
                                                             ⏰
                                                             @break
-                                                        @case('pending_leave_requests')
-                                                            📋
-                                                            @break
+
                                                         @case('active_payrolls')
                                                             💰
                                                             @break
@@ -347,9 +382,7 @@
                                                         @case('my_time_logs')
                                                             ⏰
                                                             @break
-                                                        @case('my_leave_requests')
-                                                            📋
-                                                            @break
+
                                                         @case('pending_leaves')
                                                             ⏳
                                                             @break
@@ -473,19 +506,38 @@
                                 </a>
                             @endcan
                             
-                            @can('view own time logs')
+                            @if(Auth::user()->hasRole(['System Administrator', 'HR Head', 'HR Staff']))
+                                <a href="{{ url('/payrolls/automation') }}" class="flex items-center p-3 bg-green-50 rounded-lg hover:bg-green-100 transition">
+                                    <span class="text-green-600 mr-3">⚙️</span>
+                                    <span class="text-green-700 font-medium">Automate Payroll</span>
+                                </a>
+                                
+                                <a href="{{ route('cash-advances.create') }}" class="flex items-center p-3 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition">
+                                    <span class="text-yellow-600 mr-3">💵</span>
+                                    <span class="text-yellow-700 font-medium">Add Cash Advance</span>
+                                </a>
+                                
+                                <a href="{{ route('paid-leaves.create') }}" class="flex items-center p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition">
+                                    <span class="text-purple-600 mr-3">📅</span>
+                                    <span class="text-purple-700 font-medium">Add Paid Leave</span>
+                                </a>
+                                
+                                @if(Auth::user()->hasRole('System Administrator'))
+                                    <a href="{{ route('users.create') }}" class="flex items-center p-3 bg-red-50 rounded-lg hover:bg-red-100 transition">
+                                        <span class="text-red-600 mr-3">👥</span>
+                                        <span class="text-red-700 font-medium">Create New User</span>
+                                    </a>
+                                @endif
+                            @endif
+                            
+                            {{-- @can('view own time logs')
                                 <a href="{{ route('my-time-logs') }}" class="flex items-center p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition">
                                     <span class="text-purple-600 mr-3">⏰</span>
                                     <span class="text-purple-700 font-medium">My Time Logs</span>
                                 </a>
-                            @endcan
+                            @endcan --}}
                             
-                            @can('create own leave requests')
-                                <a href="{{ route('leave-requests.create') }}" class="flex items-center p-3 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition">
-                                    <span class="text-yellow-600 mr-3">📋</span>
-                                    <span class="text-yellow-700 font-medium">Request Leave</span>
-                                </a>
-                            @endcan
+
 
                             @hasrole('Employee')
                                 <a href="{{ route('payrolls.my-payslips') }}" class="flex items-center p-3 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition">
@@ -498,10 +550,7 @@
                                     <span class="text-green-700 font-medium">View Cash Advance</span>
                                 </a>
                                 
-                                <a href="{{ route('leave-requests.index') }}" class="flex items-center p-3 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition">
-                                    <span class="text-yellow-600 mr-3">📋</span>
-                                    <span class="text-yellow-700 font-medium">View Paid Leaves & Request Leave</span>
-                                </a>
+
                             @endhasrole
                         </div>
                     </div>

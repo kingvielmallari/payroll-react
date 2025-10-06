@@ -8182,3 +8182,102 @@ AFTER SNAPSHOT CREATED:
 }
 ==================================================
 
+AFTER MAX CALCULATION:
+{
+    "employee_id": 39,
+    "taxable_income_after_max": 15200,
+    "base_taxable_income": 13200,
+    "basic_pay": 13200,
+    "holiday_pay": 0,
+    "rest_pay": 0,
+    "overtime_pay": 0,
+    "timestamp": "2025-10-06 13:40:51"
+}
+
+BEFORE SNAPSHOT CREATION:
+{
+    "employee_id": 39,
+    "taxable_income_variable": 15200,
+    "taxable_income_type": "double",
+    "is_null": false,
+    "is_numeric": true,
+    "value_as_string": "15200",
+    "timestamp": "2025-10-06 13:40:51"
+}
+
+AFTER SNAPSHOT CREATED:
+{
+    "snapshot_id": 3946,
+    "stored_taxable_income": "15200.00",
+    "stored_gross_pay": "15200.00",
+    "stored_net_pay": "15200.00",
+    "timestamp": "2025-10-06 13:40:51"
+}
+==================================================
+
+AFTER MAX CALCULATION:
+{
+    "employee_id": 39,
+    "taxable_income_after_max": 15200,
+    "base_taxable_income": 13200,
+    "basic_pay": 13200,
+    "holiday_pay": 0,
+    "rest_pay": 0,
+    "overtime_pay": 0,
+    "timestamp": "2025-10-06 13:58:20"
+}
+
+BEFORE SNAPSHOT CREATION:
+{
+    "employee_id": 39,
+    "taxable_income_variable": 15200,
+    "taxable_income_type": "double",
+    "is_null": false,
+    "is_numeric": true,
+    "value_as_string": "15200",
+    "timestamp": "2025-10-06 13:58:20"
+}
+
+AFTER SNAPSHOT CREATED:
+{
+    "snapshot_id": 3947,
+    "stored_taxable_income": "15200.00",
+    "stored_gross_pay": "15200.00",
+    "stored_net_pay": "15200.00",
+    "timestamp": "2025-10-06 13:58:20"
+}
+==================================================
+
+AFTER MAX CALCULATION:
+{
+    "employee_id": 39,
+    "taxable_income_after_max": 15200,
+    "base_taxable_income": 13200,
+    "basic_pay": 13200,
+    "holiday_pay": 0,
+    "rest_pay": 0,
+    "overtime_pay": 0,
+    "timestamp": "2025-10-06 13:58:40"
+}
+
+BEFORE SNAPSHOT CREATION:
+{
+    "employee_id": 39,
+    "taxable_income_variable": 15200,
+    "taxable_income_type": "double",
+    "is_null": false,
+    "is_numeric": true,
+    "value_as_string": "15200",
+    "timestamp": "2025-10-06 13:58:40"
+}
+
+AFTER SNAPSHOT CREATED:
+{
+    "snapshot_id": 3948,
+    "stored_taxable_income": "15200.00",
+    "stored_gross_pay": "15200.00",
+    "stored_net_pay": "15200.00",
+    "timestamp": "2025-10-06 13:58:40"
+}
+==================================================
+
