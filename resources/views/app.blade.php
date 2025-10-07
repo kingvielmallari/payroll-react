@@ -37,7 +37,7 @@
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
         <!-- Local fonts instead of external CDN -->
-        <link href="/assets/css/fonts.css" rel="stylesheet" />
+        <link href="{{ asset('assets/css/fonts.css') }}" rel="stylesheet" />
 
         @routes
         @viteReactRefresh

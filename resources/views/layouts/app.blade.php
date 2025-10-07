@@ -7,12 +7,8 @@
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
-        <!-- Fonts -->
-        <!-- Local fonts instead of external CDN -->
-        <link href="/assets/css/fonts.css" rel="stylesheet" />
-
-        <!-- Scripts -->
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
+        <!-- Fonts & Scripts -->
+        @vite(['resources/css/app.css', 'resources/css/fonts.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans antialiased">
         <div class="min-h-screen bg-gray-100">

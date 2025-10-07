@@ -5,8 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Laravel</title>
         <!-- Local fonts instead of external CDN -->
-        <link href="/assets/css/fonts.css" rel="stylesheet" />
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @vite(['resources/css/app.css', 'resources/css/fonts.css', 'resources/js/app.js'])
       
     </head>
     

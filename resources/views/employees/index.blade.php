@@ -71,7 +71,7 @@
                     </div>
                     
                     <!-- Records per page selector -->
-                    <div class="flex items-center justify-between">
+                    {{-- <div class="flex items-center justify-between">
                         <div class="flex items-center space-x-4">
                             <div class="text-sm text-gray-500">
                                 Total: {{ $employees->total() }} employees
@@ -81,7 +81,7 @@
                                 Add Employee
                             </a>
                         </div>
-                    </div>
+                    </div> --}}
                 </div>
             </div>
 
